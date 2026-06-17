@@ -2,22 +2,23 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import { useEffect, useState } from 'react'
 import { supabase } from './lib/supabase'
-import Layout       from './components/Layout'
-import Dashboard    from './pages/Dashboard'
-import Inventory    from './pages/Inventory'
-import Issuance     from './pages/Issuance'
-import Reports      from './pages/Reports'
-import Orders       from './pages/Orders'
-import Analytics    from './pages/Analytics'
-import Settings     from './pages/Settings'
-import Login        from './pages/Login'
-import StockHistory from './pages/StockHistory'
-import Waste        from './pages/Waste'
-import Stocktake    from './pages/Stocktake'
-import Transfers    from './pages/Transfers'
-import Suppliers    from './pages/Suppliers'
-import ItemDetail   from './pages/ItemDetail'
-import Receiving    from './pages/Receiving'
+import Layout        from './components/Layout'
+import Dashboard     from './pages/Dashboard'
+import Inventory     from './pages/Inventory'
+import Issuance      from './pages/Issuance'
+import IssuanceScan  from './pages/IssuanceScan'
+import Reports       from './pages/Reports'
+import Orders        from './pages/Orders'
+import Analytics     from './pages/Analytics'
+import Settings      from './pages/Settings'
+import Login         from './pages/Login'
+import StockHistory  from './pages/StockHistory'
+import Waste         from './pages/Waste'
+import Stocktake     from './pages/Stocktake'
+import Transfers     from './pages/Transfers'
+import Suppliers     from './pages/Suppliers'
+import ItemDetail    from './pages/ItemDetail'
+import Receiving     from './pages/Receiving'
 
 function ProtectedRoute({ session, children }) {
   if (!session) return <Navigate to="/login" replace />
@@ -57,20 +58,21 @@ export default function App() {
           <ProtectedRoute session={session}>
             <Layout session={session}>
               <Routes>
-                <Route index              element={<Dashboard />}    />
-                <Route path="inventory"   element={<Inventory />}    />
-                <Route path="inventory/:id" element={<ItemDetail />} />
-                <Route path="issuance"    element={<Issuance />}     />
-                <Route path="reports"     element={<Reports />}      />
-                <Route path="orders"      element={<Orders />}       />
-                <Route path="analytics"   element={<Analytics />}    />
-                <Route path="settings"    element={<Settings />}     />
-                <Route path="history"     element={<StockHistory />} />
-                <Route path="waste"       element={<Waste />}        />
-                <Route path="stocktake"   element={<Stocktake />}    />
-                <Route path="transfers"   element={<Transfers />}    />
-                <Route path="suppliers"   element={<Suppliers />}    />
-                <Route path="receiving"   element={<Receiving />}    />
+                <Route index                element={<Dashboard />}     />
+                <Route path="inventory"     element={<Inventory />}     />
+                <Route path="inventory/:id" element={<ItemDetail />}    />
+                <Route path="issuance"      element={<Issuance />}      />
+                <Route path="issuance-scan" element={<IssuanceScan />}  />
+                <Route path="reports"       element={<Reports />}       />
+                <Route path="orders"        element={<Orders />}        />
+                <Route path="analytics"     element={<Analytics />}     />
+                <Route path="settings"      element={<Settings />}      />
+                <Route path="history"       element={<StockHistory />}  />
+                <Route path="waste"         element={<Waste />}         />
+                <Route path="stocktake"     element={<Stocktake />}     />
+                <Route path="transfers"     element={<Transfers />}     />
+                <Route path="suppliers"     element={<Suppliers />}     />
+                <Route path="receiving"     element={<Receiving />}     />
               </Routes>
             </Layout>
           </ProtectedRoute>
