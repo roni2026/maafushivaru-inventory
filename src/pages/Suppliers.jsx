@@ -1,134 +1,143 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { Building2, Plus, Pencil, Trash2, Search, Phone, Mail, Clock } from 'lucide-react'
+import { Plus, Search, Trash2, Edit2, Upload, X, RefreshCw, Building2, Mail, Phone } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
-import Modal from '../components/ui/Modal'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
+import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
+import CSVImportModal from '../components/CSVImportModal'
+import { CSV_CONFIGS } from '../lib/csvTemplates'
 
-const EMPTY = { name:'', contact_person:'', phone:'', email:'', lead_time_days:7, notes:'' }
+const EMPTY = { name: '', contact_name: '', email: '', phone: '', address: '', payment_terms: '', notes: '' }
 
 export default function Suppliers() {
-  const [suppliers, setSuppliers] = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [saving,    setSaving]    = useState(false)
-  const [editId,    setEditId]    = useState(null)
-  const [form,      setForm]      = useState(EMPTY)
-  const [search,    setSearch]    = useState('')
-  const [deleting,  setDeleting]  = useState(null)
+  const [records, setRecords] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [showCSV, setShowCSV] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [form,    setForm]    = useState(EMPTY)
+  const [saving,  setSaving]  = useState(false)
 
-  const set = (k, v) => setForm(p => ({ ...p, [k]: v }))
-
-  const load = useCallback(async () => {
+  const load = async () => {
     setLoading(true)
     const { data } = await supabase.from('suppliers').select('*').order('name')
-    setSuppliers(data || [])
-    setLoading(false)
-  }, [])
+    setRecords(data || []); setLoading(false)
+  }
+  useEffect(() => { load() }, [])
 
-  useEffect(() => { load() }, [load])
+  const filtered = useMemo(() => records.filter(r =>
+    !search ||
+    r.name?.toLowerCase().includes(search.toLowerCase()) ||
+    r.contact_name?.toLowerCase().includes(search.toLowerCase()) ||
+    r.email?.toLowerCase().includes(search.toLowerCase())
+  ), [records, search])
 
-  const openAdd = () => { setEditId(null); setForm(EMPTY); setShowModal(true) }
-  const openEdit = (s) => { setEditId(s.id); setForm({ name:s.name, contact_person:s.contact_person||'', phone:s.phone||'', email:s.email||'', lead_time_days:s.lead_time_days||7, notes:s.notes||'' }); setShowModal(true) }
+  const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  const openAdd = () => { setEditing(null); setForm(EMPTY); setShowAdd(true) }
+  const openEdit = (r) => { setEditing(r.id); setForm({ name: r.name, contact_name: r.contact_name || '', email: r.email || '', phone: r.phone || '', address: r.address || '', payment_terms: r.payment_terms || '', notes: r.notes || '' }); setShowAdd(true) }
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Supplier name is required'); return }
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { toast.error('Invalid email'); return }
     setSaving(true)
-    try {
-      const payload = { name:form.name.trim(), contact_person:form.contact_person, phone:form.phone, email:form.email, lead_time_days:Number(form.lead_time_days)||7, notes:form.notes }
-      if (editId) {
-        const { data } = await supabase.from('suppliers').update(payload).eq('id', editId).select().single()
-        setSuppliers(prev => prev.map(s => s.id===editId ? data : s))
-        toast.success('Supplier updated')
-      } else {
-        const { data } = await supabase.from('suppliers').insert(payload).select().single()
-        setSuppliers(prev => [...prev, data].sort((a,b)=>a.name.localeCompare(b.name)))
-        toast.success('Supplier added')
-      }
-      setShowModal(false)
-    } catch(err) { toast.error(err.message) }
-    setSaving(false)
+    const payload = { name: form.name.trim(), contact_name: form.contact_name.trim(), email: form.email.trim(), phone: form.phone.trim(), address: form.address.trim(), payment_terms: form.payment_terms.trim(), notes: form.notes.trim() }
+    const { error } = editing
+      ? await supabase.from('suppliers').update(payload).eq('id', editing)
+      : await supabase.from('suppliers').insert(payload)
+    if (error) { toast.error(error.message); setSaving(false); return }
+    toast.success(editing ? 'Supplier updated' : 'Supplier added'); setShowAdd(false); load(); setSaving(false)
   }
 
-  const handleDelete = async (id) => {
-    if (!confirm('Delete this supplier?')) return
-    setDeleting(id)
+  const handleDelete = async (id, name) => {
+    if (!confirm(`Delete supplier "${name}"?`)) return
     await supabase.from('suppliers').delete().eq('id', id)
-    setSuppliers(prev => prev.filter(s => s.id!==id))
-    toast.success('Supplier deleted')
-    setDeleting(null)
+    toast.success('Deleted'); load()
   }
-
-  const filtered = useMemo(() => {
-    if (!search) return suppliers
-    const q=search.toLowerCase()
-    return suppliers.filter(s=>s.name.toLowerCase().includes(q)||s.contact_person?.toLowerCase().includes(q)||s.email?.toLowerCase().includes(q))
-  }, [suppliers, search])
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h1 className="page-title">Suppliers</h1><p className="page-sub">Manage your supplier directory and contact information</p></div>
-        <Button onClick={openAdd}><Plus className="w-4 h-4" /> Add Supplier</Button>
+        <div>
+          <h1 className="page-title">Suppliers</h1>
+          <p className="page-sub">Manage your supplier contact database</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+          <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
+          <Button onClick={openAdd}><Plus className="w-4 h-4" /> Add Supplier</Button>
+        </div>
       </div>
 
-      <div className="card py-3 px-4 flex gap-3 items-center">
-        <Search className="w-4 h-4 text-slate-400 shrink-0" />
-        <input className="flex-1 bg-transparent text-slate-100 text-sm placeholder-slate-500 focus:outline-none" placeholder="Search suppliers…" value={search} onChange={e=>setSearch(e.target.value)} />
-        <span className="text-slate-400 text-sm">{filtered.length} suppliers</span>
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input placeholder="Search supplier, contact or email…" value={search} onChange={e => setSearch(e.target.value)} className="input pl-9 text-sm" />
+        {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-slate-400" /></button>}
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>
-      ) : filtered.length===0 ? (
-        <div className="card text-center py-16 text-slate-500">
-          <Building2 className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="font-medium">No suppliers yet</p>
-          <p className="text-sm mt-1">Add your first supplier to build the directory.</p>
+        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="card text-center py-20 text-slate-500">
+          <Building2 className="w-14 h-14 mx-auto mb-4 opacity-20" />
+          <p className="font-medium text-lg">No suppliers yet</p>
+          <p className="text-sm mt-1">Add suppliers manually or import a CSV file</p>
+          <div className="flex gap-2 justify-center mt-5">
+            <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
+            <Button onClick={openAdd}><Plus className="w-4 h-4" /> Add Supplier</Button>
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map(s=>(
-            <div key={s.id} className="card border border-slate-700/40 hover:border-teal-700/40 transition-colors">
-              <div className="flex items-start justify-between mb-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-100 truncate">{s.name}</p>
-                  {s.contact_person&&<p className="text-slate-400 text-sm mt-0.5">{s.contact_person}</p>}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map(r => (
+            <div key={r.id} className="card border border-slate-700/40 hover:border-[#00AEEF]/30 transition-colors">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 bg-[#00AEEF]/10 border border-[#00AEEF]/20 rounded-xl flex items-center justify-center shrink-0">
+                    <Building2 className="w-4 h-4 text-[#00AEEF]" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-100 text-sm">{r.name}</p>
+                    {r.contact_name && <p className="text-xs text-slate-400 mt-0.5">{r.contact_name}</p>}
+                  </div>
                 </div>
-                <div className="flex gap-1 shrink-0 ml-2">
-                  <button onClick={()=>openEdit(s)} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-teal-400 transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
-                  <button onClick={()=>handleDelete(s.id)} disabled={deleting===s.id} className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                <div className="flex gap-1 shrink-0">
+                  <button onClick={() => openEdit(r)} className="p-1.5 text-slate-500 hover:text-[#00AEEF] hover:bg-[#00AEEF]/10 rounded-lg transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                  <button onClick={() => handleDelete(r.id, r.name)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
-              <div className="space-y-2">
-                {s.phone&&<div className="flex items-center gap-2 text-sm"><Phone className="w-3.5 h-3.5 text-slate-500 shrink-0" /><a href={`tel:${s.phone}`} className="text-teal-400 hover:text-teal-300 truncate">{s.phone}</a></div>}
-                {s.email&&<div className="flex items-center gap-2 text-sm"><Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" /><a href={`mailto:${s.email}`} className="text-teal-400 hover:text-teal-300 truncate">{s.email}</a></div>}
-                <div className="flex items-center gap-2 text-sm"><Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" /><span className="text-slate-400">Lead time: <strong className="text-slate-300">{s.lead_time_days} days</strong></span></div>
+              <div className="mt-3 space-y-1.5 text-xs">
+                {r.email && <div className="flex items-center gap-2 text-slate-400"><Mail className="w-3.5 h-3.5 shrink-0" /><a href={`mailto:${r.email}`} className="hover:text-[#00AEEF] transition-colors truncate">{r.email}</a></div>}
+                {r.phone && <div className="flex items-center gap-2 text-slate-400"><Phone className="w-3.5 h-3.5 shrink-0" /><span>{r.phone}</span></div>}
+                {r.payment_terms && <div className="flex items-center gap-2"><span className="text-slate-500">Terms:</span><span className="text-slate-300">{r.payment_terms}</span></div>}
               </div>
-              {s.notes&&<p className="mt-3 text-xs text-slate-500 border-t border-slate-700/40 pt-3 line-clamp-2">{s.notes}</p>}
+              {r.notes && <p className="text-xs text-slate-500 mt-2 border-t border-slate-700/40 pt-2 truncate">{r.notes}</p>}
             </div>
           ))}
         </div>
       )}
 
-      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title={editId?'Edit Supplier':'Add Supplier'} size="sm"
-        footer={<><Button variant="secondary" onClick={()=>setShowModal(false)}>Cancel</Button><Button onClick={handleSave} loading={saving}>{editId?'Save Changes':'Add Supplier'}</Button></>}>
-        <div className="space-y-4">
-          <Input label="Supplier Name *" value={form.name} onChange={e=>set('name',e.target.value)} placeholder="e.g. Maldives Fresh Imports" />
-          <Input label="Contact Person" value={form.contact_person} onChange={e=>set('contact_person',e.target.value)} placeholder="e.g. Ahmed Hassan" />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Phone" type="tel" value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+960 123 4567" />
-            <Input label="Email" type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="supplier@email.com" />
+      {showAdd && (
+        <Modal isOpen onClose={() => setShowAdd(false)} title={editing ? 'Edit Supplier' : 'Add Supplier'} size="sm"
+          footer={<><Button variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Button><Button onClick={handleSave} loading={saving}>Save</Button></>}>
+          <div className="space-y-4">
+            <Input label="Company Name *" value={form.name} onChange={f('name')} placeholder="e.g. Maldives Fresh Co" />
+            <Input label="Contact Person" value={form.contact_name} onChange={f('contact_name')} placeholder="Full name" />
+            <div className="grid grid-cols-2 gap-3">
+              <Input label="Email" type="email" value={form.email} onChange={f('email')} placeholder="contact@supplier.com" />
+              <Input label="Phone / WhatsApp" value={form.phone} onChange={f('phone')} placeholder="+960 300 1234" />
+            </div>
+            <Input label="Address" value={form.address} onChange={f('address')} placeholder="City, Country" />
+            <Input label="Payment Terms" value={form.payment_terms} onChange={f('payment_terms')} placeholder="e.g. Net 30, COD, Advance" />
+            <Textarea label="Notes" value={form.notes} onChange={f('notes')} rows={2} />
           </div>
-          <Input label="Lead Time (days)" type="number" min="1" value={form.lead_time_days} onChange={e=>set('lead_time_days',e.target.value)} />
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Notes</label>
-            <textarea className="input min-h-[80px] resize-none" value={form.notes} onChange={e=>set('notes',e.target.value)} placeholder="Payment terms, delivery schedule, etc." />
-          </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
+
+      {showCSV && <CSVImportModal config={CSV_CONFIGS.suppliers} onClose={() => setShowCSV(false)} onImported={load} />}
     </div>
   )
 }

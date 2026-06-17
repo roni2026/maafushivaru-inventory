@@ -1,186 +1,181 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { ArrowLeftRight, Plus, Download, Search, RefreshCw } from 'lucide-react'
+import { Plus, Search, Upload, X, RefreshCw, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
-import Modal from '../components/ui/Modal'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
-import Input, { Select } from '../components/ui/Input'
+import Modal from '../components/ui/Modal'
+import Input, { Select, Textarea } from '../components/ui/Input'
+import CSVImportModal from '../components/CSVImportModal'
+import { CSV_CONFIGS } from '../lib/csvTemplates'
 
-const fmtDate = (n=0) => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split('T')[0] }
+const today = () => new Date().toISOString().split('T')[0]
+const EMPTY = { date: today(), item_id: '', quantity: '', from_store_id: '', to_store_id: '', transferred_by: 'Roni', note: '' }
 
 export default function Transfers() {
-  const [transfers, setTransfers] = useState([])
-  const [items,     setItems]     = useState([])
-  const [stores,    setStores]    = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [saving,    setSaving]    = useState(false)
-  const [search,    setSearch]    = useState('')
-  const [dateFrom,  setDateFrom]  = useState(fmtDate(30))
-  const [dateTo,    setDateTo]    = useState(fmtDate(0))
-  // form
-  const [fromStore, setFromStore] = useState('')
-  const [toStore,   setToStore]   = useState('')
-  const [query,     setQuery]     = useState('')
-  const [itemSel,   setItemSel]   = useState(null)
-  const [qty,       setQty]       = useState('')
-  const [date,      setDate]      = useState(fmtDate(0))
-  const [reason,    setReason]    = useState('')
-  const [transferBy,setTransferBy]= useState('')
-  const [showSug,   setShowSug]   = useState(false)
+  const [records, setRecords] = useState([])
+  const [items,   setItems]   = useState([])
+  const [stores,  setStores]  = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [showCSV, setShowCSV] = useState(false)
+  const [form,    setForm]    = useState(EMPTY)
+  const [saving,  setSaving]  = useState(false)
+  const [itemSearch, setItemSearch]   = useState('')
+  const [showItemDrop, setShowItemDrop] = useState(false)
 
-  const load = useCallback(async () => {
+  const load = async () => {
     setLoading(true)
-    const [{ data: tr }, { data: it }, { data: st }] = await Promise.all([
-      supabase.from('transfers')
-        .select('*, items(name,part_number,unit), from_store:stores!transfers_from_store_id_fkey(name), to_store:stores!transfers_to_store_id_fkey(name)')
-        .gte('date', dateFrom).lte('date', dateTo)
-        .order('date', { ascending:false }).order('created_at', { ascending:false }),
-      supabase.from('items').select('id,name,part_number,unit,current_stock,store_id,stores(name)').order('name'),
+    const [{ data: r }, { data: i }, { data: s }] = await Promise.all([
+      supabase.from('transfers').select('*').order('date', { ascending: false }).limit(200),
+      supabase.from('items').select('id,name,part_number,unit,current_stock').order('name'),
       supabase.from('stores').select('*').order('name'),
     ])
-    setTransfers(tr||[]); setItems(it||[]); setStores(st||[]); setLoading(false)
-  }, [dateFrom, dateTo])
-
-  useEffect(() => { load() }, [load])
-
-  const suggestions = useMemo(() => {
-    if (!query||query.length<2) return []
-    const q=query.toLowerCase()
-    return items.filter(i=>i.name.toLowerCase().includes(q)||i.part_number.toLowerCase().includes(q)).slice(0,8)
-  }, [query, items])
-
-  const selectItem = (item) => {
-    setItemSel(item); setQuery(`${item.part_number} – ${item.name}`)
-    if (!fromStore && item.store_id) setFromStore(item.store_id)
-    setShowSug(false)
+    setRecords(r || []); setItems(i || []); setStores(s || []); setLoading(false)
   }
+  useEffect(() => { load() }, [])
 
-  const handleTransfer = async () => {
-    if (!itemSel) { toast.error('Select an item'); return }
-    if (!fromStore) { toast.error('Select source store'); return }
-    if (!toStore)   { toast.error('Select destination store'); return }
-    if (fromStore === toStore) { toast.error('Source and destination must differ'); return }
-    const q=Number(qty); if (!q||q<=0) { toast.error('Enter valid quantity'); return }
-    if (q > Number(itemSel.current_stock)) { toast.error(`Only ${itemSel.current_stock} ${itemSel.unit} available`); return }
+  const filtered = useMemo(() => records.filter(r =>
+    !search ||
+    r.item_name?.toLowerCase().includes(search.toLowerCase()) ||
+    r.from_store_name?.toLowerCase().includes(search.toLowerCase()) ||
+    r.to_store_name?.toLowerCase().includes(search.toLowerCase())
+  ), [records, search])
+
+  const filteredItems = items.filter(i =>
+    i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+    i.part_number.toLowerCase().includes(itemSearch.toLowerCase())
+  ).slice(0, 8)
+
+  const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+  const selectedItem    = items.find(i => i.id === form.item_id)
+  const selectedFrom    = stores.find(s => s.id === form.from_store_id)
+  const selectedTo      = stores.find(s => s.id === form.to_store_id)
+
+  const handleSave = async () => {
+    if (!form.item_id)       { toast.error('Select an item'); return }
+    if (!form.quantity)      { toast.error('Enter quantity'); return }
+    if (!form.from_store_id) { toast.error('Select from store'); return }
+    if (!form.to_store_id)   { toast.error('Select to store'); return }
+    if (form.from_store_id === form.to_store_id) { toast.error('From and To stores cannot be the same'); return }
     setSaving(true)
-    try {
-      const newStock = Number(itemSel.current_stock)-q
-      await supabase.from('items').update({ current_stock: newStock }).eq('id', itemSel.id)
-      await supabase.from('stock_updates').insert({ item_id:itemSel.id, date, quantity_change:-q, new_quantity:newStock, updated_by:transferBy||'System', note:`Transfer → ${stores.find(s=>s.id===toStore)?.name}` })
-      await supabase.from('transfers').insert({ from_store_id:fromStore, to_store_id:toStore, item_id:itemSel.id, quantity:q, date, reason, transferred_by:transferBy||'System' })
-      toast.success(`Transferred ${q} ${itemSel.unit} of ${itemSel.name}`)
-      setShowModal(false); setItemSel(null); setQuery(''); setQty(''); setReason(''); setTransferBy('')
-      load()
-    } catch(err) { toast.error(err.message) }
-    setSaving(false)
-  }
-
-  const filtered = useMemo(() => {
-    if (!search) return transfers
-    const q=search.toLowerCase()
-    return transfers.filter(t=>t.items?.name?.toLowerCase().includes(q)||t.items?.part_number?.toLowerCase().includes(q))
-  }, [transfers, search])
-
-  const exportCSV = () => {
-    const h=['Date','Part #','Item','From','To','Qty','Unit','Transferred By','Reason']
-    const rows=filtered.map(t=>[t.date,t.items?.part_number,t.items?.name,t.from_store?.name,t.to_store?.name,t.quantity,t.items?.unit,t.transferred_by||'',t.reason||''])
-    const csv=[h,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n')
-    const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=`transfers_${dateFrom}_${dateTo}.csv`; a.click()
-    toast.success('CSV exported')
+    const item = items.find(i => i.id === form.item_id)
+    const { error } = await supabase.from('transfers').insert({
+      item_id:        form.item_id,
+      item_name:      item?.name || '',
+      date:           form.date,
+      quantity:       Number(form.quantity),
+      unit:           item?.unit || 'pcs',
+      from_store_id:  form.from_store_id,
+      from_store_name:selectedFrom?.name || '',
+      to_store_id:    form.to_store_id,
+      to_store_name:  selectedTo?.name || '',
+      transferred_by: form.transferred_by || 'Roni',
+      note:           form.note,
+      status:         'completed',
+    })
+    if (error) { toast.error(error.message); setSaving(false); return }
+    toast.success('Transfer recorded'); setShowAdd(false); setForm(EMPTY); setItemSearch(''); load(); setSaving(false)
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h1 className="page-title">Store Transfers</h1><p className="page-sub">Move stock between stores without recording as a loss</p></div>
-        <div className="flex gap-2">
+        <div>
+          <h1 className="page-title">Transfers</h1>
+          <p className="page-sub">Move items between stores and outlets</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
           <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
-          <button onClick={exportCSV} className="btn-secondary btn-sm"><Download className="w-4 h-4" /> CSV</button>
-          <Button onClick={()=>{setShowModal(true);setDate(fmtDate(0))}}><Plus className="w-4 h-4" /> New Transfer</Button>
+          <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
+          <Button onClick={() => { setShowAdd(true); setForm(EMPTY); setItemSearch('') }}><Plus className="w-4 h-4" /> New Transfer</Button>
         </div>
       </div>
 
-      <div className="card py-3 px-4 flex flex-wrap gap-3 items-center">
-        <input type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} className="input text-sm w-auto" />
-        <span className="text-slate-500 text-sm">→</span>
-        <input type="date" value={dateTo}   onChange={e=>setDateTo(e.target.value)}   className="input text-sm w-auto" />
-        <div className="relative flex-1 min-w-40">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input className="input pl-9 text-sm" placeholder="Search item…" value={search} onChange={e=>setSearch(e.target.value)} />
-        </div>
-        <span className="text-slate-400 text-sm">{filtered.length} records</span>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="card-sm text-center"><p className="text-2xl font-bold text-teal-400">{filtered.length}</p><p className="text-slate-500 text-xs mt-1">Transfers</p></div>
-        <div className="card-sm text-center"><p className="text-2xl font-bold text-blue-400">{filtered.reduce((s,t)=>s+Number(t.quantity),0).toFixed(1)}</p><p className="text-slate-500 text-xs mt-1">Total Units Moved</p></div>
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input placeholder="Search item or store…" value={search} onChange={e => setSearch(e.target.value)} className="input pl-9 text-sm" />
+        {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-slate-400" /></button>}
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>
-      ) : filtered.length===0 ? (
-        <div className="card text-center py-16 text-slate-500"><ArrowLeftRight className="w-12 h-12 mx-auto mb-3 opacity-20" /><p className="font-medium">No transfers recorded</p><p className="text-sm mt-1">Record a transfer when moving items between stores.</p></div>
+        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
       ) : (
-        <Table>
-          <Thead><tr><Th>Date</Th><Th>Part #</Th><Th>Item</Th><Th>From</Th><Th>To</Th><Th>Qty</Th><Th>By</Th><Th>Reason</Th></tr></Thead>
-          <Tbody>
-            {filtered.map(t=>(
-              <Tr key={t.id}>
-                <Td className="text-slate-400 text-xs whitespace-nowrap">{t.date}</Td>
-                <Td className="font-mono text-xs text-slate-300">{t.items?.part_number}</Td>
-                <Td className="font-medium text-slate-100 max-w-xs truncate">{t.items?.name}</Td>
-                <Td className="text-slate-400 text-xs">{t.from_store?.name}</Td>
-                <Td className="text-teal-400 text-xs font-medium">{t.to_store?.name}</Td>
-                <Td className="text-slate-100 font-semibold">{t.quantity} <span className="text-slate-500 text-xs font-normal">{t.items?.unit}</span></Td>
-                <Td className="text-slate-400 text-xs">{t.transferred_by||'—'}</Td>
-                <Td className="text-slate-500 text-xs max-w-xs truncate">{t.reason||'—'}</Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
+        <div className="card overflow-x-auto">
+          <Table>
+            <Thead><tr>
+              <Th>Date</Th><Th>Item</Th><Th>Quantity</Th><Th>From</Th><Th></Th><Th>To</Th><Th>By</Th><Th>Note</Th>
+            </tr></Thead>
+            <Tbody>
+              {filtered.length === 0 ? (
+                <Tr><Td colSpan={8} className="text-center text-slate-500 py-12">No transfer records yet</Td></Tr>
+              ) : filtered.map(r => (
+                <Tr key={r.id}>
+                  <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
+                  <Td className="font-medium text-slate-100">{r.item_name}</Td>
+                  <Td><span className="font-bold text-[#00AEEF]">{r.quantity}</span> <span className="text-slate-500 text-xs">{r.unit}</span></Td>
+                  <Td className="text-slate-300 text-sm">{r.from_store_name}</Td>
+                  <Td><ArrowRight className="w-4 h-4 text-slate-500" /></Td>
+                  <Td className="text-slate-300 text-sm">{r.to_store_name}</Td>
+                  <Td className="text-slate-400 text-sm">{r.transferred_by}</Td>
+                  <Td className="text-slate-400 text-xs max-w-xs truncate">{r.note}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </div>
       )}
 
-      <Modal isOpen={showModal} onClose={()=>setShowModal(false)} title="New Store Transfer" size="sm"
-        footer={<><Button variant="secondary" onClick={()=>setShowModal(false)}>Cancel</Button><Button onClick={handleTransfer} loading={saving}>Transfer Stock</Button></>}>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Item *</label>
+      {showAdd && (
+        <Modal isOpen onClose={() => setShowAdd(false)} title="New Transfer" size="sm"
+          footer={<><Button variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Button><Button onClick={handleSave} loading={saving}>Save Transfer</Button></>}>
+          <div className="space-y-4">
+            <Input label="Date *" type="date" value={form.date} onChange={f('date')} />
             <div className="relative">
-              <input className="input" placeholder="Type part # or name…" value={query}
-                onChange={e=>{setQuery(e.target.value);setItemSel(null);setShowSug(true)}}
-                onFocus={()=>setShowSug(true)} onBlur={()=>setTimeout(()=>setShowSug(false),150)} />
-              {showSug&&suggestions.length>0&&(
-                <div className="absolute z-20 mt-1 w-full bg-slate-700 border border-slate-600 rounded-xl shadow-xl overflow-hidden">
-                  {suggestions.map(i=>(
-                    <button key={i.id} onMouseDown={()=>selectItem(i)} className="w-full text-left px-4 py-2.5 hover:bg-slate-600 text-sm">
-                      <span className="font-mono text-teal-400 text-xs">{i.part_number}</span>
-                      <span className="ml-2 text-slate-100">{i.name}</span>
-                      <span className="ml-2 text-slate-400 text-xs">{i.stores?.name} · {i.current_stock} {i.unit}</span>
+              <label className="block text-sm font-medium text-slate-300 mb-1">Item *</label>
+              {selectedItem ? (
+                <div className="input bg-slate-700/50 flex items-center gap-2">
+                  <span className="font-mono text-xs text-[#00AEEF]">{selectedItem.part_number}</span>
+                  <span className="flex-1 text-slate-100">{selectedItem.name}</span>
+                  <button onClick={() => { setForm(p => ({...p, item_id:''})); setItemSearch('') }}><X className="w-4 h-4 text-slate-400" /></button>
+                </div>
+              ) : (
+                <input className="input text-sm" placeholder="Search item…" value={itemSearch}
+                  onChange={e => { setItemSearch(e.target.value); setShowItemDrop(true) }}
+                  onFocus={() => setShowItemDrop(true)} />
+              )}
+              {showItemDrop && !selectedItem && filteredItems.length > 0 && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {filteredItems.map(item => (
+                    <button key={item.id} onClick={() => { setForm(p => ({...p, item_id: item.id})); setItemSearch(''); setShowItemDrop(false) }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-700 text-left text-sm">
+                      <span className="font-mono text-xs text-[#00AEEF] w-20 shrink-0">{item.part_number}</span>
+                      <span className="flex-1 text-slate-200 truncate">{item.name}</span>
+                      <span className="text-slate-400 text-xs">{item.current_stock} {item.unit}</span>
                     </button>
                   ))}
                 </div>
               )}
             </div>
+            <Input label="Quantity *" type="number" min="0.01" step="0.01" value={form.quantity} onChange={f('quantity')} />
+            <div className="grid grid-cols-2 gap-3">
+              <Select label="From Store *" value={form.from_store_id} onChange={f('from_store_id')}>
+                <option value="">Select…</option>
+                {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+              <Select label="To Store *" value={form.to_store_id} onChange={f('to_store_id')}>
+                <option value="">Select…</option>
+                {stores.filter(s => s.id !== form.from_store_id).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </div>
+            <Input label="Transferred By" value={form.transferred_by} onChange={f('transferred_by')} />
+            <Textarea label="Note" value={form.note} onChange={f('note')} rows={2} />
           </div>
-          {itemSel&&<div className="bg-teal-900/20 border border-teal-700/30 rounded-lg p-3 text-sm"><p className="font-medium text-slate-100">{itemSel.name}</p><p className="text-slate-400 text-xs">Currently in: <strong className="text-teal-400">{itemSel.stores?.name}</strong> · {itemSel.current_stock} {itemSel.unit} available</p></div>}
-          <Select label="From Store *" value={fromStore} onChange={e=>setFromStore(e.target.value)}>
-            <option value="">Select source store…</option>
-            {stores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
-          <Select label="To Store *" value={toStore} onChange={e=>setToStore(e.target.value)}>
-            <option value="">Select destination store…</option>
-            {stores.filter(s=>s.id!==fromStore).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-          </Select>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label={`Quantity${itemSel?` (${itemSel.unit})`:''} *`} type="number" min="0.01" step="0.01" value={qty} onChange={e=>setQty(e.target.value)} />
-            <Input label="Date" type="date" value={date} onChange={e=>setDate(e.target.value)} />
-          </div>
-          <Input label="Transferred By" value={transferBy} onChange={e=>setTransferBy(e.target.value)} placeholder="Your name" />
-          <Input label="Reason (optional)" value={reason} onChange={e=>setReason(e.target.value)} placeholder="e.g. Bar is full, storing excess" />
-        </div>
-      </Modal>
+        </Modal>
+      )}
+
+      {showCSV && <CSVImportModal config={CSV_CONFIGS.transfers} onClose={() => setShowCSV(false)} onImported={load} />}
     </div>
   )
 }

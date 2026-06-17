@@ -1,237 +1,188 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../lib/supabase'
-import { ClipboardList, Search, Plus, Trash2 } from 'lucide-react'
+import { Plus, Search, Trash2, Upload, X, RefreshCw } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
-import Modal from '../components/ui/Modal'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
-import Input, { Select } from '../components/ui/Input'
+import Modal from '../components/ui/Modal'
+import Input, { Textarea } from '../components/ui/Input'
+import CSVImportModal from '../components/CSVImportModal'
+import { CSV_CONFIGS } from '../lib/csvTemplates'
 
 const today = () => new Date().toISOString().split('T')[0]
-const yesterday = () => {
-  const d = new Date(); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]
-}
+
+const EMPTY = { date: today(), item_id: '', quantity_issued: '', issued_by: 'Roni', note: '' }
 
 export default function Issuance() {
-  const [items,     setItems]     = useState([])
-  const [stores,    setStores]    = useState([])
-  const [issuances, setIssuances] = useState([])
-  const [loading,   setLoading]   = useState(true)
-  const [showModal, setShowModal] = useState(false)
-  const [saving,    setSaving]    = useState(false)
-  const [search,    setSearch]    = useState('')
+  const [records, setRecords] = useState([])
+  const [items,   setItems]   = useState([])
+  const [loading, setLoading] = useState(true)
+  const [search,  setSearch]  = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [showCSV, setShowCSV] = useState(false)
+  const [form,    setForm]    = useState(EMPTY)
+  const [saving,  setSaving]  = useState(false)
+  const [itemSearch, setItemSearch] = useState('')
+  const [showItemDrop, setShowItemDrop] = useState(false)
 
-  // Form
-  const [query,    setQuery]    = useState('')
-  const [itemSel,  setItemSel]  = useState(null)
-  const [qty,      setQty]      = useState('')
-  const [date,     setDate]     = useState(today())
-  const [loggedBy, setLoggedBy] = useState('')
-  const [showSug,  setShowSug]  = useState(false)
-
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      const [{ data: it }, { data: st }, { data: iss }] = await Promise.all([
-        supabase.from('items').select('id, part_number, name, unit, current_stock, store_id, stores(name)').order('name'),
-        supabase.from('stores').select('*').order('name'),
-        supabase.from('issuances')
-          .select('*, items(id, part_number, name, unit), stores(name)')
-          .order('date', { ascending: false })
-          .order('created_at', { ascending: false })
-          .limit(100),
-      ])
-      setItems(it || [])
-      setStores(st || [])
-      setIssuances(iss || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
-
-  // Autocomplete
-  const suggestions = useMemo(() => {
-    if (!query || query.length < 2) return []
-    const q = query.toLowerCase()
-    return items.filter(i =>
-      i.name.toLowerCase().includes(q) || i.part_number.toLowerCase().includes(q)
-    ).slice(0, 8)
-  }, [query, items])
-
-  const selectItem = (item) => {
-    setItemSel(item)
-    setQuery(`${item.part_number} – ${item.name}`)
-    setShowSug(false)
+  const load = async () => {
+    setLoading(true)
+    const [{ data: r }, { data: i }] = await Promise.all([
+      supabase.from('issuances').select('*,items(name,part_number,unit)').order('date', { ascending: false }).limit(200),
+      supabase.from('items').select('id,name,part_number,unit,current_stock').order('name'),
+    ])
+    setRecords(r || [])
+    setItems(i || [])
+    setLoading(false)
   }
+  useEffect(() => { load() }, [])
 
-  const handleLog = async () => {
-    if (!itemSel) { toast.error('Select an item'); return }
-    const q = Number(qty)
-    if (!q || q <= 0) { toast.error('Enter a valid quantity'); return }
-    if (q > Number(itemSel.current_stock)) {
-      toast.error(`Only ${itemSel.current_stock} ${itemSel.unit} in stock`)
-      return
-    }
+  const filtered = useMemo(() =>
+    records.filter(r =>
+      !search ||
+      r.items?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      r.items?.part_number?.toLowerCase().includes(search.toLowerCase()) ||
+      r.issued_by?.toLowerCase().includes(search.toLowerCase())
+    ), [records, search])
+
+  const filteredItems = items.filter(i =>
+    i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
+    i.part_number.toLowerCase().includes(itemSearch.toLowerCase())
+  ).slice(0, 8)
+
+  const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+
+  const handleSave = async () => {
+    if (!form.item_id)          { toast.error('Select an item'); return }
+    if (!form.quantity_issued)  { toast.error('Enter quantity'); return }
     setSaving(true)
-    try {
-      const newStock = Number(itemSel.current_stock) - q
-      await supabase.from('items').update({ current_stock: newStock }).eq('id', itemSel.id)
-      await supabase.from('stock_updates').insert({
-        item_id: itemSel.id, date, quantity_change: -q, new_quantity: newStock,
-        updated_by: loggedBy || 'System', note: 'Daily issuance',
-      })
-      const { data: iss } = await supabase.from('issuances')
-        .insert({ item_id: itemSel.id, store_id: itemSel.store_id, quantity_issued: q, date, logged_by: loggedBy || 'System' })
-        .select('*, items(id, part_number, name, unit), stores(name)')
-        .single()
-      setIssuances(prev => [iss, ...prev])
-      setItems(prev => prev.map(i => i.id === itemSel.id ? { ...i, current_stock: newStock } : i))
-      toast.success(`Issued ${q} ${itemSel.unit} of ${itemSel.name}`)
-      setItemSel(null); setQuery(''); setQty(''); setShowModal(false)
-    } catch (err) { toast.error(err.message) }
-    setSaving(false)
+    const item = items.find(i => i.id === form.item_id)
+    const { error } = await supabase.from('issuances').insert({
+      item_id:         form.item_id,
+      date:            form.date,
+      quantity_issued: Number(form.quantity_issued),
+      issued_by:       form.issued_by || 'Roni',
+      note:            form.note,
+    })
+    if (error) { toast.error(error.message); setSaving(false); return }
+    // Deduct stock
+    if (item) {
+      const newStock = Math.max(0, Number(item.current_stock) - Number(form.quantity_issued))
+      await supabase.from('items').update({ current_stock: newStock }).eq('id', form.item_id)
+    }
+    toast.success('Issuance recorded')
+    setShowAdd(false); setForm(EMPTY); setItemSearch('')
+    load(); setSaving(false)
   }
 
   const handleDelete = async (id) => {
-    if (!confirm('Delete this issuance record? Stock will NOT be restored automatically.')) return
+    if (!confirm('Delete this issuance record?')) return
     await supabase.from('issuances').delete().eq('id', id)
-    setIssuances(prev => prev.filter(i => i.id !== id))
-    toast.success('Record deleted')
+    toast.success('Deleted'); load()
   }
 
-  const filtered = useMemo(() => {
-    if (!search) return issuances
-    const q = search.toLowerCase()
-    return issuances.filter(i =>
-      i.items?.name?.toLowerCase().includes(q) ||
-      i.items?.part_number?.toLowerCase().includes(q)
-    )
-  }, [issuances, search])
-
-  // Weekly totals per item (last 7 days)
-  const weeklyMap = useMemo(() => {
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-7)
-    const map = {}
-    issuances.forEach(i => {
-      if (new Date(i.date) >= cutoff) {
-        map[i.item_id] = (map[i.item_id] || 0) + Number(i.quantity_issued)
-      }
-    })
-    return map
-  }, [issuances])
+  const selectedItem = items.find(i => i.id === form.item_id)
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div><h1 className="page-title">Daily Issuance</h1><p className="page-sub">Log items issued each day</p></div>
-        <Button onClick={() => { setDate(today()); setShowModal(true) }}>
-          <Plus className="w-4 h-4" /> Log Issuance
-        </Button>
+        <div>
+          <h1 className="page-title">Daily Issuance</h1>
+          <p className="page-sub">Record items issued to departments or outlets</p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+          <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm">
+            <Upload className="w-4 h-4" /> Import CSV
+          </button>
+          <Button onClick={() => { setShowAdd(true); setForm(EMPTY); setItemSearch('') }}>
+            <Plus className="w-4 h-4" /> Issue Item
+          </Button>
+        </div>
       </div>
 
       {/* Search */}
-      <div className="card py-3 px-4 flex gap-3 items-center">
-        <Search className="w-4 h-4 text-slate-400 shrink-0" />
-        <input className="input flex-1" placeholder="Search issuances…" value={search} onChange={e => setSearch(e.target.value)} />
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input placeholder="Search item, part # or issued by…" value={search} onChange={e => setSearch(e.target.value)}
+          className="input pl-9 text-sm" />
+        {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-slate-400" /></button>}
       </div>
 
-      {/* Issuances table */}
       {loading ? (
-        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>
-      ) : filtered.length === 0 ? (
-        <div className="card text-center py-16 text-slate-500">
-          <ClipboardList className="w-12 h-12 mx-auto mb-3 opacity-20" />
-          <p className="font-medium">No issuances yet</p>
-          <p className="text-sm mt-1">Start logging daily issuances.</p>
-        </div>
+        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
       ) : (
-        <Table>
-          <Thead><tr>
-            <Th>Date</Th>
-            <Th>Part #</Th>
-            <Th>Item Name</Th>
-            <Th>Store</Th>
-            <Th>Qty Issued</Th>
-            <Th>Weekly Total</Th>
-            <Th>Logged By</Th>
-            <Th className="text-right">Actions</Th>
-          </tr></Thead>
-          <Tbody>
-            {filtered.map(iss => (
-              <Tr key={iss.id}>
-                <Td className="text-slate-400 text-xs">{iss.date}</Td>
-                <Td className="font-mono text-xs text-slate-300">{iss.items?.part_number}</Td>
-                <Td className="font-medium text-slate-100">{iss.items?.name}</Td>
-                <Td className="text-slate-400 text-xs">{iss.stores?.name}</Td>
-                <Td><Badge variant="teal">{iss.quantity_issued} {iss.items?.unit}</Badge></Td>
-                <Td><span className="text-slate-300 text-sm">{weeklyMap[iss.item_id] || 0} {iss.items?.unit}</span></Td>
-                <Td className="text-slate-400 text-xs">{iss.logged_by || '—'}</Td>
-                <Td>
-                  <div className="flex justify-end">
-                    <button onClick={() => handleDelete(iss.id)} className="p-1.5 hover:bg-red-900/30 rounded-lg transition-colors text-slate-400 hover:text-red-400">
+        <div className="card overflow-x-auto">
+          <Table>
+            <Thead><tr>
+              <Th>Date</Th><Th>Part #</Th><Th>Item</Th><Th>Qty Issued</Th><Th>Issued By</Th><Th>Note</Th><Th></Th>
+            </tr></Thead>
+            <Tbody>
+              {filtered.length === 0 ? (
+                <Tr><Td colSpan={7} className="text-center text-slate-500 py-12">No issuance records yet</Td></Tr>
+              ) : filtered.map(r => (
+                <Tr key={r.id}>
+                  <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
+                  <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
+                  <Td className="font-medium text-slate-100">{r.items?.name}</Td>
+                  <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
+                  <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
+                  <Td className="text-slate-400 text-xs max-w-xs truncate">{r.note}</Td>
+                  <Td>
+                    <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
-                  </div>
-                </Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </div>
       )}
 
-      {/* Log Modal */}
-      <Modal isOpen={showModal} onClose={() => setShowModal(false)} title="Log Issuance" size="sm"
-        footer={<>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>Cancel</Button>
-          <Button onClick={handleLog} loading={saving}>Log Issuance</Button>
-        </>}
-      >
-        <div className="space-y-4">
-          {/* Item autocomplete */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-slate-300 mb-1">Item (Part # or Name) *</label>
-            <input
-              className="input"
-              placeholder="Type to search…"
-              value={query}
-              onChange={e => { setQuery(e.target.value); setItemSel(null); setShowSug(true) }}
-              onFocus={() => setShowSug(true)}
-            />
-            {showSug && suggestions.length > 0 && (
-              <div className="absolute z-20 mt-1 w-full bg-slate-700 border border-slate-600 rounded-lg shadow-xl overflow-hidden">
-                {suggestions.map(i => (
-                  <button key={i.id} onMouseDown={() => selectItem(i)}
-                    className="w-full text-left px-4 py-2.5 hover:bg-slate-600 transition-colors text-sm">
-                    <span className="font-mono text-teal-400 text-xs">{i.part_number}</span>
-                    <span className="ml-2 text-slate-100">{i.name}</span>
-                    <span className="ml-2 text-slate-400 text-xs">({i.current_stock} {i.unit})</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          {itemSel && (
-            <div className="bg-slate-700/40 rounded-lg p-3 text-sm">
-              <p className="font-medium text-slate-100">{itemSel.name}</p>
-              <p className="text-slate-400 text-xs mt-0.5">
-                Store: {itemSel.stores?.name} · In stock: <strong className="text-teal-400">{itemSel.current_stock} {itemSel.unit}</strong>
-              </p>
+      {/* Add modal */}
+      {showAdd && (
+        <Modal isOpen onClose={() => setShowAdd(false)} title="Issue Item" size="sm"
+          footer={<><Button variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Button><Button onClick={handleSave} loading={saving}>Save Issuance</Button></>}>
+          <div className="space-y-4">
+            <Input label="Date *" type="date" value={form.date} onChange={f('date')} />
+            {/* Item search */}
+            <div className="relative">
+              <label className="block text-sm font-medium text-slate-300 mb-1">Item *</label>
+              {selectedItem ? (
+                <div className="flex items-center gap-2 input bg-slate-700/50">
+                  <span className="font-mono text-xs text-[#00AEEF]">{selectedItem.part_number}</span>
+                  <span className="flex-1 text-slate-100">{selectedItem.name}</span>
+                  <button onClick={() => { setForm(p => ({...p, item_id:''})); setItemSearch('') }}><X className="w-4 h-4 text-slate-400" /></button>
+                </div>
+              ) : (
+                <input className="input text-sm" placeholder="Search item…" value={itemSearch}
+                  onChange={e => { setItemSearch(e.target.value); setShowItemDrop(true) }}
+                  onFocus={() => setShowItemDrop(true)} />
+              )}
+              {showItemDrop && !selectedItem && filteredItems.length > 0 && (
+                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {filteredItems.map(item => (
+                    <button key={item.id} onClick={() => { setForm(p => ({...p, item_id: item.id})); setItemSearch(''); setShowItemDrop(false) }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-700 text-left text-sm">
+                      <span className="font-mono text-xs text-[#00AEEF] w-20 shrink-0">{item.part_number}</span>
+                      <span className="flex-1 text-slate-200 truncate">{item.name}</span>
+                      <span className="text-slate-500 text-xs">{item.current_stock} {item.unit}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-          <Input label={`Quantity${itemSel ? ` (${itemSel.unit})` : ''} *`} type="number" min="0.01" step="0.01"
-            value={qty} onChange={e => setQty(e.target.value)} placeholder="0" />
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-1">Date</label>
-            <div className="flex gap-2">
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} className="input flex-1" />
-              <button onClick={() => setDate(today())} className="btn-secondary btn-sm px-3">Today</button>
-              <button onClick={() => setDate(yesterday())} className="btn-secondary btn-sm px-3">Yesterday</button>
-            </div>
+            <Input label="Quantity Issued *" type="number" min="0.01" step="0.01" value={form.quantity_issued} onChange={f('quantity_issued')}
+              placeholder={selectedItem ? `Available: ${selectedItem.current_stock} ${selectedItem.unit}` : ''} />
+            <Input label="Issued By" value={form.issued_by} onChange={f('issued_by')} />
+            <Textarea label="Note" value={form.note} onChange={f('note')} rows={2} placeholder="e.g. Bar service, Kitchen prep…" />
           </div>
-          <Input label="Logged By" value={loggedBy} onChange={e => setLoggedBy(e.target.value)} placeholder="Your name" />
-        </div>
-      </Modal>
+        </Modal>
+      )}
+
+      {showCSV && <CSVImportModal config={CSV_CONFIGS.issuances} onClose={() => setShowCSV(false)} onImported={load} />}
     </div>
   )
 }
