@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, TrendingUp, Settings, LogOut, Waves, X, History,
-  Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox
+  Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox, ScanLine
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
@@ -18,11 +18,12 @@ const NAV_GROUPS = [
   {
     label: 'Operations',
     items: [
-      { to:'/issuance',  icon:ClipboardList,  label:'Daily Issuance' },
-      { to:'/receiving', icon:Inbox,          label:'Receiving (GRN)' },
-      { to:'/transfers', icon:ArrowLeftRight, label:'Transfers'       },
-      { to:'/waste',     icon:Trash2,         label:'Waste Log'       },
-      { to:'/stocktake', icon:ClipboardCheck, label:'Stocktake'       },
+      { to:'/issuance',      icon:ClipboardList,  label:'Daily Issuance'  },
+      { to:'/issuance-scan', icon:ScanLine,        label:'Scan Issuance'  },
+      { to:'/receiving',     icon:Inbox,           label:'Receiving (GRN)' },
+      { to:'/transfers',     icon:ArrowLeftRight,  label:'Transfers'       },
+      { to:'/waste',         icon:Trash2,          label:'Waste Log'       },
+      { to:'/stocktake',     icon:ClipboardCheck,  label:'Stocktake'       },
     ],
   },
   {
@@ -36,9 +37,9 @@ const NAV_GROUPS = [
   {
     label: 'Admin',
     items: [
-      { to:'/suppliers', icon:Building2,  label:'Suppliers' },
-      { to:'/orders',    icon:ShoppingCart, label:'Orders'  },
-      { to:'/settings',  icon:Settings,   label:'Settings'  },
+      { to:'/suppliers', icon:Building2,    label:'Suppliers' },
+      { to:'/orders',    icon:ShoppingCart, label:'Orders'    },
+      { to:'/settings',  icon:Settings,     label:'Settings'  },
     ],
   },
 ]
@@ -53,14 +54,13 @@ export default function Sidebar({ session, isOpen, onClose }) {
   }
 
   return (
-    <aside
-      className={[
-        'fixed lg:static inset-y-0 left-0 z-30 w-64 shrink-0',
-        'bg-slate-800 border-r border-slate-700 flex flex-col',
-        'transform transition-transform duration-200 ease-in-out',
-        isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-      ].join(' ')}
-    >
+    <aside className={[
+      'fixed lg:static inset-y-0 left-0 z-30 w-64 shrink-0',
+      'bg-slate-800 border-r border-slate-700 flex flex-col',
+      'transform transition-transform duration-200 ease-in-out',
+      isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+    ].join(' ')}>
+
       {/* Brand */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
         <div className="flex items-center gap-3">
@@ -77,7 +77,7 @@ export default function Sidebar({ session, isOpen, onClose }) {
         </button>
       </div>
 
-      {/* Navigation */}
+      {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
@@ -86,17 +86,13 @@ export default function Sidebar({ session, isOpen, onClose }) {
             </p>
             <div className="space-y-0.5">
               {group.items.map(({ to, icon: Icon, label, end }) => (
-                <NavLink
-                  key={to} to={to} end={end} onClick={onClose}
-                  className={({ isActive }) =>
-                    [
-                      'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium',
-                      isActive
-                        ? 'bg-teal-600/20 text-teal-300 border border-teal-600/30'
-                        : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-100 border border-transparent',
-                    ].join(' ')
-                  }
-                >
+                <NavLink key={to} to={to} end={end} onClick={onClose}
+                  className={({ isActive }) => [
+                    'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium',
+                    isActive
+                      ? 'bg-teal-600/20 text-teal-300 border border-teal-600/30'
+                      : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-100 border border-transparent',
+                  ].join(' ')}>
                   <Icon className="w-4 h-4 shrink-0" />
                   {label}
                 </NavLink>
