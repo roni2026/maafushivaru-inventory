@@ -2,7 +2,8 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, TrendingUp, Settings, LogOut, X, History,
-  Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox, ScanLine
+  Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox,
+  ScanLine, AlertTriangle
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
@@ -18,12 +19,13 @@ const NAV_GROUPS = [
   {
     label: 'Operations',
     items: [
-      { to:'/issuance',      icon:ClipboardList,  label:'Daily Issuance'  },
-      { to:'/issuance-scan', icon:ScanLine,        label:'Scan Issuance'  },
+      { to:'/issuance',      icon:ClipboardList,  label:'Daily Issuance'   },
+      { to:'/issuance-scan', icon:ScanLine,        label:'Scan Issuance'   },
       { to:'/receiving',     icon:Inbox,           label:'Receiving (GRN)' },
-      { to:'/transfers',     icon:ArrowLeftRight,  label:'Transfers'       },
-      { to:'/waste',         icon:Trash2,          label:'Waste Log'       },
-      { to:'/stocktake',     icon:ClipboardCheck,  label:'Stocktake'       },
+      { to:'/transfers',     icon:ArrowLeftRight,  label:'Transfers'        },
+      { to:'/waste',         icon:Trash2,          label:'Waste Log'        },
+      { to:'/stocktake',     icon:ClipboardCheck,  label:'Stocktake'        },
+      { to:'/claims',        icon:AlertTriangle,   label:'Delivery Claims'  },
     ],
   },
   {
@@ -37,8 +39,8 @@ const NAV_GROUPS = [
   {
     label: 'Admin',
     items: [
-      { to:'/suppliers', icon:Building2,    label:'Suppliers' },
       { to:'/orders',    icon:ShoppingCart, label:'Orders'    },
+      { to:'/suppliers', icon:Building2,    label:'Suppliers' },
       { to:'/settings',  icon:Settings,     label:'Settings'  },
     ],
   },
@@ -64,26 +66,13 @@ export default function Sidebar({ session, isOpen, onClose }) {
       {/* ── Brand ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
         <div className="flex items-center gap-3 min-w-0">
-          {/* Outrigger SVG logo */}
-          <img
-            src="/logo.svg"
-            alt="Outrigger"
-            className="h-8 w-auto shrink-0"
-            draggable={false}
-          />
+          <img src="/logo.svg" alt="Outrigger" className="h-8 w-auto shrink-0" draggable={false} />
           <div className="min-w-0">
-            <p className="font-display text-xs font-bold text-[#00AEEF] leading-tight truncate">
-              Outrigger
-            </p>
-            <p className="text-[10px] text-slate-400 leading-tight truncate">
-              Maafushivaru · Inventory
-            </p>
+            <p className="font-display text-xs font-bold text-[#00AEEF] leading-tight truncate">Outrigger</p>
+            <p className="text-[10px] text-slate-400 leading-tight truncate">Maafushivaru · Inventory</p>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="lg:hidden p-1.5 hover:bg-slate-700 rounded-lg transition-colors shrink-0 ml-2"
-        >
+        <button onClick={onClose} className="lg:hidden p-1.5 hover:bg-slate-700 rounded-lg transition-colors shrink-0 ml-2">
           <X className="w-4 h-4 text-slate-400" />
         </button>
       </div>
@@ -97,15 +86,13 @@ export default function Sidebar({ session, isOpen, onClose }) {
             </p>
             <div className="space-y-0.5">
               {group.items.map(({ to, icon: Icon, label, end }) => (
-                <NavLink
-                  key={to} to={to} end={end} onClick={onClose}
+                <NavLink key={to} to={to} end={end} onClick={onClose}
                   className={({ isActive }) => [
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium',
                     isActive
                       ? 'bg-[#00AEEF]/15 text-[#00AEEF] border border-[#00AEEF]/30'
                       : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-100 border border-transparent',
-                  ].join(' ')}
-                >
+                  ].join(' ')}>
                   <Icon className="w-4 h-4 shrink-0" />
                   {label}
                 </NavLink>
@@ -126,10 +113,8 @@ export default function Sidebar({ session, isOpen, onClose }) {
             <p className="text-[10px] text-slate-500">Inventory Manager</p>
           </div>
         </div>
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-900/30 hover:text-red-400 transition-colors"
-        >
+        <button onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-900/30 hover:text-red-400 transition-colors">
           <LogOut className="w-4 h-4" /> Sign Out
         </button>
       </div>
