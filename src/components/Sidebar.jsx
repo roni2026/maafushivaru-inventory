@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Package, ClipboardList, BarChart2,
-  ShoppingCart, TrendingUp, Settings, LogOut, Waves, X, History,
+  ShoppingCart, TrendingUp, Settings, LogOut, X, History,
   Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox, ScanLine
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -61,23 +61,34 @@ export default function Sidebar({ session, isOpen, onClose }) {
       isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
     ].join(' ')}>
 
-      {/* Brand */}
-      <div className="flex items-center justify-between px-4 py-4 border-b border-slate-700">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-teal-500 to-teal-700 rounded-xl flex items-center justify-center shadow-lg shrink-0">
-            <Waves className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <p className="font-display text-sm font-bold text-teal-400 leading-tight">Outrigger</p>
-            <p className="text-xs text-slate-400 leading-tight">Maafushivaru</p>
+      {/* ── Brand ─────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-700">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Outrigger SVG logo */}
+          <img
+            src="/logo.svg"
+            alt="Outrigger"
+            className="h-8 w-auto shrink-0"
+            draggable={false}
+          />
+          <div className="min-w-0">
+            <p className="font-display text-xs font-bold text-[#00AEEF] leading-tight truncate">
+              Outrigger
+            </p>
+            <p className="text-[10px] text-slate-400 leading-tight truncate">
+              Maafushivaru · Inventory
+            </p>
           </div>
         </div>
-        <button onClick={onClose} className="lg:hidden p-1.5 hover:bg-slate-700 rounded-lg transition-colors">
+        <button
+          onClick={onClose}
+          className="lg:hidden p-1.5 hover:bg-slate-700 rounded-lg transition-colors shrink-0 ml-2"
+        >
           <X className="w-4 h-4 text-slate-400" />
         </button>
       </div>
 
-      {/* Nav */}
+      {/* ── Navigation ────────────────────────────────────── */}
       <nav className="flex-1 overflow-y-auto py-3 px-2">
         {NAV_GROUPS.map((group, gi) => (
           <div key={gi} className={gi > 0 ? 'mt-4' : ''}>
@@ -86,13 +97,15 @@ export default function Sidebar({ session, isOpen, onClose }) {
             </p>
             <div className="space-y-0.5">
               {group.items.map(({ to, icon: Icon, label, end }) => (
-                <NavLink key={to} to={to} end={end} onClick={onClose}
+                <NavLink
+                  key={to} to={to} end={end} onClick={onClose}
                   className={({ isActive }) => [
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all text-sm font-medium',
                     isActive
-                      ? 'bg-teal-600/20 text-teal-300 border border-teal-600/30'
+                      ? 'bg-[#00AEEF]/15 text-[#00AEEF] border border-[#00AEEF]/30'
                       : 'text-slate-400 hover:bg-slate-700/60 hover:text-slate-100 border border-transparent',
-                  ].join(' ')}>
+                  ].join(' ')}
+                >
                   <Icon className="w-4 h-4 shrink-0" />
                   {label}
                 </NavLink>
@@ -102,19 +115,21 @@ export default function Sidebar({ session, isOpen, onClose }) {
         ))}
       </nav>
 
-      {/* User footer */}
+      {/* ── User footer ───────────────────────────────────── */}
       <div className="p-2 border-t border-slate-700">
         <div className="flex items-center gap-3 px-3 py-2 rounded-xl mb-1">
-          <div className="w-8 h-8 bg-gradient-to-br from-teal-600 to-teal-800 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0">
+          <div className="w-8 h-8 bg-gradient-to-br from-[#00AEEF] to-teal-700 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0">
             {session?.user?.email?.[0]?.toUpperCase() || 'U'}
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs text-slate-300 truncate">{session?.user?.email}</p>
-            <p className="text-xs text-slate-500">Inventory Manager</p>
+            <p className="text-[10px] text-slate-500">Inventory Manager</p>
           </div>
         </div>
-        <button onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-900/30 hover:text-red-400 transition-colors">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-900/30 hover:text-red-400 transition-colors"
+        >
           <LogOut className="w-4 h-4" /> Sign Out
         </button>
       </div>
