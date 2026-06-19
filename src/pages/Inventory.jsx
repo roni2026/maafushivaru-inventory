@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useItems } from '../hooks/useItems'
-import { supabase, chunkedWrite } from '../lib/supabase'
+import { chunkedWrite } from '../lib/supabase'
 import { parseCSV } from '../lib/csvTemplates'
 import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
@@ -83,8 +83,8 @@ export default function Inventory() {
   // ── CSV import ───────────────────────────────────────────
   const [csvRows,   setCsvRows]   = useState([])
   const [csvErrors, setCsvErrors] = useState([])
-  const [missingStores,    setMissingStores]    = useState([])
-  const [autoCreateStores, setAutoCreateStores] = useState(true)
+  const [missingStores,  setMissingStores]  = useState([])
+  const [defaultStoreId, setDefaultStoreId] = useState('')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 })
   const fileRef = useRef(null)
@@ -125,6 +125,14 @@ export default function Inventory() {
 
   // Reset to first page whenever the result set changes
   useEffect(() => { setPage(1) }, [search, searchField, filterStore, filterCat, filterExp, sortField, sortDir, pageSize])
+
+  // Default the "unmatched rows" store to General (or the first store available)
+  useEffect(() => {
+    if (!defaultStoreId && stores.length) {
+      const general = stores.find(s => s.name.trim().toLowerCase() === 'general')
+      setDefaultStoreId(general?.id || stores[0].id)
+    }
+  }, [stores, defaultStoreId])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
   const pageItems  = useMemo(
@@ -272,26 +280,17 @@ export default function Inventory() {
 
   const handleImport = async () => {
     if(!csvRows.length){ toast.error('No rows to import'); return }
+    if(missingStores.length && !defaultStoreId){ toast.error('Pick a store for unmatched rows first'); return }
     setImporting(true)
     setImportProgress({ done: 0, total: csvRows.length })
 
-    const norm=(s)=>(s||'').trim().replace(/\s+/g,' ').toLowerCase()
-    const storeIdByKey=new Map(stores.map(s=>[norm(s.name),s.id]))
-
-    // Auto-create any missing stores first (category 'General' — the only
-    // safe default that satisfies the DB CHECK constraint).
-    if(missingStores.length && autoCreateStores){
-      const toCreate=missingStores.map(name=>({name,category:'General'}))
-      const { data:created, error }=await supabase.from('stores').insert(toCreate).select('id,name')
-      if(error){ toast.error('Could not create stores: '+error.message); setImporting(false); return }
-      created?.forEach(s=>storeIdByKey.set(norm(s.name),s.id))
-    }
-
-    // Resolve store_id for every row; skip rows still without a store.
+    // Resolve store_id for every row. Matched rows keep their store; unmatched
+    // rows fall back to the chosen existing store (we never create new stores —
+    // the DB's row-level security forbids it).
     let skipped=0
     const payloads=[]
     for(const row of csvRows){
-      const sid=row.store_id||storeIdByKey.get(row._storeKey)
+      const sid=row.store_id||defaultStoreId
       if(!sid){ skipped++; continue }
       payloads.push({
         part_number:row.part_number, name:row.name, store_id:sid, unit:row.unit,
@@ -301,7 +300,7 @@ export default function Inventory() {
       })
     }
     if(!payloads.length){
-      toast.error('No importable rows — enable "Auto-create missing stores" or fix store names')
+      toast.error('No importable rows — choose a store for unmatched rows')
       setImporting(false); return
     }
     const { success, failed } = await chunkedWrite('items', payloads, {
@@ -577,16 +576,16 @@ export default function Inventory() {
           {csvErrors.length>0&&<div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3 text-sm text-red-300 space-y-1">{csvErrors.slice(0,5).map((e,i)=><p key={i}>{e}</p>)}{csvErrors.length>5&&<p className="text-red-400/70">+ {(csvErrors.length-5).toLocaleString()} more rows skipped (missing part_number/name)…</p>}</div>}
 
           {missingStores.length>0&&(
-            <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-3 text-sm">
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input type="checkbox" checked={autoCreateStores} onChange={e=>setAutoCreateStores(e.target.checked)} className="mt-0.5 w-4 h-4 accent-teal-500" />
-                <span className="text-amber-200">
-                  Auto-create <strong>{missingStores.length}</strong> new store{missingStores.length!==1?'s':''} found in this file (category: <em>General</em>).
-                  {!autoCreateStores && <span className="text-amber-400/80"> If unchecked, rows with these stores will be skipped.</span>}
-                </span>
-              </label>
-              <div className="mt-2 max-h-24 overflow-y-auto text-xs text-amber-300/80 flex flex-wrap gap-1.5">
-                {missingStores.slice(0,40).map((s,i)=><span key={i} className="bg-amber-900/30 rounded px-1.5 py-0.5">{s}</span>)}
+            <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-3 text-sm space-y-2">
+              <p className="text-amber-200">
+                <strong>{missingStores.length}</strong> store name{missingStores.length!==1?'s':''} in this file don’t match any of your existing stores.
+                Assign those rows to an existing store:
+              </p>
+              <select value={defaultStoreId} onChange={e=>setDefaultStoreId(e.target.value)} className="input text-sm">
+                {stores.map(s=><option key={s.id} value={s.id}>{s.name} ({s.category})</option>)}
+              </select>
+              <div className="max-h-20 overflow-y-auto text-xs text-amber-300/70 flex flex-wrap gap-1.5">
+                {missingStores.slice(0,40).map((s,i)=><span key={i} className="bg-amber-900/30 rounded px-1.5 py-0.5">{s||'(blank)'}</span>)}
                 {missingStores.length>40&&<span className="px-1.5 py-0.5">+ {missingStores.length-40} more…</span>}
               </div>
             </div>
@@ -599,7 +598,7 @@ export default function Inventory() {
             </div>
           )}
 
-          {csvRows.length>0&&<div><p className="text-sm text-green-400 mb-2">✓ {csvRows.length.toLocaleString()} rows ready to import{missingStores.length>0&&autoCreateStores?` (incl. ${missingStores.length} new store${missingStores.length!==1?'s':''})`:''}</p><div className="max-h-40 overflow-y-auto text-xs bg-slate-700/30 rounded-lg p-3 space-y-1">{csvRows.slice(0,15).map((r,i)=><div key={i} className="flex gap-2 text-slate-300"><span className="font-mono text-teal-400 shrink-0">{r.part_number}</span><span className="truncate flex-1">{r.name}</span><span className="text-slate-500 shrink-0">{r.store_name}</span></div>)}{csvRows.length>15&&<p className="text-slate-500 text-center pt-1">+ {(csvRows.length-15).toLocaleString()} more…</p>}</div></div>}
+          {csvRows.length>0&&<div><p className="text-sm text-green-400 mb-2">✓ {csvRows.length.toLocaleString()} rows ready to import{missingStores.length>0?` (${(csvRows.filter(r=>!r.store_id).length).toLocaleString()} will use the chosen store)`:''}</p><div className="max-h-40 overflow-y-auto text-xs bg-slate-700/30 rounded-lg p-3 space-y-1">{csvRows.slice(0,15).map((r,i)=><div key={i} className="flex gap-2 text-slate-300"><span className="font-mono text-teal-400 shrink-0">{r.part_number}</span><span className="truncate flex-1">{r.name}</span><span className="text-slate-500 shrink-0">{r.store_name}</span></div>)}{csvRows.length>15&&<p className="text-slate-500 text-center pt-1">+ {(csvRows.length-15).toLocaleString()} more…</p>}</div></div>}
         </div>
       </Modal>
 
