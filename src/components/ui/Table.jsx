@@ -1,6 +1,9 @@
-export default function Table({ children, className = '' }) {
+export default function Table({ children, className = '', maxHeight }) {
   return (
-    <div className={`overflow-x-auto rounded-xl border border-slate-700 ${className}`}>
+    <div
+      className={`overflow-auto rounded-xl border border-slate-700 ${className}`}
+      style={maxHeight ? { maxHeight } : undefined}
+    >
       <table className="w-full text-sm text-left">{children}</table>
     </div>
   )
@@ -8,7 +11,7 @@ export default function Table({ children, className = '' }) {
 
 export function Thead({ children }) {
   return (
-    <thead className="bg-slate-700/50 text-slate-300 text-xs uppercase tracking-wider sticky top-0 z-10">
+    <thead className="bg-slate-700 text-slate-300 text-xs uppercase tracking-wider sticky top-0 z-10 shadow-sm">
       {children}
     </thead>
   )

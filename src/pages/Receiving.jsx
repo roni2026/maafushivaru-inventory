@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import { Plus, Search, Trash2, Upload, X, RefreshCw, CheckCircle2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -28,7 +28,7 @@ export default function Receiving() {
     setLoading(true)
     const [{ data: r }, { data: i }] = await Promise.all([
       supabase.from('receiving').select('*').order('date', { ascending: false }).limit(200),
-      supabase.from('items').select('id,name,part_number,unit,current_stock').order('name'),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').order('name')),
     ])
     setRecords(r || []); setItems(i || []); setLoading(false)
   }

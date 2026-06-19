@@ -3,7 +3,7 @@
 // Pass a config from csvTemplates.js and it handles everything.
 
 import { useState, useEffect, useRef } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows, chunkedWrite } from '../lib/supabase'
 import { generateCSV, parseCSV } from '../lib/csvTemplates'
 import { Download, Upload, CheckCircle2, X, FileText, AlertCircle, Loader } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -17,6 +17,7 @@ export default function CSVImportModal({ config, onClose, onImported }) {
   const [lookups,   setLookups]  = useState({})
   const [rows,      setRows]     = useState([])
   const [importing, setImporting]= useState(false)
+  const [progress,  setProgress] = useState({ done: 0, total: 0 })
   const [loadingLookups, setLoadingLookups] = useState(true)
   const [results,   setResults]  = useState(null)
   const [fileName,  setFileName] = useState('')
@@ -29,12 +30,12 @@ export default function CSVImportModal({ config, onClose, onImported }) {
       const needs = config.lookups || []
       await Promise.all(needs.map(async (lk) => {
         if (lk === 'stores') {
-          const { data } = await supabase.from('stores').select('*')
-          loaded.stores = data || []
+          loaded.stores = await fetchAllRows(() => supabase.from('stores').select('*'))
         }
         if (lk === 'items') {
-          const { data } = await supabase.from('items').select('*,stores(name)')
-          loaded.items = data || []
+          // Paginated — needed so upsert-matching works against the FULL item
+          // catalogue (e.g. 6,000+ rows), not just the first 1,000.
+          loaded.items = await fetchAllRows(() => supabase.from('items').select('*,stores(name)'))
         }
       }))
       setLookups(loaded)
@@ -119,24 +120,29 @@ export default function CSVImportModal({ config, onClose, onImported }) {
     setImporting(true)
     const valid = rows.filter(r => r._valid)
     let success = 0; let failed = 0
+    setProgress({ done: 0, total: valid.length })
 
     try {
       if (config.table === 'order_history_items') {
         const res = await importOrderItems(valid)
         success = res.success; failed = res.failed
+        setProgress({ done: valid.length, total: valid.length })
       } else {
-        for (const row of valid) {
-          const payload = { ...row._transformed }
-          // Remove internal _ prefixed keys
-          Object.keys(payload).forEach(k => { if (k.startsWith('_')) delete payload[k] })
-
-          const { error } = config.upsertOn
-            ? await supabase.from(config.table).upsert(payload, { onConflict: config.upsertOn })
-            : await supabase.from(config.table).insert(payload)
-
-          if (!error) success++
-          else { failed++; console.error(error) }
-        }
+        // Strip internal _-prefixed keys, then write in batches of 500 so even
+        // very large imports (thousands of rows) complete quickly and reliably.
+        const payloads = valid.map(r => {
+          const p = { ...r._transformed }
+          Object.keys(p).forEach(k => { if (k.startsWith('_')) delete p[k] })
+          return p
+        })
+        const res = await chunkedWrite(config.table, payloads, {
+          mode: config.upsertOn ? 'upsert' : 'insert',
+          onConflict: config.upsertOn,
+          chunkSize: 500,
+          onProgress: (done, total) => setProgress({ done, total }),
+        })
+        success = res.success; failed = res.failed
+        if (res.errors.length) console.error('Import errors:', res.errors.slice(0, 20))
       }
     } catch (err) {
       toast.error('Import error: ' + err.message)
@@ -306,9 +312,23 @@ export default function CSVImportModal({ config, onClose, onImported }) {
             </div>
           </div>
 
-          {/* Row list */}
+          {/* Live import progress */}
+          {importing && progress.total > 0 && (
+            <div className="bg-slate-700/30 border border-slate-700/40 rounded-xl p-3">
+              <div className="flex justify-between text-xs text-slate-300 mb-1.5">
+                <span>Importing…</span>
+                <span>{progress.done} / {progress.total}</span>
+              </div>
+              <div className="h-2 bg-slate-600/50 rounded-full overflow-hidden">
+                <div className="h-full bg-[#00AEEF] transition-all duration-200"
+                  style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+
+          {/* Row list (preview capped at 100 rows for performance) */}
           <div className="space-y-1.5 max-h-72 overflow-y-auto pr-0.5">
-            {rows.map((row) => (
+            {rows.slice(0, 100).map((row) => (
               <div key={row._rowNum}
                 className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs transition-colors ${row._valid ? 'border-green-700/30 bg-green-900/10' : 'border-red-700/30 bg-red-900/10'}`}>
                 <div className={`w-6 h-6 rounded-full shrink-0 flex items-center justify-center font-bold text-[10px] ${row._valid ? 'bg-green-600 text-white' : 'bg-red-700 text-white'}`}>
@@ -325,6 +345,11 @@ export default function CSVImportModal({ config, onClose, onImported }) {
                 </div>
               </div>
             ))}
+            {rows.length > 100 && (
+              <p className="text-center text-xs text-slate-500 py-2">
+                + {rows.length - 100} more rows (preview limited to first 100). All valid rows will be imported.
+              </p>
+            )}
           </div>
 
           {invalid.length > 0 && (

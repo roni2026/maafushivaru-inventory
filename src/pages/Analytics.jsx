@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, PieChart, Pie, Legend
@@ -80,7 +80,7 @@ export default function Analytics() {
     try {
       const d14 = new Date(); d14.setDate(d14.getDate()-14)
       const [{ data: items }, { data: issuances }, { data: st }] = await Promise.all([
-        supabase.from('items').select('*, stores(name, category)'),
+        selectAll(() => supabase.from('items').select('*, stores(name, category)')),
         supabase.from('issuances')
           .select('item_id, quantity_issued, date')
           .gte('date', d14.toISOString().split('T')[0]),

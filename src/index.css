@@ -1,9 +1,11 @@
+/* Fonts (must precede other rules) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ── Fonts ──────────────────────────────────────────────── */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap');
 
 @layer base {
   * { box-sizing: border-box; }
@@ -47,6 +49,18 @@
   .page-title { @apply font-display text-2xl font-bold text-slate-100; }
   .page-sub   { @apply text-slate-400 text-sm mt-0.5; }
 }
+
+/* ── Inventory expiry row colour-coding ──────────────────────────────────
+   Applied per-row for at-a-glance expiry status via a coloured left border
+   and subtle row tint. */
+tr.row-expired  > td { background: rgba(239, 68, 68, 0.07); }
+tr.row-critical > td { background: rgba(249, 115, 22, 0.06); }
+tr.row-warning  > td { background: rgba(234, 179, 8, 0.05); }
+tr.row-expired  > td:first-child { box-shadow: inset 3px 0 0 0 #ef4444; }
+tr.row-critical > td:first-child { box-shadow: inset 3px 0 0 0 #f97316; }
+tr.row-warning  > td:first-child { box-shadow: inset 3px 0 0 0 #eab308; }
+tr.row-ok       > td:first-child { box-shadow: inset 3px 0 0 0 #16a34a; }
+tr.row-none     > td:first-child { box-shadow: inset 3px 0 0 0 #475569; }
 
 /* ── Light mode overrides ───────────────────────────────── */
 html.light-mode {

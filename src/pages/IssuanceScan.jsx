@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import {
   ScanLine, Upload, Loader, Plus, Trash2, Check, X,
   RefreshCw, FileText, AlertCircle, ChevronLeft
@@ -122,7 +122,7 @@ export default function IssuanceScan() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from('items').select('id,name,part_number,unit,stores(name)').order('name'),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,stores(name)').order('name')),
       supabase.from('stores').select('*').order('name'),
     ]).then(([{ data: inv }, { data: st }]) => {
       setInventory(inv || [])

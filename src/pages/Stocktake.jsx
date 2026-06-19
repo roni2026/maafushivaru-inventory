@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import { Plus, Search, Upload, X, RefreshCw, CheckCircle2, ClipboardCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -30,7 +30,7 @@ export default function Stocktake() {
     setLoading(true)
     const [{ data: r }, { data: i }] = await Promise.all([
       supabase.from('stocktake_entries').select('*,items(name,part_number,unit)').order('date', { ascending: false }).limit(200),
-      supabase.from('items').select('id,name,part_number,unit,current_stock').order('name'),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').order('name')),
     ])
     setRecords(r || []); setItems(i || []); setLoading(false)
   }

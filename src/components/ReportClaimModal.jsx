@@ -3,7 +3,7 @@
 // Can be triggered from Orders history, Receiving page, or Claims page.
 
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import { AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Modal from './ui/Modal'
@@ -58,7 +58,7 @@ export default function ReportClaimModal({ prefill = {}, onClose, onSaved }) {
   useEffect(() => {
     // Load items only if no item was prefilled (manual claim entry)
     if (!prefill.item_id) {
-      supabase.from('items').select('id,name,part_number,unit,supplier,stores(name)').order('name')
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,supplier,stores(name)').order('name'))
         .then(({ data }) => setItems(data || []))
     }
   }, [prefill.item_id])

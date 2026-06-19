@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import {
   ShoppingCart, Download, RefreshCw, Minus, Plus, Save,
   ChevronDown, ChevronRight, AlertTriangle, PackageX, CheckCircle2,
@@ -74,7 +74,7 @@ export default function Orders() {
   // ── Load all items for manual add ─────────────────────────
   const loadAllItems = async () => {
     if (allItems.length) return
-    const { data } = await supabase.from('items').select('id,name,part_number,unit,current_stock,stores(name)').order('name')
+    const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,stores(name)').order('name'))
     setAllItems(data || [])
   }
 
@@ -104,10 +104,10 @@ export default function Orders() {
       const { data: settings } = await supabase.from('settings').select('key,value')
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
-      const { data: items } = await supabase.from('items').select('*, stores(name,category)')
+      const { data: items } = await selectAll(() => supabase.from('items').select('*, stores(name,category)'))
       const tw = weekRange(0); const lw = weekRange(1)
-      const { data: thisIss } = await supabase.from('issuances').select('item_id,quantity_issued').gte('date', tw.from).lte('date', tw.to)
-      const { data: lastIss } = await supabase.from('issuances').select('item_id,quantity_issued').gte('date', lw.from).lte('date', lw.to)
+      const { data: thisIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', tw.from).lte('date', tw.to))
+      const { data: lastIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', lw.from).lte('date', lw.to))
       const sum = (list, id) => (list || []).filter(i => i.item_id === id).reduce((s, i) => s + Number(i.quantity_issued), 0)
       const orderRows = (items || []).map(item => {
         const thisTotal = sum(thisIss, item.id); const lastTotal = sum(lastIss, item.id)

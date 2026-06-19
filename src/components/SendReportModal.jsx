@@ -2,7 +2,7 @@
 // Triggered from Reports page — fetches live data and sends email via Brevo
 
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import { sendInventoryReport } from '../lib/brevo'
 import { Mail, CheckCircle2, AlertTriangle, Loader, ExternalLink } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -29,7 +29,7 @@ export default function SendReportModal({ onClose }) {
     async function load() {
       const [{ data: sRows }, { data: items }, { data: claimsData }] = await Promise.all([
         supabase.from('settings').select('key,value'),
-        supabase.from('items').select('*,stores(name)').not('expiry_date', 'is', null),
+        selectAll(() => supabase.from('items').select('*,stores(name)').not('expiry_date', 'is', null)),
         supabase.from('delivery_claims').select('*').in('status', ['pending', 'contacted']),
       ])
 

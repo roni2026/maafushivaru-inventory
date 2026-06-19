@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, fetchAllRows } from '../lib/supabase'
 import toast from 'react-hot-toast'
 
 export function useItems() {
@@ -15,16 +15,22 @@ export function useItems() {
 
   const fetchItems = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('items')
-      .select('*, stores(id, name, category)')
-      .order('expiry_date', { ascending: true, nullsFirst: false })
-    if (error) {
+    try {
+      // Paginated fetch — pulls ALL items, not just the first 1,000 that
+      // Supabase returns by default.
+      const data = await fetchAllRows(() =>
+        supabase
+          .from('items')
+          .select('*, stores(id, name, category)')
+          .order('expiry_date', { ascending: true, nullsFirst: false })
+      )
+      setItems(data)
+    } catch (err) {
+      console.error(err)
       toast.error('Failed to load items')
-    } else {
-      setItems(data || [])
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }, [])
 
   useEffect(() => {

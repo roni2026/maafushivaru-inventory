@@ -5,18 +5,19 @@ import { supabase } from './lib/supabase'
 import Layout        from './components/Layout'
 import Login         from './pages/Login'
 
-// Core pages (always bundled)
-import Dashboard     from './pages/Dashboard'
-import Inventory     from './pages/Inventory'
-import Issuance      from './pages/Issuance'
-import Reports       from './pages/Reports'
-import Orders        from './pages/Orders'
-import Analytics     from './pages/Analytics'
-import Settings      from './pages/Settings'
-import StockHistory  from './pages/StockHistory'
-import Claims        from './pages/Claims'
+import NotFound      from './pages/NotFound'
 
-// Lazy-loaded pages (safe for build even if file not yet committed)
+// All pages are lazy-loaded (code-split) so the initial bundle stays small and
+// heavy dependencies (PDF, OCR, charts) only load on the pages that use them.
+const Dashboard     = lazy(() => import('./pages/Dashboard'))
+const Inventory     = lazy(() => import('./pages/Inventory'))
+const Issuance      = lazy(() => import('./pages/Issuance'))
+const Reports       = lazy(() => import('./pages/Reports'))
+const Orders        = lazy(() => import('./pages/Orders'))
+const Analytics     = lazy(() => import('./pages/Analytics'))
+const Settings      = lazy(() => import('./pages/Settings'))
+const StockHistory  = lazy(() => import('./pages/StockHistory'))
+const Claims        = lazy(() => import('./pages/Claims'))
 const IssuanceScan  = lazy(() => import('./pages/IssuanceScan'))
 const Waste         = lazy(() => import('./pages/Waste'))
 const Stocktake     = lazy(() => import('./pages/Stocktake'))
@@ -88,6 +89,7 @@ export default function App() {
                   <Route path="suppliers"     element={<Suppliers />}     />
                   <Route path="orders"        element={<Orders />}        />
                   <Route path="settings"      element={<Settings />}      />
+                  <Route path="*"             element={<NotFound />}      />
                 </Routes>
               </Suspense>
             </Layout>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import { BarChart2, Download, RefreshCw, Mail } from 'lucide-react'
 import toast from 'react-hot-toast'
 import {
@@ -28,9 +28,9 @@ export default function Reports() {
   const load = async () => {
     setLoading(true)
     const [{ data: i }, { data: s }, { data: iss }] = await Promise.all([
-      supabase.from('items').select('*,stores(name,category)'),
+      selectAll(() => supabase.from('items').select('*,stores(name,category)')),
       supabase.from('stores').select('*'),
-      supabase.from('issuances').select('*').gte('date', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]),
+      selectAll(() => supabase.from('issuances').select('*').gte('date', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0])),
     ])
     setItems(i || [])
     setStores(s || [])

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, selectAll } from '../lib/supabase'
 import { Plus, Search, Upload, X, RefreshCw, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -29,7 +29,7 @@ export default function Transfers() {
     setLoading(true)
     const [{ data: r }, { data: i }, { data: s }] = await Promise.all([
       supabase.from('transfers').select('*').order('date', { ascending: false }).limit(200),
-      supabase.from('items').select('id,name,part_number,unit,current_stock').order('name'),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').order('name')),
       supabase.from('stores').select('*').order('name'),
     ])
     setRecords(r || []); setItems(i || []); setStores(s || []); setLoading(false)

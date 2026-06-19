@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, PackagePlus,
@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useItems } from '../hooks/useItems'
-import { supabase } from '../lib/supabase'
+import { supabase, chunkedWrite } from '../lib/supabase'
 import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -83,7 +83,12 @@ export default function Inventory() {
   const [csvRows,   setCsvRows]   = useState([])
   const [csvErrors, setCsvErrors] = useState([])
   const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ done: 0, total: 0 })
   const fileRef = useRef(null)
+
+  // ── Pagination ────────────────────────────────────────────────────────────
+  const [page,     setPage]     = useState(1)
+  const [pageSize, setPageSize] = useState(50)
 
   const categories = useMemo(() => [...new Set(stores.map(s=>s.category))].sort(), [stores])
 
@@ -115,9 +120,41 @@ export default function Inventory() {
     return list
   }, [items, search, searchField, filterStore, filterCat, filterExp, sortField, sortDir])
 
+  // Reset to first page whenever the result set changes
+  useEffect(() => { setPage(1) }, [search, searchField, filterStore, filterCat, filterExp, sortField, sortDir, pageSize])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const pageItems  = useMemo(
+    () => filtered.slice((page - 1) * pageSize, page * pageSize),
+    [filtered, page, pageSize]
+  )
+  const firstRow = filtered.length === 0 ? 0 : (page - 1) * pageSize + 1
+  const lastRow  = Math.min(page * pageSize, filtered.length)
+
   const toggleSort = (field) => {
     if(sortField===field) setSortDir(d=>d==='asc'?'desc':'asc')
     else { setSortField(field); setSortDir('asc') }
+  }
+
+  // ── Export current (filtered) view to CSV ─────────────────────────────────
+  const exportCSV = () => {
+    if (!filtered.length) { toast.error('Nothing to export'); return }
+    const headers = ['part_number','name','store_name','category','unit','current_stock','min_stock','unit_cost','expiry_date','supplier','location','notes']
+    const esc = (v) => {
+      const s = v == null ? '' : String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s
+    }
+    const rows = filtered.map(i => [
+      i.part_number, i.name, i.stores?.name || '', i.stores?.category || '', i.unit,
+      i.current_stock, i.min_stock, i.unit_cost || 0, i.expiry_date || '',
+      i.supplier || '', i.location || '', i.notes || '',
+    ].map(esc).join(','))
+    const csv = [headers.join(','), ...rows].join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+    a.download = `inventory_export_${new Date().toISOString().split('T')[0]}.csv`
+    a.click()
+    toast.success(`Exported ${filtered.length} items`)
   }
 
   const openAdd  = () => { setForm(EMPTY_FORM); setShowAdd(true) }
@@ -206,15 +243,18 @@ export default function Inventory() {
   const handleImport = async () => {
     if(!csvRows.length){ toast.error('No valid rows'); return }
     setImporting(true)
-    let success=0
-    for(const row of csvRows){
-      const {error}=await supabase.from('items').upsert(
-        {part_number:row.part_number,name:row.name,store_id:row.store_id,unit:row.unit,current_stock:row.current_stock,min_stock:row.min_stock,expiry_date:row.expiry_date||null,supplier:row.supplier||'',notes:row.notes||'',unit_cost:row.unit_cost||0,location:row.location||''},
-        {onConflict:'part_number',ignoreDuplicates:false}
-      )
-      if(!error) success++
-    }
-    toast.success(`Imported ${success} items`)
+    setImportProgress({ done: 0, total: csvRows.length })
+    const payloads = csvRows.map(row => ({
+      part_number:row.part_number, name:row.name, store_id:row.store_id, unit:row.unit,
+      current_stock:row.current_stock, min_stock:row.min_stock, expiry_date:row.expiry_date||null,
+      supplier:row.supplier||'', notes:row.notes||'', unit_cost:row.unit_cost||0, location:row.location||'',
+    }))
+    const { success, failed } = await chunkedWrite('items', payloads, {
+      mode: 'upsert', onConflict: 'part_number', chunkSize: 500,
+      onProgress: (done, total) => setImportProgress({ done, total }),
+    })
+    if (failed > 0) toast.error(`Imported ${success}, ${failed} failed`)
+    else toast.success(`Imported ${success} items`)
     setShowImport(false); setCsvRows([]); setCsvErrors([]); refetch()
     setImporting(false)
   }
@@ -235,6 +275,7 @@ export default function Inventory() {
         <div className="flex gap-2 flex-wrap">
           <button onClick={refetch} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
           <button onClick={()=>window.print()} className="btn-secondary btn-sm" title="Print"><Printer className="w-4 h-4" /></button>
+          <button onClick={exportCSV} className="btn-secondary btn-sm" title="Export current view to CSV"><Download className="w-4 h-4" /> Export</button>
           <button onClick={()=>setShowImport(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
           <Button onClick={openAdd}><Plus className="w-4 h-4" /> Add Item</Button>
         </div>
@@ -301,7 +342,8 @@ export default function Inventory() {
           <p className="text-sm mt-1">Try a different search, or use "Import CSV" / "Add Item".</p>
         </div>
       ) : (
-        <Table>
+       <>
+        <Table maxHeight="calc(100vh - 340px)">
           <Thead>
             <tr>
               <Th sortable onClick={()=>toggleSort('part_number')} sorted={sortField==='part_number'?sortDir:undefined}>Part #</Th>
@@ -316,7 +358,7 @@ export default function Inventory() {
             </tr>
           </Thead>
           <Tbody>
-            {filtered.map(item => {
+            {pageItems.map(item => {
               const days=daysUntil(item.expiry_date)
               const lowStock=Number(item.current_stock)<=Number(item.min_stock)
               const hasImage=!!item.image_url
@@ -378,6 +420,29 @@ export default function Inventory() {
             })}
           </Tbody>
         </Table>
+
+        {/* ── Pagination controls ──────────────────────────────────────── */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-3 text-sm">
+          <div className="flex items-center gap-2 text-slate-400">
+            <span>Showing <strong className="text-slate-200">{firstRow}–{lastRow}</strong> of <strong className="text-slate-200">{filtered.length}</strong></span>
+            <select value={pageSize} onChange={e=>setPageSize(Number(e.target.value))}
+              className="input text-xs w-auto py-1.5">
+              {[25,50,100,200,500].map(n=><option key={n} value={n}>{n} / page</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-1">
+            <button onClick={()=>setPage(1)} disabled={page===1}
+              className="btn-ghost btn-sm disabled:opacity-30 disabled:cursor-not-allowed">« First</button>
+            <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+              className="btn-ghost btn-sm disabled:opacity-30 disabled:cursor-not-allowed">‹ Prev</button>
+            <span className="px-3 text-slate-300">Page <strong>{page}</strong> / {totalPages}</span>
+            <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page>=totalPages}
+              className="btn-ghost btn-sm disabled:opacity-30 disabled:cursor-not-allowed">Next ›</button>
+            <button onClick={()=>setPage(totalPages)} disabled={page>=totalPages}
+              className="btn-ghost btn-sm disabled:opacity-30 disabled:cursor-not-allowed">Last »</button>
+          </div>
+        </div>
+       </>
       )}
 
       {/* ── Add/Edit modal ───────────────────────────────── */}
@@ -449,7 +514,13 @@ export default function Inventory() {
             Download the template, fill in your items (store_name must match exactly), then upload.
           </div>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-teal-700 file:text-white file:text-sm file:font-medium hover:file:bg-teal-600 cursor-pointer" />
-          {csvErrors.length>0&&<div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3 text-sm text-red-300 space-y-1">{csvErrors.slice(0,5).map((e,i)=><p key={i}>{e}</p>)}</div>}
+          {csvErrors.length>0&&<div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3 text-sm text-red-300 space-y-1">{csvErrors.slice(0,5).map((e,i)=><p key={i}>{e}</p>)}{csvErrors.length>5&&<p className="text-red-400/70">+ {csvErrors.length-5} more errors…</p>}</div>}
+          {importing&&importProgress.total>0&&(
+            <div className="bg-slate-700/30 border border-slate-700/40 rounded-lg p-3">
+              <div className="flex justify-between text-xs text-slate-300 mb-1.5"><span>Importing…</span><span>{importProgress.done} / {importProgress.total}</span></div>
+              <div className="h-2 bg-slate-600/50 rounded-full overflow-hidden"><div className="h-full bg-teal-500 transition-all duration-200" style={{width:`${Math.round((importProgress.done/importProgress.total)*100)}%`}} /></div>
+            </div>
+          )}
           {csvRows.length>0&&<div><p className="text-sm text-green-400 mb-2">✓ {csvRows.length} rows ready</p><div className="max-h-40 overflow-y-auto text-xs bg-slate-700/30 rounded-lg p-3 space-y-1">{csvRows.slice(0,10).map((r,i)=><div key={i} className="flex gap-2 text-slate-300"><span className="font-mono text-teal-400">{r.part_number}</span><span className="truncate">{r.name}</span></div>)}</div></div>}
         </div>
       </Modal>
