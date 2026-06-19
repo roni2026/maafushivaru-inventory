@@ -7,6 +7,7 @@ import {
 import toast from 'react-hot-toast'
 import { useItems } from '../hooks/useItems'
 import { supabase, chunkedWrite } from '../lib/supabase'
+import { parseCSV } from '../lib/csvTemplates'
 import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -82,6 +83,8 @@ export default function Inventory() {
   // ── CSV import ───────────────────────────────────────────
   const [csvRows,   setCsvRows]   = useState([])
   const [csvErrors, setCsvErrors] = useState([])
+  const [missingStores,    setMissingStores]    = useState([])
+  const [autoCreateStores, setAutoCreateStores] = useState(true)
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 })
   const fileRef = useRef(null)
@@ -211,7 +214,10 @@ export default function Inventory() {
 
   // ── CSV import ───────────────────────────────────────────
   const downloadTemplate = () => {
-    const csv='part_number,name,store_name,unit,current_stock,min_stock,expiry_date,supplier,unit_cost,location,notes\nBEV-001,Mineral Water 500mL,Beverage Dry Store,bottle,100,20,2026-12-31,Maldives Fresh Co,1.50,Shelf A1,Keep cool'
+    const csv='part_number,name,store_name,unit,current_stock,min_stock,expiry_date,supplier,unit_cost,location,notes\n'
+      +'BEV-001,Mineral Water 500mL,Beverage Dry Store,bottle,100,20,2026-12-31,Maldives Fresh Co,1.50,Shelf A1,Keep cool\n'
+      +'DRY-012,"Rice, Basmati 5kg",Dry Store,bag,30,5,2027-06-01,Global Foods,12.00,Row 3,\n'
+      +'GEN-007,Aluminium Foil Roll,General Store,roll,40,10,,Island Supplies,3.20,Shelf C2,'
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}))
     a.download='inventory_template.csv'; a.click(); toast.success('Template downloaded')
   }
@@ -221,41 +227,94 @@ export default function Inventory() {
     const reader=new FileReader()
     reader.onload=(ev)=>{
       const text=ev.target.result
-      const lines=text.split('\n').map(l=>l.trim()).filter(Boolean)
-      if(lines.length<2){ toast.error('CSV is empty'); return }
-      const headers=lines[0].split(',').map(h=>h.replace(/^"|"$/g,'').trim().toLowerCase())
-      const required=['part_number','name','store_name','unit','current_stock','min_stock']
+      // Robust, quote-aware parser (handles commas & quotes inside fields).
+      const rawRows=parseCSV(text)
+      if(!rawRows.length){ toast.error('CSV is empty or has no data rows'); return }
+      const headers=Object.keys(rawRows[0])
+      const required=['part_number','name','store_name','unit']
       const missing=required.filter(r=>!headers.includes(r))
-      if(missing.length){ toast.error(`CSV missing: ${missing.join(', ')}`); return }
-      const parsed=[]; const errs=[]
-      lines.slice(1).forEach((line,idx)=>{
-        const vals=line.split(',').map(v=>v.replace(/^"|"$/g,'').trim())
-        const row={}; headers.forEach((h,i)=>{ row[h]=vals[i]||'' })
-        const store=stores.find(s=>s.name.toLowerCase()===row.store_name?.toLowerCase())
-        if(!store) errs.push(`Row ${idx+2}: Store "${row.store_name}" not found`)
-        else parsed.push({...row,store_id:store.id,current_stock:Number(row.current_stock)||0,min_stock:Number(row.min_stock)||0,unit_cost:Number(row.unit_cost)||0})
+      if(missing.length){ toast.error(`CSV missing columns: ${missing.join(', ')}`); return }
+
+      const norm=(s)=>(s||'').trim().replace(/\s+/g,' ').toLowerCase()
+      const storeByName=new Map(stores.map(s=>[norm(s.name),s]))
+
+      const parsed=[]; const errs=[]; const missingSet=new Map()
+      rawRows.forEach((row,idx)=>{
+        if(!row.part_number?.trim()||!row.name?.trim()){
+          errs.push(`Row ${idx+2}: missing part_number or name`); return
+        }
+        const rawStore=(row.store_name||'').trim() || 'Unassigned'
+        const store=storeByName.get(norm(rawStore))
+        if(!store){ missingSet.set(norm(rawStore), rawStore) }
+        parsed.push({
+          part_number:row.part_number.trim(),
+          name:row.name.trim(),
+          store_name:rawStore,
+          _storeKey:norm(rawStore),
+          store_id:store?.id||null,
+          unit:row.unit?.trim()||'pcs',
+          current_stock:Number(row.current_stock)||0,
+          min_stock:Number(row.min_stock)||0,
+          unit_cost:Number(row.unit_cost)||0,
+          expiry_date:row.expiry_date?.trim()||'',
+          supplier:row.supplier?.trim()||'',
+          location:row.location?.trim()||'',
+          notes:row.notes?.trim()||'',
+        })
       })
-      setCsvRows(parsed); setCsvErrors(errs)
+      setCsvRows(parsed)
+      setCsvErrors(errs)
+      setMissingStores([...missingSet.values()].sort())
+      if(fileRef.current) fileRef.current.dataset.name=file.name
     }
     reader.readAsText(file)
   }
 
   const handleImport = async () => {
-    if(!csvRows.length){ toast.error('No valid rows'); return }
+    if(!csvRows.length){ toast.error('No rows to import'); return }
     setImporting(true)
     setImportProgress({ done: 0, total: csvRows.length })
-    const payloads = csvRows.map(row => ({
-      part_number:row.part_number, name:row.name, store_id:row.store_id, unit:row.unit,
-      current_stock:row.current_stock, min_stock:row.min_stock, expiry_date:row.expiry_date||null,
-      supplier:row.supplier||'', notes:row.notes||'', unit_cost:row.unit_cost||0, location:row.location||'',
-    }))
+
+    const norm=(s)=>(s||'').trim().replace(/\s+/g,' ').toLowerCase()
+    const storeIdByKey=new Map(stores.map(s=>[norm(s.name),s.id]))
+
+    // Auto-create any missing stores first (category 'General' — the only
+    // safe default that satisfies the DB CHECK constraint).
+    if(missingStores.length && autoCreateStores){
+      const toCreate=missingStores.map(name=>({name,category:'General'}))
+      const { data:created, error }=await supabase.from('stores').insert(toCreate).select('id,name')
+      if(error){ toast.error('Could not create stores: '+error.message); setImporting(false); return }
+      created?.forEach(s=>storeIdByKey.set(norm(s.name),s.id))
+    }
+
+    // Resolve store_id for every row; skip rows still without a store.
+    let skipped=0
+    const payloads=[]
+    for(const row of csvRows){
+      const sid=row.store_id||storeIdByKey.get(row._storeKey)
+      if(!sid){ skipped++; continue }
+      payloads.push({
+        part_number:row.part_number, name:row.name, store_id:sid, unit:row.unit,
+        current_stock:row.current_stock, min_stock:row.min_stock,
+        expiry_date:row.expiry_date||null, supplier:row.supplier, notes:row.notes,
+        unit_cost:row.unit_cost, location:row.location,
+      })
+    }
+    if(!payloads.length){
+      toast.error('No importable rows — enable "Auto-create missing stores" or fix store names')
+      setImporting(false); return
+    }
     const { success, failed } = await chunkedWrite('items', payloads, {
       mode: 'upsert', onConflict: 'part_number', chunkSize: 500,
       onProgress: (done, total) => setImportProgress({ done, total }),
     })
-    if (failed > 0) toast.error(`Imported ${success}, ${failed} failed`)
+    const parts=[`Imported ${success}`]
+    if(failed) parts.push(`${failed} failed`)
+    if(skipped) parts.push(`${skipped} skipped (no store)`)
+    if(failed||skipped) toast(parts.join(' · '), { icon:'⚠️' })
     else toast.success(`Imported ${success} items`)
-    setShowImport(false); setCsvRows([]); setCsvErrors([]); refetch()
+    setShowImport(false); setCsvRows([]); setCsvErrors([]); setMissingStores([])
+    refetch()
     setImporting(false)
   }
 
@@ -506,22 +565,41 @@ export default function Inventory() {
       </Modal>
 
       {/* ── CSV import ───────────────────────────────────── */}
-      <Modal isOpen={showImport} onClose={()=>{setShowImport(false);setCsvRows([]);setCsvErrors([]);if(fileRef.current)fileRef.current.value=''}}
-        title="Bulk Import via CSV"
-        footer={<><Button variant="secondary" onClick={downloadTemplate}><Download className="w-4 h-4" /> Template</Button>{csvRows.length>0&&<Button onClick={handleImport} loading={importing}>Import {csvRows.length} Items</Button>}</>}>
+      <Modal isOpen={showImport} onClose={()=>{setShowImport(false);setCsvRows([]);setCsvErrors([]);setMissingStores([]);if(fileRef.current)fileRef.current.value=''}}
+        title="Bulk Import via CSV" size="lg"
+        footer={<><Button variant="secondary" onClick={downloadTemplate}><Download className="w-4 h-4" /> Template</Button>{csvRows.length>0&&<Button onClick={handleImport} loading={importing}>Import {csvRows.length.toLocaleString()} {csvRows.length===1?'Item':'Items'}</Button>}</>}>
         <div className="space-y-4">
           <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 text-sm text-blue-300">
-            Download the template, fill in your items (store_name must match exactly), then upload.
+            Required columns: <code className="text-blue-200">part_number, name, store_name, unit</code>. Stores that don’t exist yet can be created automatically below — no need to set them up first.
           </div>
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-teal-700 file:text-white file:text-sm file:font-medium hover:file:bg-teal-600 cursor-pointer" />
-          {csvErrors.length>0&&<div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3 text-sm text-red-300 space-y-1">{csvErrors.slice(0,5).map((e,i)=><p key={i}>{e}</p>)}{csvErrors.length>5&&<p className="text-red-400/70">+ {csvErrors.length-5} more errors…</p>}</div>}
+
+          {csvErrors.length>0&&<div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3 text-sm text-red-300 space-y-1">{csvErrors.slice(0,5).map((e,i)=><p key={i}>{e}</p>)}{csvErrors.length>5&&<p className="text-red-400/70">+ {(csvErrors.length-5).toLocaleString()} more rows skipped (missing part_number/name)…</p>}</div>}
+
+          {missingStores.length>0&&(
+            <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-3 text-sm">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" checked={autoCreateStores} onChange={e=>setAutoCreateStores(e.target.checked)} className="mt-0.5 w-4 h-4 accent-teal-500" />
+                <span className="text-amber-200">
+                  Auto-create <strong>{missingStores.length}</strong> new store{missingStores.length!==1?'s':''} found in this file (category: <em>General</em>).
+                  {!autoCreateStores && <span className="text-amber-400/80"> If unchecked, rows with these stores will be skipped.</span>}
+                </span>
+              </label>
+              <div className="mt-2 max-h-24 overflow-y-auto text-xs text-amber-300/80 flex flex-wrap gap-1.5">
+                {missingStores.slice(0,40).map((s,i)=><span key={i} className="bg-amber-900/30 rounded px-1.5 py-0.5">{s}</span>)}
+                {missingStores.length>40&&<span className="px-1.5 py-0.5">+ {missingStores.length-40} more…</span>}
+              </div>
+            </div>
+          )}
+
           {importing&&importProgress.total>0&&(
             <div className="bg-slate-700/30 border border-slate-700/40 rounded-lg p-3">
-              <div className="flex justify-between text-xs text-slate-300 mb-1.5"><span>Importing…</span><span>{importProgress.done} / {importProgress.total}</span></div>
+              <div className="flex justify-between text-xs text-slate-300 mb-1.5"><span>Importing…</span><span>{importProgress.done.toLocaleString()} / {importProgress.total.toLocaleString()}</span></div>
               <div className="h-2 bg-slate-600/50 rounded-full overflow-hidden"><div className="h-full bg-teal-500 transition-all duration-200" style={{width:`${Math.round((importProgress.done/importProgress.total)*100)}%`}} /></div>
             </div>
           )}
-          {csvRows.length>0&&<div><p className="text-sm text-green-400 mb-2">✓ {csvRows.length} rows ready</p><div className="max-h-40 overflow-y-auto text-xs bg-slate-700/30 rounded-lg p-3 space-y-1">{csvRows.slice(0,10).map((r,i)=><div key={i} className="flex gap-2 text-slate-300"><span className="font-mono text-teal-400">{r.part_number}</span><span className="truncate">{r.name}</span></div>)}</div></div>}
+
+          {csvRows.length>0&&<div><p className="text-sm text-green-400 mb-2">✓ {csvRows.length.toLocaleString()} rows ready to import{missingStores.length>0&&autoCreateStores?` (incl. ${missingStores.length} new store${missingStores.length!==1?'s':''})`:''}</p><div className="max-h-40 overflow-y-auto text-xs bg-slate-700/30 rounded-lg p-3 space-y-1">{csvRows.slice(0,15).map((r,i)=><div key={i} className="flex gap-2 text-slate-300"><span className="font-mono text-teal-400 shrink-0">{r.part_number}</span><span className="truncate flex-1">{r.name}</span><span className="text-slate-500 shrink-0">{r.store_name}</span></div>)}{csvRows.length>15&&<p className="text-slate-500 text-center pt-1">+ {(csvRows.length-15).toLocaleString()} more…</p>}</div></div>}
         </div>
       </Modal>
 
