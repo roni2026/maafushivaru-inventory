@@ -28,18 +28,38 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 //   )
 //
 // ───────────────────────────────────────────────────────────────────────────
-export async function fetchAllRows(makeQuery, { pageSize = 1000, onProgress } = {}) {
-  let from = 0
-  const all = []
+export async function fetchAllRows(makeQuery, { pageSize = 1000, concurrency = 6, onProgress } = {}) {
+  // Page 0 first — most tables fit in a single page, so this is usually the
+  // only round-trip we need.
+  const first = await makeQuery().range(0, pageSize - 1)
+  if (first.error) throw first.error
+  const all = [...(first.data || [])]
+  onProgress?.(all.length)
+  if (all.length < pageSize) return all   // single page → done
+
+  // More than one page exists. Instead of walking pages one-at-a-time
+  // (N sequential round-trips), fire `concurrency` page requests in parallel
+  // per wave and stop as soon as a short page signals the end. Promise.all
+  // preserves request order, and ranges are contiguous, so the merged result
+  // keeps the query's ORDER BY intact.
+  let nextPage = 1
+  let reachedEnd = false
   // Safety cap: 500 pages = 500k rows. Prevents an accidental infinite loop.
-  for (let page = 0; page < 500; page++) {
-    const { data, error } = await makeQuery().range(from, from + pageSize - 1)
-    if (error) throw error
-    const batch = data || []
-    all.push(...batch)
+  while (!reachedEnd && nextPage < 500) {
+    const reqs = []
+    for (let c = 0; c < concurrency; c++) {
+      const from = (nextPage + c) * pageSize
+      reqs.push(makeQuery().range(from, from + pageSize - 1))
+    }
+    const results = await Promise.all(reqs)
+    for (const r of results) {
+      if (r.error) throw r.error
+      const batch = r.data || []
+      all.push(...batch)
+      if (batch.length < pageSize) reachedEnd = true
+    }
     onProgress?.(all.length)
-    if (batch.length < pageSize) break
-    from += pageSize
+    nextPage += concurrency
   }
   return all
 }

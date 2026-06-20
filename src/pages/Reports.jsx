@@ -28,9 +28,9 @@ export default function Reports() {
   const load = async () => {
     setLoading(true)
     const [{ data: i }, { data: s }, { data: iss }] = await Promise.all([
-      selectAll(() => supabase.from('items').select('*,stores(name,category)').eq('active', true)),
+      selectAll(() => supabase.from('items').select('id, part_number, name, store_id, current_stock, min_stock, unit, unit_cost, expiry_date, stores(name,category)').eq('active', true)),
       supabase.from('stores').select('*'),
-      selectAll(() => supabase.from('issuances').select('*').gte('date', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0])),
+      selectAll(() => supabase.from('issuances').select('item_id, quantity_issued, date').gte('date', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0])),
     ])
     setItems(i || [])
     setStores(s || [])
