@@ -74,7 +74,7 @@ export default function Orders() {
   // ── Load all items for manual add ─────────────────────────
   const loadAllItems = async () => {
     if (allItems.length) return
-    const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,stores(name)').order('name'))
+    const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,stores(name)').eq('active', true).order('name'))
     setAllItems(data || [])
   }
 
@@ -104,7 +104,7 @@ export default function Orders() {
       const { data: settings } = await supabase.from('settings').select('key,value')
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
-      const { data: items } = await selectAll(() => supabase.from('items').select('*, stores(name,category)'))
+      const { data: items } = await selectAll(() => supabase.from('items').select('*, stores(name,category)').eq('active', true))
       const tw = weekRange(0); const lw = weekRange(1)
       const { data: thisIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', tw.from).lte('date', tw.to))
       const { data: lastIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', lw.from).lte('date', lw.to))

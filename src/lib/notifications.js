@@ -7,7 +7,8 @@ export async function fetchNotifications() {
 
   const [{ data: items }, { data: issuances }] = await Promise.all([
     supabase.from('items')
-      .select('id, name, part_number, unit, current_stock, min_stock, expiry_date, stores(name)'),
+      .select('id, name, part_number, unit, current_stock, min_stock, expiry_date, stores(name)')
+      .eq('active', true),
     supabase.from('issuances')
       .select('item_id')
       .gte('date', d14.toISOString().split('T')[0]),

@@ -122,7 +122,7 @@ export default function IssuanceScan() {
 
   useEffect(() => {
     Promise.all([
-      selectAll(() => supabase.from('items').select('id,name,part_number,unit,stores(name)').order('name')),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,stores(name)').eq('active', true).order('name')),
       supabase.from('stores').select('*').order('name'),
     ]).then(([{ data: inv }, { data: st }]) => {
       setInventory(inv || [])

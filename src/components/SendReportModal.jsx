@@ -29,7 +29,7 @@ export default function SendReportModal({ onClose }) {
     async function load() {
       const [{ data: sRows }, { data: items }, { data: claimsData }] = await Promise.all([
         supabase.from('settings').select('key,value'),
-        selectAll(() => supabase.from('items').select('*,stores(name)').not('expiry_date', 'is', null)),
+        selectAll(() => supabase.from('items').select('*,stores(name)').eq('active', true).not('expiry_date', 'is', null)),
         supabase.from('delivery_claims').select('*').in('status', ['pending', 'contacted']),
       ])
 

@@ -29,7 +29,7 @@ export default function Transfers() {
     setLoading(true)
     const [{ data: r }, { data: i }, { data: s }] = await Promise.all([
       supabase.from('transfers').select('*').order('date', { ascending: false }).limit(200),
-      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').order('name')),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').eq('active', true).order('name')),
       supabase.from('stores').select('*').order('name'),
     ])
     setRecords(r || []); setItems(i || []); setStores(s || []); setLoading(false)

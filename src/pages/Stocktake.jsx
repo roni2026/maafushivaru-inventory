@@ -30,7 +30,7 @@ export default function Stocktake() {
     setLoading(true)
     const [{ data: r }, { data: i }] = await Promise.all([
       supabase.from('stocktake_entries').select('*,items(name,part_number,unit)').order('date', { ascending: false }).limit(200),
-      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').order('name')),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').eq('active', true).order('name')),
     ])
     setRecords(r || []); setItems(i || []); setLoading(false)
   }

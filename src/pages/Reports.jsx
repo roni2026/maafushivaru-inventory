@@ -28,7 +28,7 @@ export default function Reports() {
   const load = async () => {
     setLoading(true)
     const [{ data: i }, { data: s }, { data: iss }] = await Promise.all([
-      selectAll(() => supabase.from('items').select('*,stores(name,category)')),
+      selectAll(() => supabase.from('items').select('*,stores(name,category)').eq('active', true)),
       supabase.from('stores').select('*'),
       selectAll(() => supabase.from('issuances').select('*').gte('date', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0])),
     ])

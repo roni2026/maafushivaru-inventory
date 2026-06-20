@@ -37,6 +37,7 @@ export default function GlobalSearch({ isOpen, onClose }) {
       const { data } = await supabase
         .from('items')
         .select('id, name, part_number, unit, current_stock, min_stock, expiry_date, stores(name)')
+        .eq('active', true)
         .or(`name.ilike.%${query}%,part_number.ilike.%${query}%`)
         .order('name').limit(12)
       setResults(data || [])

@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, PackagePlus,
-  Download, Upload, ExternalLink, Printer, Camera, MapPin, X
+  Download, Upload, ExternalLink, Printer, Camera, MapPin, X,
+  CheckCircle2, Ban
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useItems } from '../hooks/useItems'
@@ -51,7 +52,7 @@ const SEARCH_FIELDS = [
 ]
 
 export default function Inventory() {
-  const { items, stores, loading, addItem, updateItem, deleteItem, updateStock, refetch } = useItems()
+  const { items, stores, loading, addItem, updateItem, deleteItem, setItemsActive, updateStock, refetch } = useItems()
 
   // ── Search / filter ──────────────────────────────────────
   const [searchField, setSearchField] = useState('name')
@@ -59,8 +60,13 @@ export default function Inventory() {
   const [filterStore, setFilterStore] = useState('')
   const [filterCat,   setFilterCat]   = useState('')
   const [filterExp,   setFilterExp]   = useState('')
+  const [filterActive,setFilterActive]= useState('')   // '' | 'active' | 'inactive'
   const [sortField,   setSortField]   = useState('expiry_date')
   const [sortDir,     setSortDir]     = useState('asc')
+
+  // ── Bulk activate / deactivate selection ──────────────────────
+  const [selected,   setSelected]   = useState(() => new Set())
+  const [bulkSaving, setBulkSaving] = useState(false)
 
   // ── Modals ───────────────────────────────────────────────
   const [showAdd,    setShowAdd]    = useState(false)
@@ -103,6 +109,8 @@ export default function Inventory() {
     }
     if (filterStore) list=list.filter(i=>i.store_id===filterStore)
     if (filterCat)   list=list.filter(i=>i.stores?.category===filterCat)
+    if (filterActive==='active')   list=list.filter(i=>i.active!==false)
+    if (filterActive==='inactive') list=list.filter(i=>i.active===false)
     if (filterExp) {
       list=list.filter(i=>{
         const d=daysUntil(i.expiry_date)
@@ -121,10 +129,10 @@ export default function Inventory() {
       return sortDir==='asc'?(va>vb?1:-1):(va<vb?1:-1)
     })
     return list
-  }, [items, search, searchField, filterStore, filterCat, filterExp, sortField, sortDir])
+  }, [items, search, searchField, filterStore, filterCat, filterExp, filterActive, sortField, sortDir])
 
   // Reset to first page whenever the result set changes
-  useEffect(() => { setPage(1) }, [search, searchField, filterStore, filterCat, filterExp, sortField, sortDir, pageSize])
+  useEffect(() => { setPage(1) }, [search, searchField, filterStore, filterCat, filterExp, filterActive, sortField, sortDir, pageSize])
 
   // Default the "unmatched rows" store to General (or the first store available)
   useEffect(() => {
@@ -146,6 +154,55 @@ export default function Inventory() {
     if(sortField===field) setSortDir(d=>d==='asc'?'desc':'asc')
     else { setSortField(field); setSortDir('asc') }
   }
+
+  // ── Bulk selection helpers ──────────────────────────────────
+  // "Select all" targets the entire FILTERED set (across every page),
+  // so a single click can mark thousands of items at once.
+  const filteredIds   = useMemo(() => filtered.map(i => i.id), [filtered])
+  const allFilteredSelected = filteredIds.length > 0 && filteredIds.every(id => selected.has(id))
+  const someSelected  = selected.size > 0
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+  const toggleSelectAll = () => {
+    setSelected(prev => {
+      if (filteredIds.every(id => prev.has(id))) {
+        // Everything in view is selected → clear those
+        const next = new Set(prev)
+        filteredIds.forEach(id => next.delete(id))
+        return next
+      }
+      // Otherwise select every filtered item
+      return new Set([...prev, ...filteredIds])
+    })
+  }
+  const clearSelection = () => setSelected(new Set())
+
+  const bulkSetActive = async (active) => {
+    const ids = [...selected]
+    if (!ids.length) return
+    setBulkSaving(true)
+    try {
+      await setItemsActive(ids, active)
+      toast.success(`${ids.length} item${ids.length>1?'s':''} ${active?'activated':'deactivated'}`)
+      clearSelection()
+    } catch (err) { toast.error(err.message) }
+    setBulkSaving(false)
+  }
+
+  // Quick single-row toggle from the status badge
+  const toggleOneActive = async (item) => {
+    try { await setItemsActive([item.id], item.active===false) }
+    catch (err) { toast.error(err.message) }
+  }
+
+  const activeCount   = useMemo(() => items.filter(i=>i.active!==false).length, [items])
+  const inactiveCount = items.length - activeCount
 
   // ── Export current (filtered) view to CSV ─────────────────────────────────
   const exportCSV = () => {
@@ -327,6 +384,8 @@ export default function Inventory() {
           <h1 className="page-title">Inventory</h1>
           <p className="page-sub">
             {filtered.length} of {items.length} items
+            {' · '}<span className="text-emerald-400">{activeCount} active</span>
+            {inactiveCount>0 && <> · <span className="text-slate-500">{inactiveCount} inactive</span></>}
             {inventoryValue>0 && <> · Value: <strong className="text-teal-400">${inventoryValue.toFixed(2)}</strong></>}
           </p>
         </div>
@@ -379,6 +438,11 @@ export default function Inventory() {
           <option value="30">≤ 30 days</option>
           <option value="ok">Good (&gt;30d)</option>
         </select>
+        <select value={filterActive} onChange={e=>setFilterActive(e.target.value)} className="input text-sm w-auto">
+          <option value="">All Statuses</option>
+          <option value="active">Active only</option>
+          <option value="inactive">Inactive only</option>
+        </select>
       </div>
 
       {/* Legend */}
@@ -390,6 +454,28 @@ export default function Inventory() {
         <span className="flex items-center gap-1 ml-4 text-teal-400"><Camera className="w-3 h-3" /> = has photo</span>
         <span className="flex items-center gap-1 text-blue-400"><MapPin className="w-3 h-3" /> = location set</span>
       </div>
+
+      {/* ── Bulk activate / deactivate action bar ───────────────── */}
+      {someSelected && (
+        <div className="card py-3 px-5 flex flex-wrap items-center gap-3 border-teal-600/40 bg-teal-900/10">
+          <span className="text-sm font-medium text-slate-200">
+            {selected.size} selected
+          </span>
+          <button onClick={toggleSelectAll} className="btn-ghost btn-sm">
+            {allFilteredSelected ? 'Deselect all' : `Select all ${filtered.length} in view`}
+          </button>
+          <div className="flex-1" />
+          <Button onClick={()=>bulkSetActive(true)} loading={bulkSaving} disabled={bulkSaving}>
+            <CheckCircle2 className="w-4 h-4" /> Mark Active
+          </Button>
+          <Button variant="secondary" onClick={()=>bulkSetActive(false)} loading={bulkSaving} disabled={bulkSaving}>
+            <Ban className="w-4 h-4" /> Mark Inactive
+          </Button>
+          <button onClick={clearSelection} className="btn-ghost btn-sm" title="Clear selection">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Table */}
       {loading ? (
@@ -404,6 +490,16 @@ export default function Inventory() {
         <Table maxHeight="calc(100vh - 340px)">
           <Thead>
             <tr>
+              <Th className="w-10">
+                <input
+                  type="checkbox"
+                  className="w-4 h-4 accent-teal-500 cursor-pointer align-middle"
+                  checked={allFilteredSelected}
+                  ref={el => { if (el) el.indeterminate = someSelected && !allFilteredSelected }}
+                  onChange={toggleSelectAll}
+                  title="Select all items in view"
+                />
+              </Th>
               <Th sortable onClick={()=>toggleSort('part_number')} sorted={sortField==='part_number'?sortDir:undefined}>Part #</Th>
               <Th sortable onClick={()=>toggleSort('name')} sorted={sortField==='name'?sortDir:undefined}>Item Name</Th>
               <Th>Store</Th>
@@ -412,6 +508,7 @@ export default function Inventory() {
               <Th>Min</Th>
               <Th>Cost</Th>
               <Th sortable onClick={()=>toggleSort('expiry_date')} sorted={sortField==='expiry_date'?sortDir:undefined}>Expiry</Th>
+              <Th>Status</Th>
               <Th className="text-right">Actions</Th>
             </tr>
           </Thead>
@@ -421,8 +518,18 @@ export default function Inventory() {
               const lowStock=Number(item.current_stock)<=Number(item.min_stock)
               const hasImage=!!item.image_url
               const hasLoc  =!!item.location
+              const isInactive=item.active===false
+              const isChecked=selected.has(item.id)
               return (
-                <Tr key={item.id} className={rowClass(days)}>
+                <Tr key={item.id} className={`${rowClass(days)} ${isInactive?'opacity-50':''} ${isChecked?'bg-teal-900/20':''}`}>
+                  <Td>
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 accent-teal-500 cursor-pointer align-middle"
+                      checked={isChecked}
+                      onChange={()=>toggleSelect(item.id)}
+                    />
+                  </Td>
                   <Td className="font-mono text-xs text-slate-300">{item.part_number}</Td>
                   <Td className="font-medium max-w-xs">
                     <Link to={`/inventory/${item.id}`} className="text-slate-100 hover:text-teal-400 transition-colors flex items-center gap-1 group truncate">
@@ -444,6 +551,16 @@ export default function Inventory() {
                   <Td className="text-slate-400">{item.min_stock}</Td>
                   <Td className="text-slate-400 text-xs">{Number(item.unit_cost||0)>0?`$${Number(item.unit_cost).toFixed(2)}`:'—'}</Td>
                   <Td>{expiryBadge(days)}</Td>
+                  <Td>
+                    <button
+                      onClick={()=>toggleOneActive(item)}
+                      title={isInactive?'Click to activate':'Click to deactivate'}
+                      className="focus:outline-none">
+                      {isInactive
+                        ? <Badge variant="gray">Inactive</Badge>
+                        : <Badge variant="green">Active</Badge>}
+                    </button>
+                  </Td>
                   <Td>
                     <div className="flex items-center justify-end gap-0.5">
                       {/* Image button */}

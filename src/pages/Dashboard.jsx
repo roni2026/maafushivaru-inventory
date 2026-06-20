@@ -82,7 +82,7 @@ export default function Dashboard() {
       const d14 = new Date(today); d14.setDate(d14.getDate()-14)
 
       const [{ data: items }, { data: issuances }, { data: updates }] = await Promise.all([
-        selectAll(() => supabase.from('items').select('*, stores(name, category)')),
+        selectAll(() => supabase.from('items').select('*, stores(name, category)').eq('active', true)),
         supabase.from('issuances')
           .select('item_id, quantity_issued, date, items(name, unit, stores(category))')
           .gte('date', d14.toISOString().split('T')[0])

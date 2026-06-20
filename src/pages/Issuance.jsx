@@ -30,7 +30,7 @@ export default function Issuance() {
     setLoading(true)
     const [{ data: r }, { data: i }] = await Promise.all([
       supabase.from('issuances').select('*,items(name,part_number,unit)').order('date', { ascending: false }).limit(200),
-      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').order('name')),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').eq('active', true).order('name')),
     ])
     setRecords(r || [])
     setItems(i || [])

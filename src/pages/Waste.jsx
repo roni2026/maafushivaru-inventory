@@ -43,7 +43,7 @@ export default function Waste() {
         .select('*, items(name, part_number, unit, stores(name))')
         .gte('date', dateFrom).lte('date', dateTo)
         .order('date', { ascending:false }).order('created_at', { ascending:false }),
-      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,unit_cost,stores(name)').order('name')),
+      selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,unit_cost,stores(name)').eq('active', true).order('name')),
     ])
     setWasteLog(wl||[]); setItems(it||[]); setLoading(false)
   }, [dateFrom, dateTo])
