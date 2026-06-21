@@ -9,6 +9,7 @@ import { Package, ArrowLeft, Pencil, Clock, TrendingUp, TrendingDown, ArrowUpRig
 import toast from 'react-hot-toast'
 import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
+import BatchManager from '../components/BatchManager'
 
 function daysUntil(d) {
   if (!d) return null
@@ -179,6 +180,9 @@ export default function ItemDetail() {
           ))}
         </div>
       </div>
+
+      {/* Expiry batches (multiple expiry dates with quantity) */}
+      <BatchManager itemId={item.id} unit={item.unit} />
 
       {/* Stock update history */}
       <div className="card">

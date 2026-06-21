@@ -102,12 +102,14 @@ export default function Inventory() {
   const categories = useMemo(() => [...new Set(stores.map(s=>s.category))].sort(), [stores])
 
   const filtered = useMemo(() => {
+    // Nothing is shown until a store (or "All Stores") is explicitly chosen.
+    if (!filterStore) return []
     let list=[...items]
     if (search) {
       const q=search.toLowerCase()
       list=list.filter(i=>(i[searchField]||'').toLowerCase().includes(q))
     }
-    if (filterStore) list=list.filter(i=>i.store_id===filterStore)
+    if (filterStore && filterStore!=='__all__') list=list.filter(i=>i.store_id===filterStore)
     if (filterCat)   list=list.filter(i=>i.stores?.category===filterCat)
     if (filterActive==='active')   list=list.filter(i=>i.active!==false)
     if (filterActive==='inactive') list=list.filter(i=>i.active===false)
@@ -422,8 +424,10 @@ export default function Inventory() {
             )}
           </div>
         </div>
-        <select value={filterStore} onChange={e=>setFilterStore(e.target.value)} className="input text-sm w-auto">
-          <option value="">All Stores</option>
+        <select value={filterStore} onChange={e=>setFilterStore(e.target.value)}
+          className={`input text-sm w-auto ${!filterStore ? 'ring-2 ring-teal-500/50 border-teal-500/60' : ''}`}>
+          <option value="">Select a Store…</option>
+          <option value="__all__">All Stores</option>
           {stores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} className="input text-sm w-auto">
@@ -480,6 +484,12 @@ export default function Inventory() {
       {/* Table */}
       {loading ? (
         <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : !filterStore ? (
+        <div className="card text-center py-16 text-slate-400">
+          <MapPin className="w-10 h-10 mx-auto mb-3 text-teal-500/70" />
+          <p className="font-semibold text-slate-200">Select a store to view its inventory</p>
+          <p className="text-sm mt-1">Choose a store from the dropdown above — or pick <strong>"All Stores"</strong> to see everything.</p>
+        </div>
       ) : filtered.length===0 ? (
         <div className="card text-center py-16 text-slate-500">
           <p className="font-medium">No items found</p>

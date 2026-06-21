@@ -362,3 +362,99 @@ export async function sendInventoryReport({ apiKey, senderEmail, senderName, rec
 
   return { subject, claimsCount: claims.length, expiryCount: expiringSoon.length + expired.length }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// EXPIRY REMINDER EMAIL  — focused email of items approaching/past expiry,
+// triggered from the Item Expiry page for the selected reminder thresholds.
+// `rows` = expiry rows from lib/expiry.js (each has: part_number, name, store,
+//          current_stock, unit, expiry_date, days)
+// ────────────────────────────────────────────────────────────────────────────
+function buildExpiryHTML({ rows, thresholdLabels, resortName }) {
+  const sorted = [...rows].sort((a, b) => a.days - b.days)
+  const expired = sorted.filter(r => r.days < 0).length
+  const within7 = sorted.filter(r => r.days >= 0 && r.days <= 7).length
+
+  const bodyRows = sorted.length === 0
+    ? `<tr><td colspan="6" style="padding:16px;text-align:center;font-family:Arial,sans-serif;color:#94a3b8;font-size:13px;">No items match the selected reminder windows.</td></tr>`
+    : sorted.map((r, i) => {
+        const badge = expiryBadge(r.days)
+        const bg = r.days < 0 ? '#fff1f2' : i % 2 === 0 ? '#ffffff' : '#fafafa'
+        const action = actionForExpiry(r.days)
+        return `
+        <tr style="background:${bg};">
+          <td style="padding:9px 10px;font-family:monospace;font-size:11px;color:#64748b;border-bottom:1px solid #f1f5f9;">${r.part_number || '—'}</td>
+          <td style="padding:9px 10px;font-family:Arial,sans-serif;font-size:12px;color:#1e293b;font-weight:600;border-bottom:1px solid #f1f5f9;">${r.name}</td>
+          <td style="padding:9px 10px;font-family:Arial,sans-serif;font-size:12px;color:#64748b;border-bottom:1px solid #f1f5f9;" class="mob-hide">${r.store || '—'}</td>
+          <td style="padding:9px 10px;text-align:center;font-family:Arial,sans-serif;font-size:12px;color:#1e293b;border-bottom:1px solid #f1f5f9;">${r.current_stock} ${r.unit || ''}</td>
+          <td style="padding:9px 10px;text-align:center;font-family:Arial,sans-serif;font-size:12px;color:#1e293b;border-bottom:1px solid #f1f5f9;">${r.expiry_date || '—'}</td>
+          <td style="padding:9px 10px;text-align:center;border-bottom:1px solid #f1f5f9;">
+            <span style="background:${badge.bg};color:${badge.color};border:1px solid ${badge.border};border-radius:4px;padding:2px 8px;font-family:Arial,sans-serif;font-size:10px;font-weight:700;">${badge.label}</span>
+          </td>
+        </tr>`
+      }).join('')
+
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<style>@media only screen and (max-width:620px){.mob-hide{display:none!important;}.tbl-wrap{overflow-x:auto!important;}}</style>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1f5f9;padding:24px 12px;"><tr><td align="center">
+<table role="presentation" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:#fff;border-radius:14px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.1);">
+  <tr><td style="background:#00AEEF;padding:24px 32px;">
+    <p style="margin:0 0 4px;color:rgba(255,255,255,0.85);font-family:Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;">${resortName || 'Outrigger Maafushivaru Resort'} — Store Department</p>
+    <h1 style="margin:0;color:#fff;font-family:Arial,sans-serif;font-size:21px;font-weight:700;">⏰ Item Expiry Reminder</h1>
+    <p style="margin:8px 0 0;color:rgba(255,255,255,0.9);font-family:Arial,sans-serif;font-size:12px;">${today()} · Reminder windows: <strong>${(thresholdLabels || []).join(', ') || '—'}</strong></p>
+  </td></tr>
+  <tr><td style="background:#0095cc;padding:0;"><table width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td style="padding:12px;text-align:center;border-right:1px solid rgba(255,255,255,0.2);"><p style="margin:0;color:#fff;font-family:Arial,sans-serif;font-size:20px;font-weight:700;">${sorted.length}</p><p style="margin:2px 0 0;color:rgba(255,255,255,0.75);font-family:Arial,sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:1px;">In Window</p></td>
+    <td style="padding:12px;text-align:center;border-right:1px solid rgba(255,255,255,0.2);"><p style="margin:0;color:#fff;font-family:Arial,sans-serif;font-size:20px;font-weight:700;">${within7}</p><p style="margin:2px 0 0;color:rgba(255,255,255,0.75);font-family:Arial,sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:1px;">≤ 7 Days</p></td>
+    <td style="padding:12px;text-align:center;"><p style="margin:0;color:#fff;font-family:Arial,sans-serif;font-size:20px;font-weight:700;">${expired}</p><p style="margin:2px 0 0;color:rgba(255,255,255,0.75);font-family:Arial,sans-serif;font-size:10px;text-transform:uppercase;letter-spacing:1px;">Expired</p></td>
+  </tr></table></td></tr>
+  <tr><td style="padding:24px 32px;">
+    <p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:14px;color:#475569;line-height:1.7;">Dear Sir,</p>
+    <p style="margin:0 0 18px;font-family:Arial,sans-serif;font-size:14px;color:#475569;line-height:1.7;">The following items are approaching (or have passed) their expiry date and require attention. Items are listed shortest to longest time remaining.</p>
+    <div class="tbl-wrap" style="overflow-x:auto;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;font-size:12px;min-width:480px;">
+      <thead><tr style="background:#fffbeb;">
+        <th style="padding:9px 10px;text-align:left;color:#92400e;font-family:Arial,sans-serif;border-bottom:1px solid #fde68a;">Part #</th>
+        <th style="padding:9px 10px;text-align:left;color:#92400e;font-family:Arial,sans-serif;border-bottom:1px solid #fde68a;">Item</th>
+        <th class="mob-hide" style="padding:9px 10px;text-align:left;color:#92400e;font-family:Arial,sans-serif;border-bottom:1px solid #fde68a;">Store</th>
+        <th style="padding:9px 10px;text-align:center;color:#92400e;font-family:Arial,sans-serif;border-bottom:1px solid #fde68a;">Stock</th>
+        <th style="padding:9px 10px;text-align:center;color:#92400e;font-family:Arial,sans-serif;border-bottom:1px solid #fde68a;">Expiry</th>
+        <th style="padding:9px 10px;text-align:center;color:#92400e;font-family:Arial,sans-serif;border-bottom:1px solid #fde68a;">Status</th>
+      </tr></thead>
+      <tbody>${bodyRows}</tbody>
+    </table></div>
+    <p style="margin:18px 0 0;font-family:Arial,sans-serif;font-size:13px;color:#475569;">Best regards,<br/><strong style="color:#1e293b;">Roni</strong> · Store Assistant</p>
+  </td></tr>
+  <tr><td style="background:#f8fafc;border-top:1px solid #e2e8f0;padding:14px 32px;text-align:center;">
+    <p style="margin:0;font-family:Arial,sans-serif;font-size:11px;color:#94a3b8;">Auto-generated by the Outrigger Maafushivaru Inventory System · ${today()}</p>
+  </td></tr>
+</table></td></tr></table></body></html>`
+}
+
+export async function sendExpiryReport({ apiKey, senderEmail, senderName, recipientEmail, recipientName, rows, thresholdLabels, resortName }) {
+  if (!apiKey)         throw new Error('Brevo API key not set. Go to Settings → Email Reports.')
+  if (!senderEmail)    throw new Error('Sender email not set. Go to Settings → Email Reports.')
+  if (!recipientEmail) throw new Error('Recipient email not set. Go to Settings → Email Reports.')
+
+  const expired = rows.filter(r => r.days < 0).length
+  const subject = `Item Expiry Reminder — ${today()} · ${rows.length} item(s)${expired ? ` · ${expired} expired` : ''}`
+
+  const response = await fetch(BREVO_API, {
+    method: 'POST',
+    headers: { 'accept': 'application/json', 'api-key': apiKey, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      sender: { name: senderName || 'Roni — Store Assistant', email: senderEmail },
+      to: [{ email: recipientEmail, name: recipientName || 'Manager' }],
+      subject,
+      htmlContent: buildExpiryHTML({ rows, thresholdLabels, resortName }),
+    }),
+  })
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.message || `Brevo API error ${response.status}`)
+  }
+  return { subject, count: rows.length }
+}

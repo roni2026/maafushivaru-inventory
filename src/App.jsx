@@ -25,6 +25,8 @@ const Transfers     = lazy(() => import('./pages/Transfers'))
 const Suppliers     = lazy(() => import('./pages/Suppliers'))
 const ItemDetail    = lazy(() => import('./pages/ItemDetail'))
 const Receiving     = lazy(() => import('./pages/Receiving'))
+const Movement      = lazy(() => import('./pages/Movement'))
+const Expiry        = lazy(() => import('./pages/Expiry'))
 
 function PageLoader() {
   return (
@@ -85,6 +87,8 @@ export default function App() {
                   <Route path="claims"        element={<Claims />}        />
                   <Route path="reports"       element={<Reports />}       />
                   <Route path="analytics"     element={<Analytics />}     />
+                  <Route path="expiry"        element={<Expiry />}        />
+                  <Route path="movement"      element={<Movement />}      />
                   <Route path="history"       element={<StockHistory />}  />
                   <Route path="suppliers"     element={<Suppliers />}     />
                   <Route path="orders"        element={<Orders />}        />

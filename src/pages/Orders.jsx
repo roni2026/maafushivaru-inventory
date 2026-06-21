@@ -13,6 +13,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import CSVImportModal from '../components/CSVImportModal'
 import { CSV_CONFIGS } from '../lib/csvTemplates'
+import { exportOrderExcel } from '../lib/excelExport'
 
 // ── Helpers ───────────────────────────────────────────────────
 function nextDelivery() {
@@ -245,6 +246,24 @@ export default function Orders() {
     setExporting(false)
   }
 
+  // ── Export styled Excel ────────────────────────────────────────────────────
+  const exportExcel = async () => {
+    if (!rows.length || !delivery) return
+    setExporting(true)
+    try {
+      const grouped = rows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
+      const delivDay  = delivery.date.toLocaleDateString('en-US', { weekday:'long' })
+      const delivDate = delivery.date.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
+      await exportOrderExcel(grouped, {
+        resortName,
+        deliveryLabel: `${delivDay} · ${delivDate}`,
+        filename: `Order_${delivDay}_${delivery.date.toISOString().split('T')[0]}.xlsx`,
+      })
+      toast.success('Excel exported')
+    } catch (err) { toast.error('Export failed: ' + err.message) }
+    setExporting(false)
+  }
+
   // ── Save order ─────────────────────────────────────────────
   const saveOrder = async () => {
     const toOrder = rows.filter(r => r.ordered > 0)
@@ -330,6 +349,7 @@ export default function Orders() {
             <>
               <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
               <Button variant="secondary" onClick={openAddItem}><PlusCircle className="w-4 h-4" /> Add Item</Button>
+              <Button variant="secondary" onClick={exportExcel} loading={exporting}><Download className="w-4 h-4" /> Excel</Button>
               <Button variant="secondary" onClick={exportPDF} loading={exporting}><Download className="w-4 h-4" /> PDF</Button>
               <Button variant="secondary" onClick={saveOrder} loading={saving}><Save className="w-4 h-4" /> Save Order</Button>
             </>

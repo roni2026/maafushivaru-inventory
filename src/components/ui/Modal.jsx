@@ -27,14 +27,14 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md', f
       {/* Panel */}
       <div
         className={[
-          'relative w-full bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl',
+          'relative w-full bg-slate-800 border border-slate-700 rounded-xl shadow-2xl',
           'flex flex-col max-h-[90vh]',
           SIZES[size] || SIZES.md,
         ].join(' ')}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 shrink-0">
-          <h2 className="font-display text-xl font-semibold text-slate-100">{title}</h2>
+          <h2 className="font-display text-lg font-semibold text-slate-100">{title}</h2>
           <button
             onClick={onClose}
             className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"

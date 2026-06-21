@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, TrendingUp, Settings, LogOut, X, History,
   Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox,
-  ScanLine, AlertTriangle
+  ScanLine, AlertTriangle, CalendarClock, Gauge
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
@@ -31,9 +31,11 @@ const NAV_GROUPS = [
   {
     label: 'Analysis',
     items: [
-      { to:'/reports',   icon:BarChart2,  label:'Reports'       },
-      { to:'/analytics', icon:TrendingUp, label:'Analytics'     },
-      { to:'/history',   icon:History,    label:'Stock History' },
+      { to:'/reports',   icon:BarChart2,     label:'Reports'       },
+      { to:'/analytics', icon:TrendingUp,    label:'Analytics'     },
+      { to:'/expiry',    icon:CalendarClock, label:'Item Expiry'   },
+      { to:'/movement',  icon:Gauge,         label:'Item Movement' },
+      { to:'/history',   icon:History,       label:'Stock History' },
     ],
   },
   {

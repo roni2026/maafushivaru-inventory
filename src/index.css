@@ -9,7 +9,11 @@
 
 @layer base {
   * { box-sizing: border-box; }
-  html { font-family: 'Inter', sans-serif; }
+  /* Base 16px on phones/tablets keeps tap targets comfortable. On desktop the
+     whole UI scales down to ~14px so it reads as a tighter, more professional
+     dashboard instead of an oversized one (everything is rem-based). */
+  html { font-family: 'Inter', sans-serif; font-size: 16px; }
+  @media (min-width: 1024px) { html { font-size: 14px; } }
   body { @apply bg-slate-900 text-slate-100 antialiased; }
   ::-webkit-scrollbar       { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { @apply bg-slate-800; }
@@ -21,20 +25,20 @@
   .font-display { font-family: 'Playfair Display', serif; }
 
   /* ── Cards ──────────────────────────────────────────── */
-  .card    { @apply bg-slate-800 border border-slate-700 rounded-xl p-4; }
+  .card    { @apply bg-slate-800 border border-slate-700 rounded-lg p-4; }
   .card-sm { @apply bg-slate-800 border border-slate-700 rounded-lg p-3; }
 
   /* ── Buttons ────────────────────────────────────────── */
-  .btn-sm { @apply text-sm px-3 py-1.5 flex items-center gap-1.5 rounded-lg font-medium; }
+  .btn-sm { @apply text-sm px-3 py-1.5 flex items-center gap-1.5 rounded-md font-medium; }
 
   .btn-secondary {
     @apply bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600
-           transition-colors rounded-xl px-4 py-2 text-sm font-medium
+           transition-colors rounded-lg px-3.5 py-1.5 text-sm font-medium
            flex items-center gap-2 cursor-pointer;
   }
   .btn-ghost {
     @apply hover:bg-slate-700 text-slate-400 hover:text-slate-100 transition-colors
-           rounded-xl px-3 py-2 text-sm font-medium flex items-center gap-2;
+           rounded-lg px-2.5 py-1.5 text-sm font-medium flex items-center gap-2;
   }
 
   /* ── Inputs ─────────────────────────────────────────── */
@@ -46,7 +50,7 @@
   }
 
   /* ── Page headings ──────────────────────────────────── */
-  .page-title { @apply font-display text-xl font-bold text-slate-100; }
+  .page-title { @apply font-display text-lg font-bold text-slate-100; }
   .page-sub   { @apply text-slate-400 text-xs mt-0.5; }
 }
 
