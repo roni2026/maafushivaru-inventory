@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSort } from '../hooks/useSort'
 import { supabase, selectAll } from '../lib/supabase'
 import { Trash2, Plus, Download, Search, RefreshCw } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from 'recharts'
@@ -90,6 +91,8 @@ export default function Waste() {
   const totalQty  = filtered.reduce((s,w)=>s+Number(w.quantity),0)
   const totalCost = filtered.reduce((s,w)=>s+Number(w.quantity)*Number(w.unit_cost||0),0)
 
+  const { sorted, thProps } = useSort(filtered, 'date', 'desc')
+
   const chartData = REASONS.map(r=>({
     r, count:filtered.filter(w=>w.reason===r).length,
     cost:filtered.filter(w=>w.reason===r).reduce((s,w)=>s+Number(w.quantity)*Number(w.unit_cost||0),0),
@@ -161,9 +164,9 @@ export default function Waste() {
         <div className="card text-center py-16 text-slate-500"><Trash2 className="w-12 h-12 mx-auto mb-3 opacity-20" /><p className="font-medium">No waste records</p><p className="text-sm mt-1">Click "Log Waste" to record a disposal.</p></div>
       ) : (
         <Table>
-          <Thead><tr><Th>Date</Th><Th>Part #</Th><Th>Item Name</Th><Th>Store</Th><Th>Reason</Th><Th>Qty</Th><Th>Est. Cost</Th><Th>Logged By</Th><Th>Notes</Th></tr></Thead>
+          <Thead><tr><Th {...thProps('date')}>Date</Th><Th {...thProps('items.part_number')}>Part #</Th><Th {...thProps('items.name')}>Item Name</Th><Th {...thProps('items.stores.name')}>Store</Th><Th {...thProps('reason')}>Reason</Th><Th {...thProps('quantity')}>Qty</Th><Th {...thProps('unit_cost')}>Est. Cost</Th><Th {...thProps('logged_by')}>Logged By</Th><Th {...thProps('notes')}>Notes</Th></tr></Thead>
           <Tbody>
-            {filtered.map(w=>(
+            {sorted.map(w=>(
               <Tr key={w.id}>
                 <Td className="text-slate-400 text-xs whitespace-nowrap">{w.date}</Td>
                 <Td className="font-mono text-xs text-slate-300">{w.items?.part_number}</Td>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSort } from '../hooks/useSort'
 import { supabase, selectAll } from '../lib/supabase'
 import { Plus, Search, Upload, X, RefreshCw, CheckCircle2, ClipboardCheck } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -41,6 +42,8 @@ export default function Stocktake() {
     r.item_name?.toLowerCase().includes(search.toLowerCase()) ||
     r.items?.name?.toLowerCase().includes(search.toLowerCase())
   ), [records, search])
+
+  const { sorted, thProps } = useSort(filtered, 'date', 'desc')
 
   const filteredItems = items.filter(i =>
     i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
@@ -120,12 +123,12 @@ export default function Stocktake() {
         <div className="card overflow-x-auto">
           <Table>
             <Thead><tr>
-              <Th>Date</Th><Th>Part #</Th><Th>Item</Th><Th>System Qty</Th><Th>Counted</Th><Th>Difference</Th><Th>Status</Th><Th>Action</Th>
+              <Th {...thProps('date')}>Date</Th><Th {...thProps('items.part_number')}>Part #</Th><Th {...thProps('item_name')}>Item</Th><Th {...thProps('system_quantity')}>System Qty</Th><Th {...thProps('counted_quantity')}>Counted</Th><Th>Difference</Th><Th {...thProps('status')}>Status</Th><Th>Action</Th>
             </tr></Thead>
             <Tbody>
-              {filtered.length === 0 ? (
+              {sorted.length === 0 ? (
                 <Tr><Td colSpan={8} className="text-center text-slate-500 py-12">No stocktake entries yet</Td></Tr>
-              ) : filtered.map(r => {
+              ) : sorted.map(r => {
                 const diff = Number(r.counted_quantity) - Number(r.system_quantity)
                 return (
                   <Tr key={r.id} className={r.status === 'pending' ? 'bg-yellow-900/5' : ''}>

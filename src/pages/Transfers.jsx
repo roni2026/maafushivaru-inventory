@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSort } from '../hooks/useSort'
 import { supabase, selectAll } from '../lib/supabase'
 import { Plus, Search, Upload, X, RefreshCw, ArrowRight } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -42,6 +43,8 @@ export default function Transfers() {
     r.from_store_name?.toLowerCase().includes(search.toLowerCase()) ||
     r.to_store_name?.toLowerCase().includes(search.toLowerCase())
   ), [records, search])
+
+  const { sorted, thProps } = useSort(filtered, 'date', 'desc')
 
   const filteredItems = items.filter(i =>
     i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
@@ -105,12 +108,12 @@ export default function Transfers() {
         <div className="card overflow-x-auto">
           <Table>
             <Thead><tr>
-              <Th>Date</Th><Th>Item</Th><Th>Quantity</Th><Th>From</Th><Th></Th><Th>To</Th><Th>By</Th><Th>Note</Th>
+              <Th {...thProps('date')}>Date</Th><Th {...thProps('item_name')}>Item</Th><Th {...thProps('quantity')}>Quantity</Th><Th {...thProps('from_store_name')}>From</Th><Th></Th><Th {...thProps('to_store_name')}>To</Th><Th {...thProps('transferred_by')}>By</Th><Th {...thProps('note')}>Note</Th>
             </tr></Thead>
             <Tbody>
-              {filtered.length === 0 ? (
+              {sorted.length === 0 ? (
                 <Tr><Td colSpan={8} className="text-center text-slate-500 py-12">No transfer records yet</Td></Tr>
-              ) : filtered.map(r => (
+              ) : sorted.map(r => (
                 <Tr key={r.id}>
                   <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
                   <Td className="font-medium text-slate-100">{r.item_name}</Td>

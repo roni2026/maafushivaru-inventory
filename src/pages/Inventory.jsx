@@ -125,9 +125,16 @@ export default function Inventory() {
       })
     }
     list.sort((a,b)=>{
-      let va=a[sortField],vb=b[sortField]
+      const getv=(o)=>{
+        if(sortField==='store_name') return o.stores?.name||''
+        if(sortField==='category')   return o.stores?.category||''
+        return o[sortField]
+      }
+      let va=getv(a),vb=getv(b)
       if(sortField==='expiry_date'){ if(!va)return 1; if(!vb)return -1; va=new Date(va); vb=new Date(vb) }
+      else if(['current_stock','min_stock','unit_cost'].includes(sortField)){ va=Number(va)||0; vb=Number(vb)||0 }
       else if(typeof va==='string'){ va=va.toLowerCase(); vb=(vb||'').toLowerCase() }
+      if(va==null) return 1; if(vb==null) return -1
       return sortDir==='asc'?(va>vb?1:-1):(va<vb?1:-1)
     })
     return list
@@ -512,11 +519,11 @@ export default function Inventory() {
               </Th>
               <Th sortable onClick={()=>toggleSort('part_number')} sorted={sortField==='part_number'?sortDir:undefined}>Part #</Th>
               <Th sortable onClick={()=>toggleSort('name')} sorted={sortField==='name'?sortDir:undefined}>Item Name</Th>
-              <Th>Store</Th>
-              <Th>Unit</Th>
+              <Th sortable onClick={()=>toggleSort('store_name')} sorted={sortField==='store_name'?sortDir:undefined}>Store</Th>
+              <Th sortable onClick={()=>toggleSort('unit')} sorted={sortField==='unit'?sortDir:undefined}>Unit</Th>
               <Th sortable onClick={()=>toggleSort('current_stock')} sorted={sortField==='current_stock'?sortDir:undefined}>Stock</Th>
-              <Th>Min</Th>
-              <Th>Cost</Th>
+              <Th sortable onClick={()=>toggleSort('min_stock')} sorted={sortField==='min_stock'?sortDir:undefined}>Min</Th>
+              <Th sortable onClick={()=>toggleSort('unit_cost')} sorted={sortField==='unit_cost'?sortDir:undefined}>Cost</Th>
               <Th sortable onClick={()=>toggleSort('expiry_date')} sorted={sortField==='expiry_date'?sortDir:undefined}>Expiry</Th>
               <Th>Status</Th>
               <Th className="text-right">Actions</Th>

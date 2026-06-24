@@ -103,8 +103,10 @@ export default function Analytics() {
     if (filterCat)   list = list.filter(i => i.stores?.category === filterCat)
     if (filterCls)   list = list.filter(i => i.cls === filterCls)
     list.sort((a,b) => {
-      let va=a[sortField], vb=b[sortField]
+      const getv=(o)=> sortField==='store_name' ? (o.stores?.name||'') : o[sortField]
+      let va=getv(a), vb=getv(b)
       if (typeof va==='string') { va=va.toLowerCase(); vb=(vb||'').toLowerCase() }
+      if (va==null) return 1; if (vb==null) return -1
       return sortDir==='asc' ? (va>vb?1:-1) : (va<vb?1:-1)
     })
     return list
@@ -324,10 +326,10 @@ export default function Analytics() {
             <Thead><tr>
               <Th sortable onClick={()=>toggleSort('part_number')} sorted={sortField==='part_number'?sortDir:undefined}>Part #</Th>
               <Th sortable onClick={()=>toggleSort('name')} sorted={sortField==='name'?sortDir:undefined}>Item Name</Th>
-              <Th>Store</Th>
+              <Th sortable onClick={()=>toggleSort('store_name')} sorted={sortField==='store_name'?sortDir:undefined}>Store</Th>
               <Th sortable onClick={()=>toggleSort('wkTotal')} sorted={sortField==='wkTotal'?sortDir:undefined}>This Week</Th>
               <Th sortable onClick={()=>toggleSort('prevTotal')} sorted={sortField==='prevTotal'?sortDir:undefined}>Last Week</Th>
-              <Th>Trend</Th>
+              <Th sortable onClick={()=>toggleSort('trend')} sorted={sortField==='trend'?sortDir:undefined}>Trend</Th>
               <Th sortable onClick={()=>toggleSort('current_stock')} sorted={sortField==='current_stock'?sortDir:undefined}>Stock</Th>
               <Th sortable onClick={()=>toggleSort('cls')} sorted={sortField==='cls'?sortDir:undefined}>Classification</Th>
             </tr></Thead>

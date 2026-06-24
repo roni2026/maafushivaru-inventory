@@ -220,13 +220,13 @@ export default function Movement() {
             <Thead>
               <tr>
                 <Th sortable onClick={() => toggleSort('name')} sorted={sortKey === 'name' ? sortDir : undefined}>Item</Th>
-                <Th className="hidden sm:table-cell">Store</Th>
+                <Th sortable onClick={() => toggleSort('store')} sorted={sortKey === 'store' ? sortDir : undefined} className="hidden sm:table-cell">Store</Th>
                 <Th sortable onClick={() => toggleSort('stock')} sorted={sortKey === 'stock' ? sortDir : undefined}>Stock</Th>
                 <Th sortable onClick={() => toggleSort('issued')} sorted={sortKey === 'issued' ? sortDir : undefined}>Issued</Th>
-                <Th className="hidden sm:table-cell">Txns</Th>
+                <Th sortable onClick={() => toggleSort('txns')} sorted={sortKey === 'txns' ? sortDir : undefined} className="hidden sm:table-cell">Txns</Th>
                 <Th sortable onClick={() => toggleSort('perWeek')} sorted={sortKey === 'perWeek' ? sortDir : undefined}>Avg/Wk</Th>
                 <Th sortable onClick={() => toggleSort('cover')} sorted={sortKey === 'cover' ? sortDir : undefined} className="hidden md:table-cell">Cover</Th>
-                <Th className="hidden md:table-cell">Last</Th>
+                <Th sortable onClick={() => toggleSort('daysSince')} sorted={sortKey === 'daysSince' ? sortDir : undefined} className="hidden md:table-cell">Last</Th>
                 <Th>Movement</Th>
               </tr>
             </Thead>

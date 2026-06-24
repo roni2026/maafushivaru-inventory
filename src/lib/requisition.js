@@ -36,10 +36,20 @@ function grabField(text, labels) {
 function parseHeader(block) {
   const reqNo = (block.match(/REQ\s*NUMBER\s*[:\-]?\s*(REQ[-\s]?MAM[-\s]?\d+)/i) ||
                  block.match(/(REQ[-\s]?MAM[-\s]?\d+)/i) || [])[1] || ''
+  // Birchstreet prints US-style mm/dd/yyyy. Build a SAFE ISO date and reject
+  // impossible values (month > 12 / day > 31) so we never feed Postgres a
+  // garbage date like "2026-23-06" which throws "date/time field value out of range".
   const toIso = (d) => {
     const m = String(d).match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/)
     if (!m) return ''
-    return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`   // mm/dd/yyyy
+    let mm = parseInt(m[1], 10)   // month (mm/dd/yyyy)
+    let dd = parseInt(m[2], 10)   // day
+    const yyyy = m[3]
+    // If the first field is clearly a day (>12) and the second is a valid month,
+    // the source was dd/mm/yyyy — swap so we still produce a valid date.
+    if (mm > 12 && dd <= 12) { const t = mm; mm = dd; dd = t }
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return ''
+    return `${yyyy}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`
   }
   return {
     req_number: reqNo.replace(/\s+/g, ''),
@@ -57,9 +67,21 @@ function parseHeader(block) {
 }
 
 // Parse a single item line. Returns null if it isn't an item row.
+// Header / metadata lines that must NEVER be treated as item rows. The REQ
+// NUMBER line ("REQ NUMBER : REQ-MAM-000035237  Status: New") in particular was
+// being parsed as an item because the zero-padded number looks like a part code.
+const HEADER_LINE_RE = new RegExp(
+  '(REQ\\s*NUMBER|REQ[-\\s]?MAM[-\\s]?\\d|\\bStatus\\s*[:\\-]|Required\\s*Delivery|' +
+  'REQ\\s*Date|REQ\\s*Type|Purchase\\s*type|Source\\s*Location|Destination\\s*Location|' +
+  '\\bRequestor\\b|\\bDepartment\\s*[:\\-]|\\bTitle\\s*[:\\-]|\\bSubject\\s*[:\\-]|' +
+  'Product\\s*Desc|\\bUOM\\b\\s*Price|\\bExtension\\b)', 'i')
+
 function parseItemLine(line) {
   const trimmed = line.replace(/\s+/g, ' ').trim()
   if (trimmed.length < 6) return null
+
+  // Skip requisition header / metadata / column-title lines outright.
+  if (HEADER_LINE_RE.test(trimmed)) return null
 
   // leading line number
   const lnMatch = trimmed.match(/^(\d{1,3})\s+/)

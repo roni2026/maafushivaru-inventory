@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useSort } from '../hooks/useSort'
 import { supabase } from '../lib/supabase'
 import { History, Search, Download, RefreshCw, ArrowUp, ArrowDown, Filter } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -67,6 +68,8 @@ export default function StockHistory() {
     if (typeFilter === 'manual')   list = list.filter(r => !(r.note||'').toLowerCase().includes('issuance'))
     return list
   }, [records, search, storeFilter, typeFilter])
+
+  const { sorted, thProps } = useSort(filtered, 'date', 'desc')
 
   // ── CSV export ─────────────────────────────────────────
   const exportCSV = () => {
@@ -192,19 +195,19 @@ export default function StockHistory() {
         <Table>
           <Thead>
             <tr>
-              <Th>Date</Th>
-              <Th>Part #</Th>
-              <Th>Item Name</Th>
-              <Th>Store</Th>
-              <Th>Type</Th>
-              <Th>Change</Th>
-              <Th>New Qty</Th>
-              <Th>Updated By</Th>
-              <Th>Note</Th>
+              <Th {...thProps('date')}>Date</Th>
+              <Th {...thProps('items.part_number')}>Part #</Th>
+              <Th {...thProps('items.name')}>Item Name</Th>
+              <Th {...thProps('items.stores.name')}>Store</Th>
+              <Th {...thProps('note')}>Type</Th>
+              <Th {...thProps('quantity_change')}>Change</Th>
+              <Th {...thProps('new_quantity')}>New Qty</Th>
+              <Th {...thProps('updated_by')}>Updated By</Th>
+              <Th {...thProps('note')}>Note</Th>
             </tr>
           </Thead>
           <Tbody>
-            {filtered.map(r => {
+            {sorted.map(r => {
               const isIn       = r.quantity_change > 0
               const isIssuance = (r.note||'').toLowerCase().includes('issuance')
               return (

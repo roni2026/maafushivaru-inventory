@@ -9,6 +9,7 @@ import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import CSVImportModal from '../components/CSVImportModal'
 import { CSV_CONFIGS } from '../lib/csvTemplates'
+import { useSort } from '../hooks/useSort'
 
 const today = () => new Date().toISOString().split('T')[0]
 
@@ -199,23 +200,7 @@ export default function Issuance() {
                         {g.info.department && <span>Dept: <span className="text-slate-300">{g.info.department}</span></span>}
                       </div>
                     )}
-                    <Table>
-                      <Thead><tr>
-                        <Th>Part #</Th><Th>Item</Th><Th>Qty Issued</Th><Th>Issued By</Th><Th>Date</Th><Th></Th>
-                      </tr></Thead>
-                      <Tbody>
-                        {g.items.map(r => (
-                          <Tr key={r.id}>
-                            <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
-                            <Td className="font-medium text-slate-100">{r.items?.name}</Td>
-                            <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
-                            <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
-                            <Td className="text-slate-400 text-xs whitespace-nowrap">{r.date}</Td>
-                            <Td><button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button></Td>
-                          </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
+                    <GroupItemsTable items={g.items} onDelete={handleDelete} />
                   </div>
                 )}
               </div>
@@ -226,28 +211,7 @@ export default function Issuance() {
           {manual.length > 0 && (
             <div className="card overflow-x-auto">
               {groups.length > 0 && <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Manual issuances</p>}
-              <Table>
-                <Thead><tr>
-                  <Th>Date</Th><Th>Part #</Th><Th>Item</Th><Th>Qty Issued</Th><Th>Issued By</Th><Th>Note</Th><Th></Th>
-                </tr></Thead>
-                <Tbody>
-                  {manual.map(r => (
-                    <Tr key={r.id}>
-                      <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
-                      <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
-                      <Td className="font-medium text-slate-100">{r.items?.name}</Td>
-                      <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
-                      <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
-                      <Td className="text-slate-400 text-xs max-w-xs truncate">{r.note}</Td>
-                      <Td>
-                        <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
+              <ManualIssuanceTable items={manual} onDelete={handleDelete} />
             </div>
           )}
         </div>
@@ -296,5 +260,68 @@ export default function Issuance() {
 
       {showCSV && <CSVImportModal config={CSV_CONFIGS.issuances} onClose={() => setShowCSV(false)} onImported={load} />}
     </div>
+  )
+}
+
+// ── Sortable issuance tables ────────────────────────────────────────────────
+function GroupItemsTable({ items, onDelete }) {
+  const { sorted, thProps } = useSort(items, 'date', 'desc')
+  return (
+    <Table>
+      <Thead><tr>
+        <Th {...thProps('items.part_number')}>Part #</Th>
+        <Th {...thProps('items.name')}>Item</Th>
+        <Th {...thProps('quantity_issued')}>Qty Issued</Th>
+        <Th {...thProps('issued_by')}>Issued By</Th>
+        <Th {...thProps('date')}>Date</Th>
+        <Th></Th>
+      </tr></Thead>
+      <Tbody>
+        {sorted.map(r => (
+          <Tr key={r.id}>
+            <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
+            <Td className="font-medium text-slate-100">{r.items?.name}</Td>
+            <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
+            <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
+            <Td className="text-slate-400 text-xs whitespace-nowrap">{r.date}</Td>
+            <Td><button onClick={() => onDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button></Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
+  )
+}
+
+function ManualIssuanceTable({ items, onDelete }) {
+  const { sorted, thProps } = useSort(items, 'date', 'desc')
+  return (
+    <Table>
+      <Thead><tr>
+        <Th {...thProps('date')}>Date</Th>
+        <Th {...thProps('items.part_number')}>Part #</Th>
+        <Th {...thProps('items.name')}>Item</Th>
+        <Th {...thProps('quantity_issued')}>Qty Issued</Th>
+        <Th {...thProps('issued_by')}>Issued By</Th>
+        <Th {...thProps('note')}>Note</Th>
+        <Th></Th>
+      </tr></Thead>
+      <Tbody>
+        {sorted.map(r => (
+          <Tr key={r.id}>
+            <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
+            <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
+            <Td className="font-medium text-slate-100">{r.items?.name}</Td>
+            <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
+            <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
+            <Td className="text-slate-400 text-xs max-w-xs truncate">{r.note}</Td>
+            <Td>
+              <button onClick={() => onDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
   )
 }

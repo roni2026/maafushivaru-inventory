@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useSort } from '../hooks/useSort'
 import { supabase, selectAll } from '../lib/supabase'
 import {
   CalendarClock, Download, RefreshCw, Search, Mail, Send, Save,
@@ -83,6 +84,8 @@ export default function Expiry() {
     }
     return list   // already sorted shortest → longest in buildExpiryRows
   }, [rows, store, search])
+
+  const { sorted, thProps } = useSort(filtered, null, 'asc')
 
   // ── Download styled Excel ──────────────────────────────────────────────────
   const handleDownload = async () => {
@@ -248,18 +251,18 @@ export default function Expiry() {
           <Table maxHeight="calc(100vh - 300px)">
             <Thead>
               <tr>
-                <Th>Part #</Th>
-                <Th>Item Name</Th>
-                <Th className="hidden sm:table-cell">Store</Th>
-                <Th className="hidden md:table-cell">Batch</Th>
-                <Th>Stock</Th>
-                <Th>Expiry</Th>
-                <Th>Days</Th>
-                <Th>Status</Th>
+                <Th {...thProps('part_number')}>Part #</Th>
+                <Th {...thProps('name')}>Item Name</Th>
+                <Th {...thProps('store')} className="hidden sm:table-cell">Store</Th>
+                <Th {...thProps('batch_code')} className="hidden md:table-cell">Batch</Th>
+                <Th {...thProps('current_stock')}>Stock</Th>
+                <Th {...thProps('expiry_date')}>Expiry</Th>
+                <Th {...thProps('days')}>Days</Th>
+                <Th {...thProps('days')}>Status</Th>
               </tr>
             </Thead>
             <Tbody>
-              {filtered.map(r => (
+              {sorted.map(r => (
                 <Tr key={r.key} className={expiryRowTint(r.days)}>
                   <Td className="font-mono text-xs text-slate-400">{r.part_number || '—'}</Td>
                   <Td>

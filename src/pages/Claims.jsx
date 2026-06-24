@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useSort } from '../hooks/useSort'
 import { supabase } from '../lib/supabase'
 import {
   AlertTriangle, Plus, CheckCircle2, CreditCard, Trash2,
@@ -53,6 +54,8 @@ export default function Claims() {
     if (filterSupplier) list = list.filter(c => c.supplier_name === filterSupplier)
     return list
   }, [claims, search, filterStatus, filterType, filterSupplier])
+
+  const { sorted, thProps } = useSort(filtered, 'date', 'desc')
 
   const updateStatus = async (id, newStatus) => {
     setUpdatingId(id)
@@ -281,20 +284,20 @@ export default function Claims() {
           <Table>
             <Thead>
               <tr>
-                <Th>Date</Th>
-                <Th>Part #</Th>
-                <Th>Item</Th>
-                <Th>Supplier</Th>
-                <Th>Issue</Th>
-                <Th>Ordered</Th>
-                <Th>Received</Th>
-                <Th>Claim Qty</Th>
-                <Th>Status</Th>
+                <Th {...thProps('date')}>Date</Th>
+                <Th {...thProps('part_number')}>Part #</Th>
+                <Th {...thProps('item_name')}>Item</Th>
+                <Th {...thProps('supplier_name')}>Supplier</Th>
+                <Th {...thProps('issue_type')}>Issue</Th>
+                <Th {...thProps('ordered_qty')}>Ordered</Th>
+                <Th {...thProps('received_qty')}>Received</Th>
+                <Th {...thProps('claim_qty')}>Claim Qty</Th>
+                <Th {...thProps('status')}>Status</Th>
                 <Th className="text-right">Actions</Th>
               </tr>
             </Thead>
             <Tbody>
-              {filtered.map(claim => {
+              {sorted.map(claim => {
                 const status = STATUS_CONFIG[claim.status] || STATUS_CONFIG.pending
                 const issueLabel = ISSUE_TYPES.find(t => t.value === claim.issue_type)?.label || claim.issue_type
                 const isLoading = updatingId === claim.id

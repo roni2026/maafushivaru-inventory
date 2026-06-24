@@ -41,9 +41,36 @@ export function classifyOrigin(name) {
   if (/CHIP|CRISP|PRINGLE|CANDY|BISCUIT/.test(n)) return 'foreign'  // packaged snacks
   return LOCAL_KW.some(k => n.includes(k)) ? 'local' : 'foreign'
 }
-// Monday = foreign delivery, Thursday = local delivery.
+// Delivery-day rules:
+//   • FOREIGN items only arrive on MONDAY.
+//   • LOCAL items can arrive on BOTH days, but MAJORLY on THURSDAY.
+// deliveryDayFor returns the *primary* day (used for labels / default sorting).
 export function deliveryDayFor(origin) {
   return origin === 'local' ? 'Thursday' : 'Monday'
+}
+// All days an item of this origin can be ordered/received on.
+export function deliveryDaysFor(origin) {
+  return origin === 'local' ? ['Thursday', 'Monday'] : ['Monday']
+}
+// Can an item of this origin be delivered on the given weekday name?
+export function canDeliverOn(origin, day) {
+  return deliveryDaysFor(origin).includes(day)
+}
+// Short human label for the order sheet.
+export function deliveryLabelFor(origin) {
+  return origin === 'local' ? 'Local · Thu (also Mon)' : 'Foreign · Mon'
+}
+
+// ── SAMPLE detection ────────────────────────────────────────────────────────
+// On a boat note a line is a SAMPLE when the word "sample" appears in the item
+// code (part number). We also accept it in the PO column or product name so a
+// sample is never missed. These are tracked over time on the Samples tab.
+const SAMPLE_RE = /sample/i
+export function isSampleRow(row) {
+  if (!row) return false
+  return SAMPLE_RE.test(String(row.part_number || '')) ||
+         SAMPLE_RE.test(String(row.po_number || '')) ||
+         SAMPLE_RE.test(String(row.product_name || ''))
 }
 
 // ── Low-level cell helpers ─────────────────────────────────────────────

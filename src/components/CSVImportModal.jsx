@@ -64,6 +64,20 @@ export default function CSVImportModal({ config, onClose, onImported }) {
         toast.error('No data rows found. Make sure the file has a header row and at least one data row.')
         return
       }
+      // ── Dedupe index: classify each row as UPDATE (matches an existing record)
+      //    or NEW. Matching is normalised (trim, lowercase, ignore leading zeros)
+      //    so we never create a duplicate just because a code was typed slightly
+      //    differently. When a match is found we align the upsert conflict key to
+      //    the stored value so the existing row is UPDATED, not duplicated.
+      const norm = (v) => String(v ?? '').trim().toLowerCase().replace(/^0+/, '')
+      const existingIdx = new Map()
+      if (config.dedupeOn && config.dedupeLookup && Array.isArray(lookups[config.dedupeLookup])) {
+        for (const ex of lookups[config.dedupeLookup]) {
+          const k = norm(ex[config.dedupeOn])
+          if (k) existingIdx.set(k, ex)
+        }
+      }
+
       const processed = rawRows
         .filter(r => Object.values(r).some(v => v?.trim()))
         .map((raw, idx) => {
@@ -75,12 +89,22 @@ export default function CSVImportModal({ config, onClose, onImported }) {
           } catch (err) {
             errors = ['Parse error: ' + err.message]
           }
+          let _action = null
+          if (config.dedupeOn) {
+            const key = norm(transformed[config.dedupeOn] ?? raw[config.dedupeOn])
+            const match = key ? existingIdx.get(key) : null
+            _action = match ? 'update' : 'new'
+            if (match && config.upsertOn && match[config.upsertOn] != null) {
+              transformed = { ...transformed, [config.upsertOn]: match[config.upsertOn] }
+            }
+          }
           return {
             _rowNum:       idx + 2,
             _raw:          raw,
             _transformed:  transformed,
             _errors:       errors,
             _valid:        errors.length === 0,
+            _action:       _action,
             _preview:      Object.values(raw).slice(0, 4).filter(v => v).join(' · '),
           }
         })
@@ -156,6 +180,9 @@ export default function CSVImportModal({ config, onClose, onImported }) {
 
   const valid   = rows.filter(r => r._valid)
   const invalid = rows.filter(r => !r._valid)
+  const hasDedupe   = !!config.dedupeOn
+  const updateCount = valid.filter(r => r._action === 'update').length
+  const newCount    = valid.filter(r => r._action === 'new').length
 
   return (
     <Modal
@@ -312,6 +339,20 @@ export default function CSVImportModal({ config, onClose, onImported }) {
             </div>
           </div>
 
+          {/* Update-vs-new breakdown (avoids duplicate records on re-upload) */}
+          {hasDedupe && valid.length > 0 && (
+            <div className="bg-slate-700/30 border border-slate-700/40 rounded-xl p-3 flex items-center justify-center gap-6 text-sm">
+              <span className="flex items-center gap-2 text-blue-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                <strong>{updateCount}</strong> existing — quantities updated
+              </span>
+              <span className="flex items-center gap-2 text-green-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                <strong>{newCount}</strong> new — will be added
+              </span>
+            </div>
+          )}
+
           {/* Live import progress */}
           {importing && progress.total > 0 && (
             <div className="bg-slate-700/30 border border-slate-700/40 rounded-xl p-3">
@@ -337,6 +378,11 @@ export default function CSVImportModal({ config, onClose, onImported }) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-slate-500 shrink-0">Row {row._rowNum}</span>
+                    {hasDedupe && row._valid && row._action && (
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold ${row._action === 'update' ? 'bg-blue-900/40 text-blue-300' : 'bg-green-900/40 text-green-300'}`}>
+                        {row._action === 'update' ? 'update' : 'new'}
+                      </span>
+                    )}
                     <span className="text-slate-200 truncate">{row._preview}</span>
                   </div>
                   {!row._valid && (

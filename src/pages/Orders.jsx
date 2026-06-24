@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { supabase, selectAll } from '../lib/supabase'
 import {
   ShoppingCart, Download, RefreshCw, Minus, Plus, Save,
@@ -14,7 +14,8 @@ import Input, { Textarea } from '../components/ui/Input'
 import CSVImportModal from '../components/CSVImportModal'
 import { CSV_CONFIGS } from '../lib/csvTemplates'
 import { exportOrderExcel } from '../lib/excelExport'
-import { classifyOrigin, deliveryDayFor } from '../lib/boatnote'
+import { classifyOrigin, deliveryDayFor, canDeliverOn, deliveryLabelFor } from '../lib/boatnote'
+import { useSort } from '../hooks/useSort'
 
 // ── Helpers ───────────────────────────────────────────────────
 function nextDelivery() {
@@ -25,6 +26,15 @@ function nextDelivery() {
     if (diff < minDiff) minDiff = diff
   }
   const d = new Date(today); d.setDate(d.getDate() + minDiff)
+  return { date: d, label: d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) }
+}
+// Next occurrence of a specific weekday (Monday / Thursday) for a targeted order.
+function nextDeliveryFor(dayName) {
+  if (!dayName || dayName === 'auto') return nextDelivery()
+  const map = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 }
+  const target = map[dayName] ?? 1
+  const today = new Date(); let diff = (target - today.getDay() + 7) % 7; if (diff === 0) diff = 7
+  const d = new Date(today); d.setDate(d.getDate() + diff)
   return { date: d, label: d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) }
 }
 function weekRange(weeksBack = 0) {
@@ -38,6 +48,8 @@ const STATUS_BADGE = { pending:'yellow', partial:'orange', received:'green', can
 
 export default function Orders() {
   const [tab,       setTab]      = useState('generate')
+  const [orderMode, setOrderMode]= useState('pattern')  // 'pattern' | 'usage'
+  const [deliveryDay, setDeliveryDay] = useState('auto') // 'auto' | 'Monday' | 'Thursday'
   const [storeOnly, setStoreOnly]= useState(true)   // STORE-only, boat-note driven
   const [boatStats, setBoatStats]= useState(null)   // { weeks, items: Map<code,{qty,n}> }
   const [rows,      setRows]     = useState([])
@@ -139,8 +151,15 @@ export default function Orders() {
         const issAvg = (sum(thisIss, item.id) + sum(lastIss, item.id)) / 2
         const bn = bnByCode.get(code(item.part_number))
         const bnAvg = bn ? bn.qty / bnWeeks : 0
-        // Prefer real boat-note ordering history when available, else issuance.
-        const avgWeekly = bnAvg > 0 ? bnAvg : issAvg
+        // ── Generation mode ──────────────────────────────────────────────
+        //  • BY PATTERN → the general/standard order list: typical ordered
+        //    quantity from boat-note ordering history (what we normally buy).
+        //  • BY USAGE   → driven by issuance usage history (what was actually
+        //    consumed), falling back to the boat-note pattern only if there is
+        //    no usage signal at all.
+        const avgWeekly = orderMode === 'usage'
+          ? (issAvg > 0 ? issAvg : bnAvg)
+          : (bnAvg > 0 ? bnAvg : issAvg)
         const suggested = Math.max(0, Math.ceil(avgWeekly * 2 - Number(item.current_stock)))
         const origin = item.origin || classifyOrigin(item.name)
         return {
@@ -155,14 +174,16 @@ export default function Orders() {
       })
       // STORE-only = items that appear in the STORE department of past boat notes.
       .filter(r => storeOnly ? r._inBoatNote : true)
-      .filter(r => r.suggested > 0 || r.current_stock <= r.min_stock)
+      // PATTERN mode shows the full general list; USAGE mode shows only what
+      // actually needs reordering based on consumption.
+      .filter(r => orderMode === 'pattern' ? true : (r.suggested > 0 || r.current_stock <= r.min_stock))
       .sort((a, b) => a.origin.localeCompare(b.origin) || a.name.localeCompare(b.name))
 
-      setRows(orderRows); setDelivery(nextDelivery())
+      setRows(orderRows); setDelivery(nextDeliveryFor(deliveryDay))
       await checkUndeliveredItems()
     } catch (err) { toast.error('Failed: ' + err.message) }
     setLoading(false)
-  }, [checkUndeliveredItems, storeOnly])
+  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay])
 
   // ── Add undelivered to current order ──────────────────────
   const addPendingToOrder = () => {
@@ -253,7 +274,7 @@ export default function Orders() {
 
   // ── Export PDF ─────────────────────────────────────────────
   const exportPDF = async () => {
-    if (!rows.length || !delivery) return
+    if (!visibleRows.length || !delivery) return
     setExporting(true)
     try {
       const { default: jsPDF }     = await import('jspdf')
@@ -267,7 +288,7 @@ export default function Orders() {
       doc.text(resortName, 14, 12)
       doc.setFontSize(13); doc.setFont('helvetica','normal')
       doc.text(`Order for ${delivDay} – ${delivDate}`, 14, 21)
-      const grouped = rows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
+      const grouped = visibleRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
       let y = 36
       for (const [store, items] of Object.entries(grouped)) {
         doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold')
@@ -289,10 +310,10 @@ export default function Orders() {
 
   // ── Export styled Excel ────────────────────────────────────────────────────
   const exportExcel = async () => {
-    if (!rows.length || !delivery) return
+    if (!visibleRows.length || !delivery) return
     setExporting(true)
     try {
-      const grouped = rows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
+      const grouped = visibleRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
       const delivDay  = delivery.date.toLocaleDateString('en-US', { weekday:'long' })
       const delivDate = delivery.date.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
       await exportOrderExcel(grouped, {
@@ -307,7 +328,7 @@ export default function Orders() {
 
   // ── Save order ─────────────────────────────────────────────
   const saveOrder = async () => {
-    const toOrder = rows.filter(r => r.ordered > 0)
+    const toOrder = visibleRows.filter(r => r.ordered > 0)
     if (!toOrder.length) { toast.error('No items to save'); return }
     if (!delivery) return
     setSaving(true)
@@ -364,7 +385,19 @@ export default function Orders() {
   }
   const switchToHistory = () => { setTab('history'); loadHistory() }
 
-  const toOrder          = rows.filter(r => r.ordered > 0)
+  // ── Delivery-day filter (live) ───────────────────────────────────────────
+  //  Foreign items only arrive Monday; local items can arrive both days (mainly
+  //  Thursday). Picking a day instantly narrows the list to what can actually
+  //  be delivered that day — no regenerate needed.
+  const visibleRows = useMemo(() => (
+    deliveryDay === 'auto' ? rows : rows.filter(r => canDeliverOn(r.origin, deliveryDay))
+  ), [rows, deliveryDay])
+  const { sorted: sortedRows, thProps } = useSort(visibleRows, null, 'asc')
+
+  // Switch the targeted delivery day live (also re-dates the order header).
+  const pickDeliveryDay = (day) => { setDeliveryDay(day); setDelivery(nextDeliveryFor(day)) }
+
+  const toOrder          = visibleRows.filter(r => r.ordered > 0)
   const showPendingAlert = pendingItems.length > 0 && !pendingDismissed && rows.length > 0
   const pendingSources   = [...new Set(pendingItems.map(i => `${i.orderDay} · ${i.orderDate}`))]
 
@@ -414,16 +447,50 @@ export default function Orders() {
       {/* ── Generate tab ───────────────────────────────────── */}
       {tab === 'generate' && (
         <>
-          {/* Scope + delivery-day legend */}
-          <div className="card-sm flex items-center justify-between gap-3 flex-wrap">
-            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-              <input type="checkbox" checked={storeOnly} onChange={e => setStoreOnly(e.target.checked)} className="accent-teal-500 w-4 h-4" />
-              <strong>STORE items only</strong> <span className="text-slate-500">— ordered from boat-note history</span>
-            </label>
-            <div className="flex items-center gap-2 text-xs">
-              {boatStats && <span className="text-slate-400">{boatStats.count} store items · ~{boatStats.weeks}w history</span>}
-              <Badge variant="blue">Foreign → Monday</Badge>
-              <Badge variant="green">Local → Thursday</Badge>
+          {/* Generation mode + scope + delivery-day controls */}
+          <div className="card-sm space-y-3">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              {/* By Pattern / By Usage */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Generate</span>
+                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+                  {[
+                    { key:'pattern', label:'By Pattern', hint:'general order list' },
+                    { key:'usage',   label:'By Usage',   hint:'from usage history' },
+                  ].map(m => (
+                    <button key={m.key} onClick={() => setOrderMode(m.key)} title={m.hint}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${orderMode === m.key ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-slate-500 hidden sm:inline">
+                  {orderMode === 'pattern' ? 'standard list from boat-note ordering pattern' : 'calculated from issuance usage history'}
+                </span>
+              </div>
+              {/* Delivery day */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Delivery</span>
+                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+                  {['auto','Monday','Thursday'].map(d => (
+                    <button key={d} onClick={() => pickDeliveryDay(d)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${deliveryDay === d ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                      {d === 'auto' ? 'Auto' : d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 flex-wrap border-t border-slate-700/50 pt-3">
+              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={storeOnly} onChange={e => setStoreOnly(e.target.checked)} className="accent-teal-500 w-4 h-4" />
+                <strong>STORE items only</strong> <span className="text-slate-500">— ordered from boat-note history</span>
+              </label>
+              <div className="flex items-center gap-2 text-xs">
+                {boatStats && <span className="text-slate-400">{boatStats.count} store items · ~{boatStats.weeks}w history</span>}
+                <Badge variant="blue">Foreign → Mon only</Badge>
+                <Badge variant="green">Local → Thu (also Mon)</Badge>
+              </div>
             </div>
           </div>
           {!rows.length && !loading && (
@@ -466,9 +533,9 @@ export default function Orders() {
 
               {/* Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="card-sm text-center"><p className="text-2xl font-bold text-[#00AEEF]">{rows.length}</p><p className="text-slate-400 text-sm mt-1">Items</p></div>
+                <div className="card-sm text-center"><p className="text-2xl font-bold text-[#00AEEF]">{visibleRows.length}</p><p className="text-slate-400 text-sm mt-1">Items</p></div>
                 <div className="card-sm text-center"><p className="text-2xl font-bold text-[#00AEEF]">{toOrder.reduce((s, r) => s + r.ordered, 0)}</p><p className="text-slate-400 text-sm mt-1">Total Units</p></div>
-                <div className="card-sm text-center"><p className="text-sm font-medium text-green-400">{rows.filter(r => r._manuallyAdded).length} manually added</p><p className="text-slate-400 text-xs mt-1">items</p></div>
+                <div className="card-sm text-center"><p className="text-sm font-medium text-green-400">{visibleRows.filter(r => r._manuallyAdded).length} manually added</p><p className="text-slate-400 text-xs mt-1">items</p></div>
                 <div className="card-sm text-center">
                   <p className="font-medium text-slate-100">{delivery?.date.toLocaleDateString('en-US', { weekday:'long' })}</p>
                   <p className="text-slate-400 text-xs mt-1">{delivery?.date.toLocaleDateString('en-US', { day:'numeric', month:'short', year:'numeric' })}</p>
@@ -483,10 +550,19 @@ export default function Orders() {
                 </div>
                 <Table>
                   <Thead><tr>
-                    <Th>Part #</Th><Th>Item Name</Th><Th>Store</Th><Th>Origin · Day</Th><Th>Unit</Th><Th>In Stock</Th><Th>Avg/Wk</Th><Th>Suggested</Th><Th>Order Qty</Th><Th></Th>
+                    <Th {...thProps('part_number')}>Part #</Th>
+                    <Th {...thProps('name')}>Item Name</Th>
+                    <Th {...thProps('store')}>Store</Th>
+                    <Th {...thProps('origin')}>Origin · Day</Th>
+                    <Th {...thProps('unit')}>Unit</Th>
+                    <Th {...thProps('current_stock')}>In Stock</Th>
+                    <Th {...thProps('avgWeekly')}>Avg/Wk</Th>
+                    <Th {...thProps('suggested')}>Suggested</Th>
+                    <Th {...thProps('ordered')}>Order Qty</Th>
+                    <Th></Th>
                   </tr></Thead>
                   <Tbody>
-                    {rows.map(row => (
+                    {sortedRows.map(row => (
                       <Tr key={row.id}
                         className={[
                           row.ordered === 0 ? 'opacity-40' : '',
@@ -501,7 +577,7 @@ export default function Orders() {
                         <Td className="text-xs text-slate-400">{row.store}</Td>
                         <Td>
                           <Badge variant={row.origin === 'local' ? 'green' : 'blue'}>
-                            {row.origin === 'local' ? 'Local · Thu' : 'Foreign · Mon'}
+                            {deliveryLabelFor(row.origin)}
                           </Badge>
                         </Td>
                         <Td className="text-xs text-slate-400">{row.unit}</Td>

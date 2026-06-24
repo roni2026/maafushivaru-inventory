@@ -64,6 +64,13 @@ export const CSV_CONFIGS = {
     icon: '📦',
     table: 'items',
     upsertOn: 'part_number',
+    // Re-uploading the inventory must UPDATE existing items (e.g. new stock qty)
+    // and INSERT only genuinely new items — never create duplicates. The import
+    // preview classifies each row as "update" vs "new" by matching part numbers
+    // (normalised: trimmed, case-insensitive, leading zeros ignored) against the
+    // existing catalogue loaded below.
+    dedupeOn: 'part_number',
+    dedupeLookup: 'items',
     headers: ['part_number','name','store_name','unit','current_stock','min_stock','unit_cost','expiry_date','supplier','location','notes'],
     required: ['part_number','name','store_name','unit'],
     descriptions: {
@@ -83,7 +90,7 @@ export const CSV_CONFIGS = {
       ['F-001','Chicken Breast 1kg','Food Store - Frozen','kg','50','10','8.00','2026-08-15','Island Meats Ltd','Freezer 1','Free range'],
       ['DRY-012','Rice Basmati 5kg','Dry Store','bag','30','5','12.00','2027-06-01','Global Foods','Row 3 shelf 2',''],
     ],
-    lookups: ['stores'],
+    lookups: ['stores', 'items'],
     transform: (row, { stores }) => ({
       part_number:   row.part_number?.trim(),
       name:          row.name?.trim(),
