@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll } from '../lib/supabase'
-import { Plus, Search, Trash2, Upload, X, RefreshCw } from 'lucide-react'
+import { Plus, Search, Trash2, Upload, X, RefreshCw, ChevronDown, ChevronRight, MapPin, FileText } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -16,10 +16,12 @@ const EMPTY = { date: today(), item_id: '', quantity_issued: '', issued_by: 'Ron
 
 export default function Issuance() {
   const [records, setRecords] = useState([])
+  const [reqMap,  setReqMap]  = useState({})   // requisition_id -> requisition header
   const [items,   setItems]   = useState([])
   const [loading, setLoading] = useState(true)
   const [search,  setSearch]  = useState('')
   const [range,   setRange]   = useState({ from: '', to: '' })
+  const [expanded, setExpanded] = useState({}) // requisition_id -> bool
   const [showAdd, setShowAdd] = useState(false)
   const [showCSV, setShowCSV] = useState(false)
   const [form,    setForm]    = useState(EMPTY)
@@ -29,26 +31,57 @@ export default function Issuance() {
 
   const load = async () => {
     setLoading(true)
-    let iq = supabase.from('issuances').select('*,items(name,part_number,unit)').order('date', { ascending: false }).limit(500)
+    let iq = supabase.from('issuances').select('*,items(name,part_number,unit)')
+      .order('date', { ascending: false }).order('created_at', { ascending: false }).limit(800)
     if (range.from) iq = iq.gte('date', range.from)
     if (range.to)   iq = iq.lte('date', range.to)
     const [{ data: r }, { data: i }] = await Promise.all([
       iq,
       selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock').eq('active', true).order('name')),
     ])
-    setRecords(r || [])
+    const recs = r || []
+    setRecords(recs)
     setItems(i || [])
+    // pull the requisition headers so we can group scanned issuances by destination
+    const reqIds = [...new Set(recs.map(x => x.requisition_id).filter(Boolean))]
+    if (reqIds.length) {
+      const { data: reqs } = await supabase.from('requisitions')
+        .select('id,req_number,destination_location,source_location,subject,department,date,requestor,purchase_type')
+        .in('id', reqIds)
+      const map = {}; (reqs || []).forEach(q => { map[q.id] = q }); setReqMap(map)
+    } else setReqMap({})
     setLoading(false)
   }
   useEffect(() => { load() }, [range.from, range.to])
 
-  const filtered = useMemo(() =>
-    records.filter(r =>
-      !search ||
-      r.items?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      r.items?.part_number?.toLowerCase().includes(search.toLowerCase()) ||
-      r.issued_by?.toLowerCase().includes(search.toLowerCase())
-    ), [records, search])
+  // search across item, part #, issued-by, req number, destination & subject
+  const filtered = useMemo(() => records.filter(r => {
+    if (!search) return true
+    const s = search.toLowerCase()
+    const q = reqMap[r.requisition_id]
+    return r.items?.name?.toLowerCase().includes(s)
+      || r.items?.part_number?.toLowerCase().includes(s)
+      || r.issued_by?.toLowerCase().includes(s)
+      || r.req_number?.toLowerCase().includes(s)
+      || q?.destination_location?.toLowerCase().includes(s)
+      || q?.subject?.toLowerCase().includes(s)
+  }), [records, search, reqMap])
+
+  // split into requisition groups (one card per requisition) + loose/manual rows
+  const { groups, manual } = useMemo(() => {
+    const byId = {}
+    const manualRows = []
+    for (const r of filtered) {
+      if (r.requisition_id && reqMap[r.requisition_id]) (byId[r.requisition_id] ||= []).push(r)
+      else manualRows.push(r)
+    }
+    const groups = Object.entries(byId).map(([id, its]) => ({
+      id, info: reqMap[id], items: its,
+      totalQty: its.reduce((s, x) => s + Number(x.quantity_issued), 0),
+      latest: its.reduce((m, x) => (x.date > m ? x.date : m), its[0].date),
+    })).sort((a, b) => String(b.latest).localeCompare(String(a.latest)))
+    return { groups, manual: manualRows }
+  }, [filtered, reqMap])
 
   const filteredItems = items.filter(i =>
     i.name.toLowerCase().includes(itemSearch.toLowerCase()) ||
@@ -56,6 +89,7 @@ export default function Issuance() {
   ).slice(0, 8)
 
   const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
+  const toggle = (id) => setExpanded(p => ({ ...p, [id]: !p[id] }))
 
   const handleSave = async () => {
     if (!form.item_id)          { toast.error('Select an item'); return }
@@ -70,7 +104,6 @@ export default function Issuance() {
       note:            form.note,
     })
     if (error) { toast.error(error.message); setSaving(false); return }
-    // Deduct stock
     if (item) {
       const newStock = Math.max(0, Number(item.current_stock) - Number(form.quantity_issued))
       await supabase.from('items').update({ current_stock: newStock }).eq('id', form.item_id)
@@ -93,7 +126,7 @@ export default function Issuance() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="page-title">Daily Issuance</h1>
-          <p className="page-sub">Record items issued to departments or outlets</p>
+          <p className="page-sub">Scanned requisitions are grouped by destination — click to see the items</p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
@@ -110,7 +143,7 @@ export default function Issuance() {
       <div className="flex items-end gap-3 flex-wrap">
         <div className="relative max-w-sm flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input placeholder="Search item, part # or issued by…" value={search} onChange={e => setSearch(e.target.value)}
+          <input placeholder="Search item, destination, subject, REQ #…" value={search} onChange={e => setSearch(e.target.value)}
             className="input pl-9 text-sm" />
           {search && <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2"><X className="w-4 h-4 text-slate-400" /></button>}
         </div>
@@ -125,33 +158,98 @@ export default function Issuance() {
 
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
+      ) : (groups.length === 0 && manual.length === 0) ? (
+        <div className="card text-center text-slate-500 py-12">No issuance records yet</div>
       ) : (
-        <div className="card overflow-x-auto">
-          <Table>
-            <Thead><tr>
-              <Th>Date</Th><Th>Part #</Th><Th>Item</Th><Th>Req #</Th><Th>Qty Issued</Th><Th>Issued By</Th><Th>Note</Th><Th></Th>
-            </tr></Thead>
-            <Tbody>
-              {filtered.length === 0 ? (
-                <Tr><Td colSpan={8} className="text-center text-slate-500 py-12">No issuance records yet</Td></Tr>
-              ) : filtered.map(r => (
-                <Tr key={r.id}>
-                  <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
-                  <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
-                  <Td className="font-medium text-slate-100">{r.items?.name}</Td>
-                  <Td className="font-mono text-[10px] text-slate-500">{r.req_number || '—'}</Td>
-                  <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
-                  <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
-                  <Td className="text-slate-400 text-xs max-w-xs truncate">{r.note}</Td>
-                  <Td>
-                    <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
+        <div className="space-y-3">
+          {/* ── Requisition groups (one card per requisition) ─────────────── */}
+          {groups.map(g => {
+            const isOpen = !!expanded[g.id]
+            const dest = g.info.destination_location || g.info.req_number || 'Requisition'
+            return (
+              <div key={g.id} className="card p-0 overflow-hidden">
+                <button onClick={() => toggle(g.id)} className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-700/30 text-left">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-100 flex items-center gap-1.5 truncate">
+                        <MapPin className="w-3.5 h-3.5 text-[#00AEEF] shrink-0" />{dest}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate flex items-center gap-1.5 mt-0.5">
+                        {g.info.subject && <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{g.info.subject}</span>}
+                        {g.info.subject && <span className="text-slate-600">·</span>}
+                        <span className="font-mono">{g.info.req_number || '—'}</span>
+                        <span className="text-slate-600">·</span>
+                        <span>{g.latest}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {g.info.purchase_type && <Badge variant="blue">{g.info.purchase_type}</Badge>}
+                    <Badge variant="teal">{g.items.length} items</Badge>
+                    <Badge variant="gray">{g.totalQty} units</Badge>
+                  </div>
+                </button>
+                {isOpen && (
+                  <div className="border-t border-slate-700 overflow-x-auto">
+                    {(g.info.requestor || g.info.source_location) && (
+                      <div className="px-4 py-2 text-xs text-slate-400 flex flex-wrap gap-x-4 gap-y-1 bg-slate-800/40">
+                        {g.info.requestor && <span>Requestor: <span className="text-slate-300">{g.info.requestor}</span></span>}
+                        {g.info.source_location && <span>From: <span className="text-slate-300">{g.info.source_location}</span></span>}
+                        {g.info.department && <span>Dept: <span className="text-slate-300">{g.info.department}</span></span>}
+                      </div>
+                    )}
+                    <Table>
+                      <Thead><tr>
+                        <Th>Part #</Th><Th>Item</Th><Th>Qty Issued</Th><Th>Issued By</Th><Th>Date</Th><Th></Th>
+                      </tr></Thead>
+                      <Tbody>
+                        {g.items.map(r => (
+                          <Tr key={r.id}>
+                            <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
+                            <Td className="font-medium text-slate-100">{r.items?.name}</Td>
+                            <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
+                            <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
+                            <Td className="text-slate-400 text-xs whitespace-nowrap">{r.date}</Td>
+                            <Td><button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button></Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* ── Manual / non-requisition issuances ───────────────────── */}
+          {manual.length > 0 && (
+            <div className="card overflow-x-auto">
+              {groups.length > 0 && <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Manual issuances</p>}
+              <Table>
+                <Thead><tr>
+                  <Th>Date</Th><Th>Part #</Th><Th>Item</Th><Th>Qty Issued</Th><Th>Issued By</Th><Th>Note</Th><Th></Th>
+                </tr></Thead>
+                <Tbody>
+                  {manual.map(r => (
+                    <Tr key={r.id}>
+                      <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
+                      <Td className="font-mono text-xs text-slate-400">{r.items?.part_number}</Td>
+                      <Td className="font-medium text-slate-100">{r.items?.name}</Td>
+                      <Td><span className="font-bold text-[#00AEEF]">{r.quantity_issued}</span> <span className="text-slate-500 text-xs">{r.items?.unit}</span></Td>
+                      <Td className="text-slate-300 text-sm">{r.issued_by}</Td>
+                      <Td className="text-slate-400 text-xs max-w-xs truncate">{r.note}</Td>
+                      <Td>
+                        <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </div>
+          )}
         </div>
       )}
 
