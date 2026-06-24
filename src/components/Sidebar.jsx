@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, TrendingUp, Settings, LogOut, X, History,
   Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox,
-  ScanLine, AlertTriangle, CalendarClock, Gauge
+  ScanLine, AlertTriangle, CalendarClock, Gauge, Ship
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
@@ -20,7 +20,8 @@ const NAV_GROUPS = [
     label: 'Operations',
     items: [
       { to:'/issuance',      icon:ClipboardList,  label:'Daily Issuance'   },
-      { to:'/issuance-scan', icon:ScanLine,        label:'Scan Issuance'   },
+      { to:'/issuance-scan', icon:ScanLine,        label:'Scan Requisition'},
+      { to:'/boat-note',     icon:Ship,            label:'Boat Note'       },
       { to:'/receiving',     icon:Inbox,           label:'Receiving (GRN)' },
       { to:'/transfers',     icon:ArrowLeftRight,  label:'Transfers'        },
       { to:'/waste',         icon:Trash2,          label:'Waste Log'        },

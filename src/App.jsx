@@ -25,6 +25,7 @@ const Transfers     = lazy(() => import('./pages/Transfers'))
 const Suppliers     = lazy(() => import('./pages/Suppliers'))
 const ItemDetail    = lazy(() => import('./pages/ItemDetail'))
 const Receiving     = lazy(() => import('./pages/Receiving'))
+const BoatNote      = lazy(() => import('./pages/BoatNote'))
 const Movement      = lazy(() => import('./pages/Movement'))
 const Expiry        = lazy(() => import('./pages/Expiry'))
 
@@ -81,6 +82,7 @@ export default function App() {
                   <Route path="issuance"      element={<Issuance />}      />
                   <Route path="issuance-scan" element={<IssuanceScan />}  />
                   <Route path="receiving"     element={<Receiving />}     />
+                  <Route path="boat-note"     element={<BoatNote />}      />
                   <Route path="transfers"     element={<Transfers />}     />
                   <Route path="waste"         element={<Waste />}         />
                   <Route path="stocktake"     element={<Stocktake />}     />
