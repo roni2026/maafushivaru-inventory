@@ -14,6 +14,7 @@ import Input, { Textarea } from '../components/ui/Input'
 import CSVImportModal from '../components/CSVImportModal'
 import { CSV_CONFIGS } from '../lib/csvTemplates'
 import { exportOrderExcel } from '../lib/excelExport'
+import { classifyOrigin, deliveryDayFor } from '../lib/boatnote'
 
 // ── Helpers ───────────────────────────────────────────────────
 function nextDelivery() {
@@ -37,6 +38,8 @@ const STATUS_BADGE = { pending:'yellow', partial:'orange', received:'green', can
 
 export default function Orders() {
   const [tab,       setTab]      = useState('generate')
+  const [storeOnly, setStoreOnly]= useState(true)   // STORE-only, boat-note driven
+  const [boatStats, setBoatStats]= useState(null)   // { weeks, items: Map<code,{qty,n}> }
   const [rows,      setRows]     = useState([])
   const [delivery,  setDelivery] = useState(null)
   const [loading,   setLoading]  = useState(false)
@@ -64,7 +67,7 @@ export default function Orders() {
   const [expandedItems, setExpandedItems] = useState({})
   const [markingId,     setMarkingId]     = useState(null)
 
-  // ── Add item to saved order (history) ─────────────────────
+  // ── Add item to saved order (history) ───────────────────
   const [showAddToOrder, setShowAddToOrder]   = useState(null) // orderId
   const [savedItemSearch,setSavedItemSearch]  = useState('')
   const [savedItem,      setSavedItem]        = useState(null)
@@ -106,22 +109,60 @@ export default function Orders() {
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
       const { data: items } = await selectAll(() => supabase.from('items').select('*, stores(name,category)').eq('active', true))
+
+      // ── Boat-note demand: avg weekly ordered qty per item code, from the STORE
+      //    department of every posted boat note (this is what we actually re-order).
+      const { data: bnItems } = await selectAll(() =>
+        supabase.from('boat_note_items').select('part_number,ordered_qty,department,boat_note_id'))
+      const { data: bnotes } = await supabase.from('boat_notes').select('id,note_date')
+      const noteDate = new Map((bnotes || []).map(n => [n.id, n.note_date]))
+      const code = (s) => String(s || '').replace(/^0+/, '')
+      const storeBn = (bnItems || []).filter(b => (b.department || '').toUpperCase() === 'STORE')
+      const bnByCode = new Map()
+      let minD = null, maxD = null
+      for (const b of storeBn) {
+        const c = code(b.part_number); if (!c) continue
+        const e = bnByCode.get(c) || { qty: 0, n: 0 }
+        e.qty += Number(b.ordered_qty) || 0; e.n += 1; bnByCode.set(c, e)
+        const d = noteDate.get(b.boat_note_id); if (d) { if (!minD || d < minD) minD = d; if (!maxD || d > maxD) maxD = d }
+      }
+      const bnWeeks = (minD && maxD) ? Math.max(1, (new Date(maxD) - new Date(minD)) / 6048e5) : 1
+      setBoatStats({ weeks: Math.round(bnWeeks * 10) / 10, count: bnByCode.size })
+
+      // ── Issuance demand (2-week average) — used as a fallback / cross-check ──
       const tw = weekRange(0); const lw = weekRange(1)
       const { data: thisIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', tw.from).lte('date', tw.to))
       const { data: lastIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', lw.from).lte('date', lw.to))
       const sum = (list, id) => (list || []).filter(i => i.item_id === id).reduce((s, i) => s + Number(i.quantity_issued), 0)
+
       const orderRows = (items || []).map(item => {
-        const thisTotal = sum(thisIss, item.id); const lastTotal = sum(lastIss, item.id)
-        const avgWeekly = (thisTotal + lastTotal) / 2
+        const issAvg = (sum(thisIss, item.id) + sum(lastIss, item.id)) / 2
+        const bn = bnByCode.get(code(item.part_number))
+        const bnAvg = bn ? bn.qty / bnWeeks : 0
+        // Prefer real boat-note ordering history when available, else issuance.
+        const avgWeekly = bnAvg > 0 ? bnAvg : issAvg
         const suggested = Math.max(0, Math.ceil(avgWeekly * 2 - Number(item.current_stock)))
-        return { id: item.id, part_number: item.part_number, name: item.name, store: item.stores?.name || '', category: item.stores?.category || '', unit: item.unit, current_stock: item.current_stock, min_stock: item.min_stock, thisWeek: thisTotal, lastWeek: lastTotal, avgWeekly: Math.round(avgWeekly * 10) / 10, suggested, ordered: suggested, _fromPending: false, _pendingNote: '', _manuallyAdded: false }
-      }).filter(r => r.suggested > 0 || r.current_stock <= r.min_stock)
-        .sort((a, b) => a.store.localeCompare(b.store) || a.name.localeCompare(b.name))
+        const origin = item.origin || classifyOrigin(item.name)
+        return {
+          id: item.id, part_number: item.part_number, name: item.name,
+          store: item.stores?.name || '', category: item.stores?.category || '',
+          unit: item.unit, current_stock: item.current_stock, min_stock: item.min_stock,
+          thisWeek: Math.round(issAvg * 10) / 10, lastWeek: 0,
+          avgWeekly: Math.round(avgWeekly * 10) / 10, suggested, ordered: suggested,
+          origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: !!bn, _fromBoatNote: bnAvg > 0,
+          _fromPending: false, _pendingNote: '', _manuallyAdded: false,
+        }
+      })
+      // STORE-only = items that appear in the STORE department of past boat notes.
+      .filter(r => storeOnly ? r._inBoatNote : true)
+      .filter(r => r.suggested > 0 || r.current_stock <= r.min_stock)
+      .sort((a, b) => a.origin.localeCompare(b.origin) || a.name.localeCompare(b.name))
+
       setRows(orderRows); setDelivery(nextDelivery())
       await checkUndeliveredItems()
     } catch (err) { toast.error('Failed: ' + err.message) }
     setLoading(false)
-  }, [checkUndeliveredItems])
+  }, [checkUndeliveredItems, storeOnly])
 
   // ── Add undelivered to current order ──────────────────────
   const addPendingToOrder = () => {
@@ -373,6 +414,18 @@ export default function Orders() {
       {/* ── Generate tab ───────────────────────────────────── */}
       {tab === 'generate' && (
         <>
+          {/* Scope + delivery-day legend */}
+          <div className="card-sm flex items-center justify-between gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+              <input type="checkbox" checked={storeOnly} onChange={e => setStoreOnly(e.target.checked)} className="accent-teal-500 w-4 h-4" />
+              <strong>STORE items only</strong> <span className="text-slate-500">— ordered from boat-note history</span>
+            </label>
+            <div className="flex items-center gap-2 text-xs">
+              {boatStats && <span className="text-slate-400">{boatStats.count} store items · ~{boatStats.weeks}w history</span>}
+              <Badge variant="blue">Foreign → Monday</Badge>
+              <Badge variant="green">Local → Thursday</Badge>
+            </div>
+          </div>
           {!rows.length && !loading && (
             <div className="card text-center py-20 text-slate-500">
               <ShoppingCart className="w-14 h-14 mx-auto mb-4 opacity-20" />
@@ -430,7 +483,7 @@ export default function Orders() {
                 </div>
                 <Table>
                   <Thead><tr>
-                    <Th>Part #</Th><Th>Item Name</Th><Th>Store</Th><Th>Unit</Th><Th>In Stock</Th><Th>Avg/Wk</Th><Th>Suggested</Th><Th>Order Qty</Th><Th></Th>
+                    <Th>Part #</Th><Th>Item Name</Th><Th>Store</Th><Th>Origin · Day</Th><Th>Unit</Th><Th>In Stock</Th><Th>Avg/Wk</Th><Th>Suggested</Th><Th>Order Qty</Th><Th></Th>
                   </tr></Thead>
                   <Tbody>
                     {rows.map(row => (
@@ -446,6 +499,11 @@ export default function Orders() {
                           {row._pendingNote && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{row._pendingNote}</p>}
                         </Td>
                         <Td className="text-xs text-slate-400">{row.store}</Td>
+                        <Td>
+                          <Badge variant={row.origin === 'local' ? 'green' : 'blue'}>
+                            {row.origin === 'local' ? 'Local · Thu' : 'Foreign · Mon'}
+                          </Badge>
+                        </Td>
                         <Td className="text-xs text-slate-400">{row.unit}</Td>
                         <Td className={Number(row.current_stock) <= Number(row.min_stock) ? 'text-red-400 font-semibold' : 'text-slate-300'}>{row.current_stock}</Td>
                         <Td className="text-slate-300">{row.avgWeekly || '—'}</Td>
