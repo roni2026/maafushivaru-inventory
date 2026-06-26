@@ -4,17 +4,20 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts'
 import {
-  TrendingUp, TrendingDown, Zap, Snowflake, RefreshCw, Search, Gauge, PackageX,
+  TrendingUp, TrendingDown, Zap, Snowflake, RefreshCw, Search, Gauge, PackageX, Download,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
+import { exportMovementExcel } from '../lib/excelExport'
 
+// Selectable report windows — weekly / monthly / quarterly (+ half-year).
 const PERIODS = [
-  { value: 30,  label: 'Last 30 days' },
-  { value: 60,  label: 'Last 60 days' },
-  { value: 90,  label: 'Last 90 days' },
-  { value: 180, label: 'Last 6 months' },
+  { value: 7,   label: 'Weekly',     long: 'Weekly report (last 7 days)' },
+  { value: 30,  label: 'Monthly',    long: 'Monthly report (last 30 days)' },
+  { value: 90,  label: 'Quarterly',  long: 'Quarterly report (last 90 days)' },
+  { value: 180, label: 'Half-Year',  long: 'Half-year report (last 6 months)' },
 ]
 
 const CAT = {
@@ -36,9 +39,10 @@ function ChartTip({ active, payload }) {
 }
 
 export default function Movement() {
-  const [period,  setPeriod]  = useState(60)
+  const [period,  setPeriod]  = useState(30)
   const [rows,    setRows]    = useState([])
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [filter,  setFilter]  = useState('')     // '' | category
   const [search,  setSearch]  = useState('')
   const [store,   setStore]   = useState('')
@@ -128,18 +132,42 @@ export default function Movement() {
   const toggleSort = (k) => { if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(k); setSortDir('desc') } }
   const coverLabel = (c) => c === Infinity ? '∞' : c >= 999 ? '999+' : `${Math.round(c)}w`
 
+  // ── Export a coloured, well-formatted movement report (current filters) ─────
+  const exportReport = async () => {
+    if (!filtered.length) { toast.error('Nothing to export'); return }
+    setExporting(true)
+    try {
+      const meta = PERIODS.find(p => p.value === period) || { label: `${period}d`, long: `Last ${period} days` }
+      const since = new Date(); since.setDate(since.getDate() - period)
+      const rangeLabel = `${since.toLocaleDateString('en-GB')} → ${new Date().toLocaleDateString('en-GB')}`
+      await exportMovementExcel(filtered, {
+        periodLabel: meta.long, rangeLabel, counts,
+        resortName: 'Outrigger Maafushivaru Resort',
+        filename: `Movement_${meta.label}_${new Date().toISOString().split('T')[0]}.xlsx`,
+      })
+      toast.success('Report downloaded')
+    } catch (e) { toast.error(e.message) }
+    setExporting(false)
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="page-title">Item Movement</h1>
-          <p className="page-sub">Fast &amp; slow movers by issuance velocity · active items only</p>
+          <p className="page-sub">Fast, slow &amp; non-moving items by issuance velocity · weekly / monthly / quarterly</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <select value={period} onChange={e => setPeriod(Number(e.target.value))} className="input text-sm w-auto">
-            {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-          </select>
+        <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+            {PERIODS.map(p => (
+              <button key={p.value} onClick={() => setPeriod(p.value)} title={p.long}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${period === p.value ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                {p.label}
+              </button>
+            ))}
+          </div>
           <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+          <Button onClick={exportReport} loading={exporting}><Download className="w-4 h-4" /> Export Report</Button>
         </div>
       </div>
 

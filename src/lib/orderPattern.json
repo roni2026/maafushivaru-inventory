@@ -1,0 +1,6461 @@
+{
+"generated": "2026-06-26T18:45:30.270237+00:00",
+"span_weeks": 20.4,
+"source_notes": 17,
+"department": "STORE",
+"items": [
+{
+"code": "13832",
+"name": "DUSTBIN BAGS - BIODEGRADABLE",
+"unit": "EA",
+"orders": 8,
+"total_qty": 15200.0,
+"avg_weekly": 744.06,
+"origin": "foreign"
+},
+{
+"code": "21174",
+"name": "KEY CARD HOLDER 1.6X6.5CM 300GSM",
+"unit": "EA",
+"orders": 2,
+"total_qty": 8000.0,
+"avg_weekly": 391.61,
+"origin": "foreign"
+},
+{
+"code": "15861",
+"name": "DENTAL KIT",
+"unit": "EA",
+"orders": 2,
+"total_qty": 6132.0,
+"avg_weekly": 300.17,
+"origin": "foreign"
+},
+{
+"code": "16631",
+"name": "TOOTH PICK -CINNAMON",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 5100.0,
+"avg_weekly": 249.65,
+"origin": "foreign"
+},
+{
+"code": "14988",
+"name": "ST-PAPER STRAW SOLID BLACK- 30 X 100 NO'S",
+"unit": "EA",
+"orders": 4,
+"total_qty": 5010.0,
+"avg_weekly": 245.24,
+"origin": "foreign"
+},
+{
+"code": "13998",
+"name": "GELATO CONE WRAPPERS (6.84 X 4.25\")",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5000.0,
+"avg_weekly": 244.76,
+"origin": "foreign"
+},
+{
+"code": "16181",
+"name": "LUGGAGE TAGS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5000.0,
+"avg_weekly": 244.76,
+"origin": "foreign"
+},
+{
+"code": "13950",
+"name": "FRESH MILK-1LIT",
+"unit": "LTR",
+"orders": 20,
+"total_qty": 4575.0,
+"avg_weekly": 223.95,
+"origin": "local"
+},
+{
+"code": "16673",
+"name": "VANITY KIT (KIMIRICA WHITE GOLD)",
+"unit": "EA",
+"orders": 2,
+"total_qty": 4420.0,
+"avg_weekly": 216.36,
+"origin": "foreign"
+},
+{
+"code": "15654",
+"name": "BEERS - BOTTLE BEER CORONA 330 ML",
+"unit": "BTL",
+"orders": 5,
+"total_qty": 2040.0,
+"avg_weekly": 99.86,
+"origin": "foreign"
+},
+{
+"code": "16095",
+"name": "KEY CARD ECO FRIENDLY PLASTIC 85.5X54X0.87MM",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2000.0,
+"avg_weekly": 97.9,
+"origin": "foreign"
+},
+{
+"code": "14670",
+"name": "POTATO CHIPS PRINGLES RED 42 GRM",
+"unit": "EA",
+"orders": 11,
+"total_qty": 1920.0,
+"avg_weekly": 93.99,
+"origin": "foreign"
+},
+{
+"code": "15648",
+"name": "BEER - LION LAGER CAN",
+"unit": "CAN",
+"orders": 5,
+"total_qty": 1800.0,
+"avg_weekly": 88.11,
+"origin": "foreign"
+},
+{
+"code": "15497",
+"name": "BEER - CARLSBERG CAN 330ML",
+"unit": "CAN",
+"orders": 4,
+"total_qty": 1680.0,
+"avg_weekly": 82.24,
+"origin": "foreign"
+},
+{
+"code": "13946",
+"name": "FRENCH FRIES - 2.50KG",
+"unit": "KG",
+"orders": 11,
+"total_qty": 1210.0,
+"avg_weekly": 59.23,
+"origin": "foreign"
+},
+{
+"code": "14065",
+"name": "HARIBO GOLDBEARS - 80G",
+"unit": "EA",
+"orders": 6,
+"total_qty": 1150.0,
+"avg_weekly": 56.29,
+"origin": "foreign"
+},
+{
+"code": "14682",
+"name": "PRAWNS PEELED TAIL ON 16-20",
+"unit": "KG",
+"orders": 12,
+"total_qty": 1115.0,
+"avg_weekly": 54.58,
+"origin": "foreign"
+},
+{
+"code": "14870",
+"name": "SCOTCH PAD - 9.5X6.5X4CM",
+"unit": "EA",
+"orders": 4,
+"total_qty": 1000.0,
+"avg_weekly": 48.95,
+"origin": "foreign"
+},
+{
+"code": "13478",
+"name": "CABLE TYE - 04 inch",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1000.0,
+"avg_weekly": 48.95,
+"origin": "foreign"
+},
+{
+"code": "14896",
+"name": "SHISHA - MOUTHPICES",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1000.0,
+"avg_weekly": 48.95,
+"origin": "foreign"
+},
+{
+"code": "14955",
+"name": "SPONGE (GREEN & YELLOW)",
+"unit": "EA",
+"orders": 6,
+"total_qty": 880.0,
+"avg_weekly": 43.08,
+"origin": "foreign"
+},
+{
+"code": "13668",
+"name": "CORNY BIG CHOCOLATE 50G",
+"unit": "EA",
+"orders": 7,
+"total_qty": 840.0,
+"avg_weekly": 41.12,
+"origin": "foreign"
+},
+{
+"code": "13576",
+"name": "CHICKEN THIGH SKINLESS",
+"unit": "KG",
+"orders": 9,
+"total_qty": 832.0,
+"avg_weekly": 40.73,
+"origin": "foreign"
+},
+{
+"code": "13529",
+"name": "CHA & SPRK - DON LUCIANO MOSCATO ROSE",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 810.0,
+"avg_weekly": 39.65,
+"origin": "foreign"
+},
+{
+"code": "19920",
+"name": "CORNY BIG CANBERRY-50GRM",
+"unit": "EA",
+"orders": 7,
+"total_qty": 792.0,
+"avg_weekly": 38.77,
+"origin": "foreign"
+},
+{
+"code": "13627",
+"name": "COCONUT MILK - AROY-D - 1L",
+"unit": "LTR",
+"orders": 4,
+"total_qty": 780.0,
+"avg_weekly": 38.18,
+"origin": "local"
+},
+{
+"code": "13672",
+"name": "COTTON GLOVES",
+"unit": "EA",
+"orders": 4,
+"total_qty": 720.0,
+"avg_weekly": 35.24,
+"origin": "foreign"
+},
+{
+"code": "13338",
+"name": "BATTERY (KODAK) AA",
+"unit": "EA",
+"orders": 3,
+"total_qty": 680.0,
+"avg_weekly": 33.29,
+"origin": "foreign"
+},
+{
+"code": "13339",
+"name": "BATTERY (KODAK) AAA",
+"unit": "EA",
+"orders": 3,
+"total_qty": 680.0,
+"avg_weekly": 33.29,
+"origin": "foreign"
+},
+{
+"code": "13949",
+"name": "FRESH MILK FULL CREAM (LACNOR)180ML",
+"unit": "CS",
+"orders": 5,
+"total_qty": 660.0,
+"avg_weekly": 32.31,
+"origin": "local"
+},
+{
+"code": "17576",
+"name": "BEER - BUDWEISER 330ML",
+"unit": "BOTTLE",
+"orders": 3,
+"total_qty": 624.0,
+"avg_weekly": 30.55,
+"origin": "foreign"
+},
+{
+"code": "15089",
+"name": "TOBLERONE MILK 35 GRM",
+"unit": "EA",
+"orders": 5,
+"total_qty": 600.0,
+"avg_weekly": 29.37,
+"origin": "foreign"
+},
+{
+"code": "14427",
+"name": "MULTIROLL PAPERTOWEL X1-205M X 1ROLL",
+"unit": "EA",
+"orders": 7,
+"total_qty": 600.0,
+"avg_weekly": 29.37,
+"origin": "foreign"
+},
+{
+"code": "13528",
+"name": "CHA & SPRK - DON LUCIANO BRUT",
+"unit": "BTL",
+"orders": 5,
+"total_qty": 600.0,
+"avg_weekly": 29.37,
+"origin": "foreign"
+},
+{
+"code": "27215",
+"name": "WHITE WINE DON SIMON SAUVIGNON BLANC NV",
+"unit": "EA",
+"orders": 5,
+"total_qty": 516.0,
+"avg_weekly": 25.26,
+"origin": "foreign"
+},
+{
+"code": "14994",
+"name": "STEEL WOOL",
+"unit": "EA",
+"orders": 3,
+"total_qty": 510.0,
+"avg_weekly": 24.97,
+"origin": "foreign"
+},
+{
+"code": "15913",
+"name": "ENVELOPS 9 X 12 A4",
+"unit": "EA",
+"orders": 1,
+"total_qty": 500.0,
+"avg_weekly": 24.48,
+"origin": "foreign"
+},
+{
+"code": "14605",
+"name": "PEN BLUE",
+"unit": "EA",
+"orders": 3,
+"total_qty": 500.0,
+"avg_weekly": 24.48,
+"origin": "foreign"
+},
+{
+"code": "20472",
+"name": "KIDS MARINE SPECIES BOOK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 500.0,
+"avg_weekly": 24.48,
+"origin": "foreign"
+},
+{
+"code": "16021",
+"name": "UMBRELLA CUSTOMIZED",
+"unit": "EA",
+"orders": 1,
+"total_qty": 500.0,
+"avg_weekly": 24.48,
+"origin": "foreign"
+},
+{
+"code": "14667",
+"name": "POS PRINTER ROLL 2 PLY",
+"unit": "EA",
+"orders": 2,
+"total_qty": 450.0,
+"avg_weekly": 22.03,
+"origin": "foreign"
+},
+{
+"code": "14227",
+"name": "LAMB LEGS BONE LESS",
+"unit": "KG",
+"orders": 12,
+"total_qty": 448.8,
+"avg_weekly": 21.97,
+"origin": "foreign"
+},
+{
+"code": "13957",
+"name": "FROZEN HASH BROWN POTATO",
+"unit": "KG",
+"orders": 14,
+"total_qty": 420.0,
+"avg_weekly": 20.56,
+"origin": "foreign"
+},
+{
+"code": "14597",
+"name": "PEANUT 40G",
+"unit": "EA",
+"orders": 2,
+"total_qty": 420.0,
+"avg_weekly": 20.56,
+"origin": "foreign"
+},
+{
+"code": "14662",
+"name": "PORK BACON SLICED APP 8 X 1 KG",
+"unit": "KG",
+"orders": 9,
+"total_qty": 420.0,
+"avg_weekly": 20.56,
+"origin": "foreign"
+},
+{
+"code": "14501",
+"name": "NOODLES EGG YOWE",
+"unit": "PKT",
+"orders": 14,
+"total_qty": 417.0,
+"avg_weekly": 20.41,
+"origin": "foreign"
+},
+{
+"code": "14681",
+"name": "PRAWNS - U 10",
+"unit": "KG",
+"orders": 13,
+"total_qty": 415.0,
+"avg_weekly": 20.31,
+"origin": "foreign"
+},
+{
+"code": "13464",
+"name": "BUFFALO CHICKEN WING(JUMBO CHICKEN WINGS)",
+"unit": "KG",
+"orders": 6,
+"total_qty": 412.0,
+"avg_weekly": 20.17,
+"origin": "foreign"
+},
+{
+"code": "14761",
+"name": "RICE - RED RICE (UDAYAM)",
+"unit": "KG",
+"orders": 7,
+"total_qty": 410.0,
+"avg_weekly": 20.07,
+"origin": "foreign"
+},
+{
+"code": "13337",
+"name": "BATTERY 12V 23A",
+"unit": "EA",
+"orders": 3,
+"total_qty": 400.0,
+"avg_weekly": 19.58,
+"origin": "foreign"
+},
+{
+"code": "14986",
+"name": "ST-KRAFT MEAL BOX (LARGE)",
+"unit": "EA",
+"orders": 2,
+"total_qty": 400.0,
+"avg_weekly": 19.58,
+"origin": "foreign"
+},
+{
+"code": "14992",
+"name": "STAPLES PIN NO.10",
+"unit": "EA",
+"orders": 1,
+"total_qty": 400.0,
+"avg_weekly": 19.58,
+"origin": "foreign"
+},
+{
+"code": "15230",
+"name": "WASHING POWDER (SOKLIN PINK )",
+"unit": "KG",
+"orders": 6,
+"total_qty": 396.0,
+"avg_weekly": 19.38,
+"origin": "foreign"
+},
+{
+"code": "14604",
+"name": "PEELED TOMATOES- 3KG",
+"unit": "TIN",
+"orders": 10,
+"total_qty": 390.0,
+"avg_weekly": 19.09,
+"origin": "local"
+},
+{
+"code": "14884",
+"name": "SEMOLINA (CROWN) 500GM",
+"unit": "TIN",
+"orders": 10,
+"total_qty": 385.0,
+"avg_weekly": 18.85,
+"origin": "foreign"
+},
+{
+"code": "15176",
+"name": "VINYL GLOVES-LARGE",
+"unit": "PQ",
+"orders": 6,
+"total_qty": 380.0,
+"avg_weekly": 18.6,
+"origin": "foreign"
+},
+{
+"code": "17577",
+"name": "BEER - ESTRELLA 0.0% FREE DAMM 330ML",
+"unit": "BTL",
+"orders": 4,
+"total_qty": 360.0,
+"avg_weekly": 17.62,
+"origin": "foreign"
+},
+{
+"code": "15784",
+"name": "CHEESE MOZZARELLA SHREDDED (GALBANI)",
+"unit": "KG",
+"orders": 11,
+"total_qty": 357.5,
+"avg_weekly": 17.5,
+"origin": "foreign"
+},
+{
+"code": "13614",
+"name": "CLING FILM",
+"unit": "EA",
+"orders": 9,
+"total_qty": 354.0,
+"avg_weekly": 17.33,
+"origin": "foreign"
+},
+{
+"code": "15322",
+"name": "YOUNG COCONUT ( KURUMBA )",
+"unit": "EA",
+"orders": 13,
+"total_qty": 345.0,
+"avg_weekly": 16.89,
+"origin": "local"
+},
+{
+"code": "13577",
+"name": "CHICKEN WHOLE",
+"unit": "KG",
+"orders": 3,
+"total_qty": 324.0,
+"avg_weekly": 15.86,
+"origin": "foreign"
+},
+{
+"code": "13917",
+"name": "FLOUR TEMPURA (SHOWA) 700GM",
+"unit": "PQ",
+"orders": 11,
+"total_qty": 300.0,
+"avg_weekly": 14.69,
+"origin": "foreign"
+},
+{
+"code": "13718",
+"name": "CUTTING DISK - 4''",
+"unit": "EA",
+"orders": 2,
+"total_qty": 300.0,
+"avg_weekly": 14.69,
+"origin": "foreign"
+},
+{
+"code": "13666",
+"name": "CORN FLOUR",
+"unit": "PKT",
+"orders": 11,
+"total_qty": 290.0,
+"avg_weekly": 14.2,
+"origin": "foreign"
+},
+{
+"code": "13409",
+"name": "BISCUIT MUNCHEE (MARIE) 500 GM",
+"unit": "EA",
+"orders": 5,
+"total_qty": 288.0,
+"avg_weekly": 14.1,
+"origin": "foreign"
+},
+{
+"code": "14598",
+"name": "PEANUT BUTTER 340 GRM-CREAMY",
+"unit": "TIN",
+"orders": 6,
+"total_qty": 283.0,
+"avg_weekly": 13.85,
+"origin": "foreign"
+},
+{
+"code": "13360",
+"name": "BEEF BOLOR BLADE CHILLED (AUSTRALIA)",
+"unit": "KG",
+"orders": 5,
+"total_qty": 276.8,
+"avg_weekly": 13.55,
+"origin": "foreign"
+},
+{
+"code": "14088",
+"name": "HONEY (VIVI)",
+"unit": "KG",
+"orders": 7,
+"total_qty": 270.0,
+"avg_weekly": 13.22,
+"origin": "foreign"
+},
+{
+"code": "17006",
+"name": "FROZEN ORANGE JUICE 5LTR",
+"unit": "CAN",
+"orders": 10,
+"total_qty": 270.0,
+"avg_weekly": 13.22,
+"origin": "local"
+},
+{
+"code": "14832",
+"name": "SALMON FILLET D- TRIM",
+"unit": "KG",
+"orders": 9,
+"total_qty": 259.6,
+"avg_weekly": 12.71,
+"origin": "foreign"
+},
+{
+"code": "13773",
+"name": "DISH WASHING LIQUID MAAMA LIME - 810 ML",
+"unit": "EA",
+"orders": 11,
+"total_qty": 252.0,
+"avg_weekly": 12.34,
+"origin": "local"
+},
+{
+"code": "14908",
+"name": "SKIM MILK NON FAT 1LTR",
+"unit": "LTR",
+"orders": 6,
+"total_qty": 252.0,
+"avg_weekly": 12.34,
+"origin": "foreign"
+},
+{
+"code": "14966",
+"name": "SQUID TUBE U10",
+"unit": "KG",
+"orders": 8,
+"total_qty": 250.0,
+"avg_weekly": 12.24,
+"origin": "foreign"
+},
+{
+"code": "17464",
+"name": "LOBSTER 800GM",
+"unit": "KG",
+"orders": 7,
+"total_qty": 250.0,
+"avg_weekly": 12.24,
+"origin": "foreign"
+},
+{
+"code": "15645",
+"name": "BEEF TOPSIDE BRAZIL",
+"unit": "KG",
+"orders": 5,
+"total_qty": 248.6,
+"avg_weekly": 12.17,
+"origin": "foreign"
+},
+{
+"code": "13505",
+"name": "CASHEW NUTS WHOLE",
+"unit": "KG",
+"orders": 8,
+"total_qty": 240.0,
+"avg_weekly": 11.75,
+"origin": "foreign"
+},
+{
+"code": "13586",
+"name": "CHOCOLATE BOUNTY",
+"unit": "EA",
+"orders": 2,
+"total_qty": 240.0,
+"avg_weekly": 11.75,
+"origin": "foreign"
+},
+{
+"code": "15028",
+"name": "SUPER GLUE",
+"unit": "EA",
+"orders": 2,
+"total_qty": 240.0,
+"avg_weekly": 11.75,
+"origin": "foreign"
+},
+{
+"code": "15076",
+"name": "DOSA MIXTURE (MELAM)",
+"unit": "PKT",
+"orders": 7,
+"total_qty": 238.0,
+"avg_weekly": 11.65,
+"origin": "foreign"
+},
+{
+"code": "24647",
+"name": "BAR SNACKS 100GM",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 238.0,
+"avg_weekly": 11.65,
+"origin": "foreign"
+},
+{
+"code": "14913",
+"name": "SMOKED SALMON",
+"unit": "KG",
+"orders": 8,
+"total_qty": 237.7,
+"avg_weekly": 11.64,
+"origin": "foreign"
+},
+{
+"code": "14522",
+"name": "OATS WHITE",
+"unit": "TIN",
+"orders": 6,
+"total_qty": 216.0,
+"avg_weekly": 10.57,
+"origin": "foreign"
+},
+{
+"code": "14067",
+"name": "HARPIC LIQUED 500ML",
+"unit": "EA",
+"orders": 4,
+"total_qty": 216.0,
+"avg_weekly": 10.57,
+"origin": "foreign"
+},
+{
+"code": "19537",
+"name": "CHA & SPARK -ROBERT DE PAMPIGNAC 750ML",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 210.0,
+"avg_weekly": 10.28,
+"origin": "foreign"
+},
+{
+"code": "13628",
+"name": "COCONUT MILK POWDER (RENUKA) 1Kg",
+"unit": "KG",
+"orders": 4,
+"total_qty": 204.0,
+"avg_weekly": 9.99,
+"origin": "local"
+},
+{
+"code": "15142",
+"name": "TUNA CHUNK IN SUNFLOWER OIL(POUCH)- 3KG",
+"unit": "PKT",
+"orders": 10,
+"total_qty": 202.0,
+"avg_weekly": 9.89,
+"origin": "foreign"
+},
+{
+"code": "15906",
+"name": "EMERY BOARD",
+"unit": "EA",
+"orders": 2,
+"total_qty": 200.0,
+"avg_weekly": 9.79,
+"origin": "foreign"
+},
+{
+"code": "21797",
+"name": "DATES",
+"unit": "KG",
+"orders": 1,
+"total_qty": 200.0,
+"avg_weekly": 9.79,
+"origin": "foreign"
+},
+{
+"code": "14932",
+"name": "SOFT DRINK COCA COLA TIN 320 ML",
+"unit": "CS",
+"orders": 15,
+"total_qty": 190.0,
+"avg_weekly": 9.3,
+"origin": "foreign"
+},
+{
+"code": "13662",
+"name": "COOKING OIL 18 LTR",
+"unit": "CAN",
+"orders": 13,
+"total_qty": 190.0,
+"avg_weekly": 9.3,
+"origin": "foreign"
+},
+{
+"code": "14567",
+"name": "PANKO BREAD CRUMBS-1KG",
+"unit": "KG",
+"orders": 4,
+"total_qty": 190.0,
+"avg_weekly": 9.3,
+"origin": "foreign"
+},
+{
+"code": "14663",
+"name": "PORK BELLIES B-LESS",
+"unit": "KG",
+"orders": 3,
+"total_qty": 187.2,
+"avg_weekly": 9.16,
+"origin": "foreign"
+},
+{
+"code": "14504",
+"name": "NOODLES RICE STICK (HOW HOW)500GM",
+"unit": "PKT",
+"orders": 6,
+"total_qty": 180.0,
+"avg_weekly": 8.81,
+"origin": "foreign"
+},
+{
+"code": "14989",
+"name": "CLEAN CLEAN (STAIN REMOVER)",
+"unit": "EA",
+"orders": 7,
+"total_qty": 180.0,
+"avg_weekly": 8.81,
+"origin": "foreign"
+},
+{
+"code": "14814",
+"name": "RUM WHITE 3 STARS PLANTATION",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 180.0,
+"avg_weekly": 8.81,
+"origin": "foreign"
+},
+{
+"code": "13652",
+"name": "COMPOSTABLE & BIODEGRADABLE CAPSULE - ARABICA (1 X 10 NOS)",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 180.0,
+"avg_weekly": 8.81,
+"origin": "foreign"
+},
+{
+"code": "13344",
+"name": "BATTERY SONY- 9V",
+"unit": "EA",
+"orders": 2,
+"total_qty": 180.0,
+"avg_weekly": 8.81,
+"origin": "foreign"
+},
+{
+"code": "13629",
+"name": "COCONUT PUREE 1LTR",
+"unit": "BTL",
+"orders": 9,
+"total_qty": 172.0,
+"avg_weekly": 8.42,
+"origin": "local"
+},
+{
+"code": "14855",
+"name": "SAUCE KIKKOMAN SOYA - 1L",
+"unit": "BTL",
+"orders": 8,
+"total_qty": 171.0,
+"avg_weekly": 8.37,
+"origin": "foreign"
+},
+{
+"code": "14617",
+"name": "PHOTO COPY PAPER A4",
+"unit": "EA",
+"orders": 5,
+"total_qty": 170.0,
+"avg_weekly": 8.32,
+"origin": "foreign"
+},
+{
+"code": "16253",
+"name": "NUTELLA",
+"unit": "TIN",
+"orders": 3,
+"total_qty": 168.0,
+"avg_weekly": 8.22,
+"origin": "foreign"
+},
+{
+"code": "13864",
+"name": "EXTRA FRUIT MUESLI/KG",
+"unit": "PKT",
+"orders": 6,
+"total_qty": 160.0,
+"avg_weekly": 7.83,
+"origin": "foreign"
+},
+{
+"code": "13839",
+"name": "EDAMAME (SOYBEANS) - FROZEN",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 160.0,
+"avg_weekly": 7.83,
+"origin": "foreign"
+},
+{
+"code": "14948",
+"name": "PASTA SPAGHETTI DECECCO- 500G",
+"unit": "PKT",
+"orders": 5,
+"total_qty": 156.0,
+"avg_weekly": 7.64,
+"origin": "foreign"
+},
+{
+"code": "13319",
+"name": "BAKED BEANS - MARA A10",
+"unit": "TIN",
+"orders": 5,
+"total_qty": 156.0,
+"avg_weekly": 7.64,
+"origin": "foreign"
+},
+{
+"code": "13777",
+"name": "DISPOSABLE LUNCH BOX (BAGASSE 7 INCHES)",
+"unit": "EA",
+"orders": 2,
+"total_qty": 155.0,
+"avg_weekly": 7.59,
+"origin": "foreign"
+},
+{
+"code": "14587",
+"name": "PASTA PENNE RIGATE WHOLE DECECCO 1KG",
+"unit": "PKT",
+"orders": 8,
+"total_qty": 153.0,
+"avg_weekly": 7.49,
+"origin": "foreign"
+},
+{
+"code": "13451",
+"name": "BREAKFAST SAUSAGE - PORK",
+"unit": "KG",
+"orders": 6,
+"total_qty": 150.0,
+"avg_weekly": 7.34,
+"origin": "foreign"
+},
+{
+"code": "15297",
+"name": "YAKI NORI SEAWEED 28GRM",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 150.0,
+"avg_weekly": 7.34,
+"origin": "foreign"
+},
+{
+"code": "24007",
+"name": "LIGHT GU10 6W WW",
+"unit": "EA",
+"orders": 3,
+"total_qty": 150.0,
+"avg_weekly": 7.34,
+"origin": "foreign"
+},
+{
+"code": "17231",
+"name": "VELCRO SANDING PAPER DISK 5\" 100 GRIT",
+"unit": "EA",
+"orders": 1,
+"total_qty": 150.0,
+"avg_weekly": 7.34,
+"origin": "foreign"
+},
+{
+"code": "13502",
+"name": "CASH REGISTER THERMAL ROLL 80 X 70 X 12",
+"unit": "EA",
+"orders": 1,
+"total_qty": 150.0,
+"avg_weekly": 7.34,
+"origin": "foreign"
+},
+{
+"code": "14318",
+"name": "LYCHEE - TIN 565ML",
+"unit": "TIN",
+"orders": 3,
+"total_qty": 144.0,
+"avg_weekly": 7.05,
+"origin": "foreign"
+},
+{
+"code": "29145",
+"name": "W/W MCWILLIAMS INHERITANCE CHARDONNAY",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 144.0,
+"avg_weekly": 7.05,
+"origin": "foreign"
+},
+{
+"code": "15205",
+"name": "W/W-LA MONTELLIANA PINOT GRIGIO DOC DELLE VENEZIE",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 144.0,
+"avg_weekly": 7.05,
+"origin": "foreign"
+},
+{
+"code": "14665",
+"name": "PORK TENDERLOIN (BRAZIL)",
+"unit": "KG",
+"orders": 5,
+"total_qty": 143.7,
+"avg_weekly": 7.03,
+"origin": "foreign"
+},
+{
+"code": "14593",
+"name": "PEACH PUREE 1LTR",
+"unit": "BTL",
+"orders": 8,
+"total_qty": 142.0,
+"avg_weekly": 6.95,
+"origin": "foreign"
+},
+{
+"code": "13358",
+"name": "BEEF BACON SLICED 15 X 1 KG",
+"unit": "KG",
+"orders": 4,
+"total_qty": 140.0,
+"avg_weekly": 6.85,
+"origin": "foreign"
+},
+{
+"code": "14519",
+"name": "OAT MILK PLAIN BARISTA BLEND(VANILA)",
+"unit": "LTR",
+"orders": 4,
+"total_qty": 138.0,
+"avg_weekly": 6.76,
+"origin": "foreign"
+},
+{
+"code": "13969",
+"name": "FROZEN WATERMELON JUICE 5LTR",
+"unit": "CAN",
+"orders": 9,
+"total_qty": 135.0,
+"avg_weekly": 6.61,
+"origin": "local"
+},
+{
+"code": "14586",
+"name": "PASTA MACARONI 500G",
+"unit": "PKT",
+"orders": 5,
+"total_qty": 132.0,
+"avg_weekly": 6.46,
+"origin": "foreign"
+},
+{
+"code": "13963",
+"name": "FROZEN PINEAPPLE JUICE 5 LTR",
+"unit": "CAN",
+"orders": 9,
+"total_qty": 130.0,
+"avg_weekly": 6.36,
+"origin": "local"
+},
+{
+"code": "13452",
+"name": "BREAKFAST SAUSAGE - POULTRY 1X6 KG",
+"unit": "KG",
+"orders": 4,
+"total_qty": 130.0,
+"avg_weekly": 6.36,
+"origin": "foreign"
+},
+{
+"code": "14435",
+"name": "MUSHROOMS WHOLE A10",
+"unit": "TIN",
+"orders": 4,
+"total_qty": 126.0,
+"avg_weekly": 6.17,
+"origin": "foreign"
+},
+{
+"code": "14506",
+"name": "NOODLES SOBA",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 125.0,
+"avg_weekly": 6.12,
+"origin": "foreign"
+},
+{
+"code": "13729",
+"name": "CALLEBAUT DARK CHOCOLATE CHIPS 54.5%",
+"unit": "KG",
+"orders": 4,
+"total_qty": 121.0,
+"avg_weekly": 5.92,
+"origin": "foreign"
+},
+{
+"code": "14856",
+"name": "SAUCE MAYONISE (HEINZ) 3.29KG",
+"unit": "CAN",
+"orders": 5,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "13507",
+"name": "CASTER SUGAR (REDMAN)",
+"unit": "KG",
+"orders": 5,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "15102",
+"name": "TOMATO PASTE (MARA) TIN 2.2 KG",
+"unit": "TIN",
+"orders": 4,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "local"
+},
+{
+"code": "13335",
+"name": "BASMATHI RICE SPECIAL (CHEF SECRET) 5KG",
+"unit": "PKT",
+"orders": 6,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "14967",
+"name": "SRIRACHA CHILI SAUCE HOT (PANTAI) 730ML",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "15114",
+"name": "TOOTH PICKS NORMAL (100PCS)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "14583",
+"name": "PASSION FRUIT PUREE 1LTR",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "13571",
+"name": "CHICK PEAS IN TIN-2.50KG",
+"unit": "TIN",
+"orders": 3,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "14862",
+"name": "SAUCE TOMATO KETCHUP (HEINZ) 3KG",
+"unit": "TIN",
+"orders": 4,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "local"
+},
+{
+"code": "14860",
+"name": "SAUCE SWEET CHILLI-850GRM",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "17579",
+"name": "BEER - ASAHI EXTRA DRY 330ML",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "14577",
+"name": "PAPER SERVITTES",
+"unit": "EA",
+"orders": 1,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "14786",
+"name": "ROSE - DON SIMON NATURE TEMPRANILLO",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "15201",
+"name": "W/W BARREL SELECTION CHENIN BLANC",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "14836",
+"name": "SAMBAR POWDER",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "22476",
+"name": "CRAYON 12 COLORS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 120.0,
+"avg_weekly": 5.87,
+"origin": "foreign"
+},
+{
+"code": "13595",
+"name": "CIF LIQUIED",
+"unit": "EA",
+"orders": 4,
+"total_qty": 112.0,
+"avg_weekly": 5.48,
+"origin": "foreign"
+},
+{
+"code": "14129",
+"name": "ICING SUGAR (REDMAN) 1 KG",
+"unit": "KG",
+"orders": 6,
+"total_qty": 110.0,
+"avg_weekly": 5.38,
+"origin": "foreign"
+},
+{
+"code": "13675",
+"name": "CRAB MEAT",
+"unit": "KG",
+"orders": 4,
+"total_qty": 110.0,
+"avg_weekly": 5.38,
+"origin": "foreign"
+},
+{
+"code": "14507",
+"name": "NOTE BOOK - A7",
+"unit": "EA",
+"orders": 2,
+"total_qty": 108.0,
+"avg_weekly": 5.29,
+"origin": "foreign"
+},
+{
+"code": "18285",
+"name": "CHICKEN BREAST SEARA",
+"unit": "KG",
+"orders": 1,
+"total_qty": 108.0,
+"avg_weekly": 5.29,
+"origin": "foreign"
+},
+{
+"code": "14193",
+"name": "KIDNEY BEANS - RED - 2.50KG",
+"unit": "TIN",
+"orders": 4,
+"total_qty": 108.0,
+"avg_weekly": 5.29,
+"origin": "foreign"
+},
+{
+"code": "14503",
+"name": "NOODLES MAMEE 80 Grm",
+"unit": "CS",
+"orders": 7,
+"total_qty": 106.0,
+"avg_weekly": 5.19,
+"origin": "foreign"
+},
+{
+"code": "13960",
+"name": "FROZEN MANGO JUICE 5LTR",
+"unit": "CAN",
+"orders": 10,
+"total_qty": 105.0,
+"avg_weekly": 5.14,
+"origin": "foreign"
+},
+{
+"code": "13958",
+"name": "FROZEN LEMON JUICE 5LIT",
+"unit": "CAN",
+"orders": 11,
+"total_qty": 102.0,
+"avg_weekly": 4.99,
+"origin": "foreign"
+},
+{
+"code": "14390",
+"name": "MILK POWDER 2.5 KG",
+"unit": "TIN",
+"orders": 4,
+"total_qty": 102.0,
+"avg_weekly": 4.99,
+"origin": "foreign"
+},
+{
+"code": "19172",
+"name": "RED WINE - CALVET MERLOT 750ML",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 102.0,
+"avg_weekly": 4.99,
+"origin": "foreign"
+},
+{
+"code": "14934",
+"name": "SOFT DRINK DIET COKE TIN 320 ML",
+"unit": "CS",
+"orders": 9,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "14322",
+"name": "MAGGI SOYA SAUCE 700 ML",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "14999",
+"name": "STRAWBERRY PUREE 1LTR",
+"unit": "BTL",
+"orders": 5,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "25133",
+"name": "CHEF HAT DISPOSABLE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "14951",
+"name": "SPECIALTY GRADE COFFEE ESPRESSO BEANS",
+"unit": "KG",
+"orders": 3,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "15714",
+"name": "CALLEBAUT WHITE CHOCOLATE 28% CALLETS",
+"unit": "KG",
+"orders": 2,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "15117",
+"name": "TORTILLAS WHEAT 25 CM 70 Grm",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "14359",
+"name": "MASKING TAPE 2\"",
+"unit": "EA",
+"orders": 2,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "14142",
+"name": "INSULATION TAPE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "13439",
+"name": "BOTH SIDE TAPE 1''",
+"unit": "EA",
+"orders": 2,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "13230",
+"name": "CLEAR FOLDER A4",
+"unit": "EA",
+"orders": 1,
+"total_qty": 100.0,
+"avg_weekly": 4.9,
+"origin": "foreign"
+},
+{
+"code": "14305",
+"name": "LP GAS CYLINDER 45KGS",
+"unit": "EA",
+"orders": 18,
+"total_qty": 99.0,
+"avg_weekly": 4.85,
+"origin": "foreign"
+},
+{
+"code": "14335",
+"name": "MANGO PUREE 1LTR",
+"unit": "BTL",
+"orders": 7,
+"total_qty": 98.0,
+"avg_weekly": 4.8,
+"origin": "foreign"
+},
+{
+"code": "14184",
+"name": "KATTA SAMBOL- 380GRM",
+"unit": "BTL",
+"orders": 4,
+"total_qty": 96.0,
+"avg_weekly": 4.7,
+"origin": "foreign"
+},
+{
+"code": "14161",
+"name": "JUICE - ORANGE",
+"unit": "CS",
+"orders": 7,
+"total_qty": 95.0,
+"avg_weekly": 4.65,
+"origin": "local"
+},
+{
+"code": "14530",
+"name": "OLIVE OIL 5 LTR",
+"unit": "CAN",
+"orders": 7,
+"total_qty": 91.0,
+"avg_weekly": 4.45,
+"origin": "foreign"
+},
+{
+"code": "13587",
+"name": "CHOCOLATE KIT KAT - 38G",
+"unit": "BOX",
+"orders": 6,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "14877",
+"name": "SEA BASS FILLET-SKIN ON",
+"unit": "KG",
+"orders": 3,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "27214",
+"name": "CHA & SPRK GANCIA PINOT DI PINOT BRUT NV",
+"unit": "EA",
+"orders": 2,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "13654",
+"name": "COMPOSTABLE & BIODEGRADABLE CAPSULE - INTENSO (1 X 10 NOS)",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "15033",
+"name": "SWEET CORN TIN - 2.65KG/TIN",
+"unit": "TIN",
+"orders": 4,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "13260",
+"name": "ALUMINIUM FOIL",
+"unit": "EA",
+"orders": 3,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "13973",
+"name": "FRUIT COCKTAIL TIN-3KG",
+"unit": "TIN",
+"orders": 4,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "23945",
+"name": "WHITE WINES - OVERSTONE SAUVIGNON BLANC",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "13532",
+"name": "CHA & SPRK - JAUME SERRA CAVA BRUT ROSE SLEEVE",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "14754",
+"name": "RED WINES - TORO CENTENARIO MALBEC",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "13533",
+"name": "CHA & SPRK - JAUME SERRA CAVA BRUT SLEEVE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 90.0,
+"avg_weekly": 4.41,
+"origin": "foreign"
+},
+{
+"code": "14938",
+"name": "SOFT DRINK SPRITE TIN 320 ML",
+"unit": "CS",
+"orders": 9,
+"total_qty": 85.0,
+"avg_weekly": 4.16,
+"origin": "foreign"
+},
+{
+"code": "14163",
+"name": "JUICE - PEACH 1LTR",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 84.0,
+"avg_weekly": 4.11,
+"origin": "foreign"
+},
+{
+"code": "13631",
+"name": "COFFEE - NESCAFE COFFEE 500GRM",
+"unit": "KG",
+"orders": 5,
+"total_qty": 84.0,
+"avg_weekly": 4.11,
+"origin": "foreign"
+},
+{
+"code": "14164",
+"name": "JUICE - PINEAPPLE",
+"unit": "CS",
+"orders": 9,
+"total_qty": 82.0,
+"avg_weekly": 4.01,
+"origin": "local"
+},
+{
+"code": "13575",
+"name": "CHICKEN STOCK POWDER (KNOOR)",
+"unit": "KG",
+"orders": 7,
+"total_qty": 82.0,
+"avg_weekly": 4.01,
+"origin": "foreign"
+},
+{
+"code": "13954",
+"name": "FROZEN EGG WHOLE BIB",
+"unit": "KG",
+"orders": 1,
+"total_qty": 81.7,
+"avg_weekly": 4.0,
+"origin": "foreign"
+},
+{
+"code": "14958",
+"name": "SPRAY PAINT - BLACK",
+"unit": "EA",
+"orders": 4,
+"total_qty": 80.0,
+"avg_weekly": 3.92,
+"origin": "foreign"
+},
+{
+"code": "13987",
+"name": "GARAM MASALA - 100GRM",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 80.0,
+"avg_weekly": 3.92,
+"origin": "foreign"
+},
+{
+"code": "14762",
+"name": "RICE PAPER MOON - 300GRM",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 80.0,
+"avg_weekly": 3.92,
+"origin": "foreign"
+},
+{
+"code": "13643",
+"name": "COIR ROPE",
+"unit": "EA",
+"orders": 3,
+"total_qty": 80.0,
+"avg_weekly": 3.92,
+"origin": "foreign"
+},
+{
+"code": "27441",
+"name": "CHA & SPARK - KRAEMER BLANC DE BLANCE BRUT NV",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 78.0,
+"avg_weekly": 3.82,
+"origin": "foreign"
+},
+{
+"code": "14200",
+"name": "KIWI PUREE 1LTR",
+"unit": "BTL",
+"orders": 5,
+"total_qty": 78.0,
+"avg_weekly": 3.82,
+"origin": "foreign"
+},
+{
+"code": "13336",
+"name": "BASMATHI RICE(STAFF)",
+"unit": "PKT",
+"orders": 4,
+"total_qty": 76.0,
+"avg_weekly": 3.72,
+"origin": "foreign"
+},
+{
+"code": "14937",
+"name": "SOFT DRINK SODA WATER TIN 320 ML",
+"unit": "CS",
+"orders": 8,
+"total_qty": 75.0,
+"avg_weekly": 3.67,
+"origin": "foreign"
+},
+{
+"code": "14859",
+"name": "SAUCE SOYA SWEET (ABC)",
+"unit": "BTL",
+"orders": 6,
+"total_qty": 74.4,
+"avg_weekly": 3.64,
+"origin": "foreign"
+},
+{
+"code": "14857",
+"name": "SAUCE OYSTER 500ML",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "14623",
+"name": "PICKLE LIME-400 GRM",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "local"
+},
+{
+"code": "13527",
+"name": "CHA & SPRK - CRUDO PROSECCO",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "14830",
+"name": "SALAD OIL",
+"unit": "CAN",
+"orders": 4,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "14409",
+"name": "MITZUKAN RICE VINEGAR",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "14793",
+"name": "ROSE WINE - SOLEILLADES COTEAUX D ALX ROSE",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "13961",
+"name": "FROZEN MANGO PUREE BOIRON",
+"unit": "KG",
+"orders": 5,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "13593",
+"name": "CHUTNEY MANGO-460GRM",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "30618",
+"name": "RED WINE VAN LOVEREN PINOT NOIR 'VINE-BY-POLE'",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "14022",
+"name": "GIN RIVES",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "30222",
+"name": "RED WINE - YELLOW CODE SYRAH",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "16746",
+"name": "WHISKY - JIMBEAM BOURBON",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "30385",
+"name": "WW ROCCA ALATA PINOT GRIGIO DELLE VENEZIE DOC",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "14907",
+"name": "SILICON TUBE - WHITE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 72.0,
+"avg_weekly": 3.52,
+"origin": "foreign"
+},
+{
+"code": "15285",
+"name": "WIRE BRUSH",
+"unit": "EA",
+"orders": 4,
+"total_qty": 70.0,
+"avg_weekly": 3.43,
+"origin": "foreign"
+},
+{
+"code": "14933",
+"name": "SOFT DRINK COKE ZERO TIN 320 ML",
+"unit": "CS",
+"orders": 8,
+"total_qty": 70.0,
+"avg_weekly": 3.43,
+"origin": "foreign"
+},
+{
+"code": "14935",
+"name": "SOFT DRINK FANTA ORANGE TIN 320 ML",
+"unit": "CS",
+"orders": 7,
+"total_qty": 70.0,
+"avg_weekly": 3.43,
+"origin": "local"
+},
+{
+"code": "15951",
+"name": "FOOD ROTATION STICKER",
+"unit": "EA",
+"orders": 2,
+"total_qty": 70.0,
+"avg_weekly": 3.43,
+"origin": "foreign"
+},
+{
+"code": "14664",
+"name": "PORK SPARE RIBS",
+"unit": "KG",
+"orders": 2,
+"total_qty": 70.0,
+"avg_weekly": 3.42,
+"origin": "foreign"
+},
+{
+"code": "14585",
+"name": "PASTA LINGUINE 500 Grm",
+"unit": "KG",
+"orders": 5,
+"total_qty": 66.0,
+"avg_weekly": 3.23,
+"origin": "foreign"
+},
+{
+"code": "14521",
+"name": "OATS FLAKES - 500G",
+"unit": "PKT",
+"orders": 4,
+"total_qty": 66.0,
+"avg_weekly": 3.23,
+"origin": "foreign"
+},
+{
+"code": "13984",
+"name": "PASTA FUSILLI DECCECO",
+"unit": "PKT",
+"orders": 6,
+"total_qty": 66.0,
+"avg_weekly": 3.23,
+"origin": "foreign"
+},
+{
+"code": "14594",
+"name": "PEACHES HALVES IN SYRUP - TIN",
+"unit": "TIN",
+"orders": 3,
+"total_qty": 66.0,
+"avg_weekly": 3.23,
+"origin": "foreign"
+},
+{
+"code": "14156",
+"name": "JUICE - GRANINI JUICE APPLE JUICE 250 ML",
+"unit": "CS",
+"orders": 4,
+"total_qty": 65.0,
+"avg_weekly": 3.18,
+"origin": "foreign"
+},
+{
+"code": "19916",
+"name": "JUICE - GRANINI JUICE ORANGE JUICE 250 ML",
+"unit": "CS",
+"orders": 4,
+"total_qty": 65.0,
+"avg_weekly": 3.18,
+"origin": "local"
+},
+{
+"code": "16067",
+"name": "HIMALAYAN PINK SALT POTATO CHIPS-56GRM",
+"unit": "CS",
+"orders": 5,
+"total_qty": 65.0,
+"avg_weekly": 3.18,
+"origin": "foreign"
+},
+{
+"code": "15204",
+"name": "W/W REMY FERBRAS VIOGNIER",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 64.0,
+"avg_weekly": 3.13,
+"origin": "foreign"
+},
+{
+"code": "13591",
+"name": "CHOCOLATE SNICKERS 51GM",
+"unit": "BOX",
+"orders": 8,
+"total_qty": 61.0,
+"avg_weekly": 2.99,
+"origin": "foreign"
+},
+{
+"code": "13542",
+"name": "CHANA DHALL",
+"unit": "KG",
+"orders": 6,
+"total_qty": 61.0,
+"avg_weekly": 2.99,
+"origin": "foreign"
+},
+{
+"code": "14680",
+"name": "PRAWN CRACKER - 500GRM",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "foreign"
+},
+{
+"code": "15687",
+"name": "BREAKFAST SAUSAGE - BEEF",
+"unit": "KG",
+"orders": 3,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "foreign"
+},
+{
+"code": "13968",
+"name": "FROZEN STRAWBERRY PUREE-1KG",
+"unit": "KG",
+"orders": 4,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "foreign"
+},
+{
+"code": "13602",
+"name": "CLAM MEAT",
+"unit": "KG",
+"orders": 4,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "foreign"
+},
+{
+"code": "16171",
+"name": "LIQUEURS - TRIPLE SEC (DEMANDIS) 700ML",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "foreign"
+},
+{
+"code": "15182",
+"name": "VODKA - RUSSIAN STANDARD",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "foreign"
+},
+{
+"code": "30221",
+"name": "ROSE WINE - ALAMOS",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "foreign"
+},
+{
+"code": "15203",
+"name": "W/W HERBSTLICHT RIESLING TROCKEN",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 60.0,
+"avg_weekly": 2.94,
+"origin": "local"
+},
+{
+"code": "14157",
+"name": "JUICE - GRANINI JUICE MULTIVITAMIN 250 ML",
+"unit": "CS",
+"orders": 4,
+"total_qty": 55.0,
+"avg_weekly": 2.69,
+"origin": "foreign"
+},
+{
+"code": "14939",
+"name": "SOFT DRINK TONIC TIN 320 ML",
+"unit": "CS",
+"orders": 6,
+"total_qty": 55.0,
+"avg_weekly": 2.69,
+"origin": "foreign"
+},
+{
+"code": "15199",
+"name": "W/W - BARREL SELECTION SAUVIGNIN BLANC",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 54.0,
+"avg_weekly": 2.64,
+"origin": "foreign"
+},
+{
+"code": "14787",
+"name": "ROSE PUREE 1LTR",
+"unit": "BTL",
+"orders": 4,
+"total_qty": 54.0,
+"avg_weekly": 2.64,
+"origin": "foreign"
+},
+{
+"code": "13676",
+"name": "CRAB MEAT CLAW 454 GRM",
+"unit": "TIN",
+"orders": 2,
+"total_qty": 54.0,
+"avg_weekly": 2.64,
+"origin": "foreign"
+},
+{
+"code": "15099",
+"name": "TOILET PAPER ROLL (YOWELL) 120 ROLL",
+"unit": "CS",
+"orders": 6,
+"total_qty": 53.0,
+"avg_weekly": 2.59,
+"origin": "foreign"
+},
+{
+"code": "20474",
+"name": "SEA SALT MALDON FLAKE",
+"unit": "EA",
+"orders": 2,
+"total_qty": 51.0,
+"avg_weekly": 2.5,
+"origin": "foreign"
+},
+{
+"code": "14228",
+"name": "LAMB RUMPS (WAMMCO BRAND)",
+"unit": "KG",
+"orders": 2,
+"total_qty": 50.2,
+"avg_weekly": 2.46,
+"origin": "foreign"
+},
+{
+"code": "16434",
+"name": "RUBBER BANDS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "13756",
+"name": "DHALL TOOR",
+"unit": "KG",
+"orders": 4,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "13302",
+"name": "ATTA FLOUR 01Kg",
+"unit": "KG",
+"orders": 3,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "15618",
+"name": "BATTERY LR44",
+"unit": "EA",
+"orders": 1,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "14412",
+"name": "MIXED SEA FOOD",
+"unit": "KG",
+"orders": 3,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "14763",
+"name": "RICE VERMICELLI 500 Grm",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "13254",
+"name": "ALMOND SEEDS",
+"unit": "KG",
+"orders": 4,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "15284",
+"name": "WHOLE PEPPER BLACK - 01KG",
+"unit": "KG",
+"orders": 2,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "13458",
+"name": "BROOM WITH WOODEN STICK",
+"unit": "EA",
+"orders": 2,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "13465",
+"name": "BULB E27 12W - DAY LIGHT WHITE LED BULB",
+"unit": "EA",
+"orders": 1,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "15016",
+"name": "SUNK BOX SINGLE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "14417",
+"name": "MOP",
+"unit": "EA",
+"orders": 2,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "14388",
+"name": "MICRON 5 BAG FILTER - NOMINAL SIZE 2",
+"unit": "EA",
+"orders": 1,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "13515",
+"name": "CELLO TAPE - 2''",
+"unit": "EA",
+"orders": 1,
+"total_qty": 50.0,
+"avg_weekly": 2.45,
+"origin": "foreign"
+},
+{
+"code": "14119",
+"name": "ICE CREAM VANILLA 4 LTR",
+"unit": "CAN",
+"orders": 5,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14959",
+"name": "SPRAY PAINT - CLEAR",
+"unit": "EA",
+"orders": 3,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14575",
+"name": "PAPER CUTTER LARGE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14625",
+"name": "PICKLE MANGO BOTTLE",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14624",
+"name": "PICKLE MALAY-375GRM",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14897",
+"name": "SHOCK DRAIN CLEANER",
+"unit": "EA",
+"orders": 3,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14946",
+"name": "SOYA MILK 1Liter",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14923",
+"name": "SOFFELL SPRAY MOSQUITO",
+"unit": "EA",
+"orders": 1,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14402",
+"name": "MIRIN SAUCE (SEASONING)",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14742",
+"name": "RED WINE - CATENA ZAPATA APPELLATION VISTA MALBEC",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "17036",
+"name": "RUM-OLD MONK 1LIT",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "19973",
+"name": "BEER DAURADAMM GLUTEN FREE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "14906",
+"name": "SILICON TUBE - CLEAR",
+"unit": "EA",
+"orders": 1,
+"total_qty": 48.0,
+"avg_weekly": 2.35,
+"origin": "foreign"
+},
+{
+"code": "13470",
+"name": "BUTANE GAS CARTRIGE",
+"unit": "EA",
+"orders": 4,
+"total_qty": 46.0,
+"avg_weekly": 2.25,
+"origin": "foreign"
+},
+{
+"code": "13755",
+"name": "DHALL RED MASOOR-15KG",
+"unit": "BAG",
+"orders": 3,
+"total_qty": 45.0,
+"avg_weekly": 2.2,
+"origin": "foreign"
+},
+{
+"code": "15283",
+"name": "WHOLE JOB FISH CLEANED",
+"unit": "KG",
+"orders": 1,
+"total_qty": 45.0,
+"avg_weekly": 2.2,
+"origin": "local"
+},
+{
+"code": "14542",
+"name": "ORDINARY RICE - 50KG",
+"unit": "BAG",
+"orders": 10,
+"total_qty": 44.0,
+"avg_weekly": 2.15,
+"origin": "foreign"
+},
+{
+"code": "16025",
+"name": "GORAKA PASTE",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 44.0,
+"avg_weekly": 2.15,
+"origin": "foreign"
+},
+{
+"code": "13325",
+"name": "BALSAMIC VINEGER 500 ML",
+"unit": "BTL",
+"orders": 4,
+"total_qty": 42.0,
+"avg_weekly": 2.06,
+"origin": "foreign"
+},
+{
+"code": "17384",
+"name": "MADRASS CURRY POWDER",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 42.0,
+"avg_weekly": 2.06,
+"origin": "foreign"
+},
+{
+"code": "13279",
+"name": "APERITIF - CAMPARI",
+"unit": "BTL",
+"orders": 4,
+"total_qty": 42.0,
+"avg_weekly": 2.06,
+"origin": "foreign"
+},
+{
+"code": "14813",
+"name": "RUM DARK PLANTATION",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 42.0,
+"avg_weekly": 2.06,
+"origin": "foreign"
+},
+{
+"code": "13665",
+"name": "CORN FLAKES - 1.1KG",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 42.0,
+"avg_weekly": 2.06,
+"origin": "foreign"
+},
+{
+"code": "14499",
+"name": "NON ALCOHOLIC SPARKLING WINE 750 ML",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 42.0,
+"avg_weekly": 2.06,
+"origin": "foreign"
+},
+{
+"code": "15268",
+"name": "WHITE WINES - EMILIANA NOVAS SAUVIGNON BLANC",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 42.0,
+"avg_weekly": 2.06,
+"origin": "foreign"
+},
+{
+"code": "14626",
+"name": "PICKLED GINGER SLICE - 1KG",
+"unit": "KG",
+"orders": 4,
+"total_qty": 41.0,
+"avg_weekly": 2.01,
+"origin": "foreign"
+},
+{
+"code": "13918",
+"name": "FLOUR WHEAT (PEARS) 25 KG",
+"unit": "BAG",
+"orders": 5,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "14415",
+"name": "MOONG DHAL YELLOW",
+"unit": "KG",
+"orders": 4,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "13967",
+"name": "FROZEN SPRING ROLL SHEET (SPRING HOME)",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "14865",
+"name": "SCALLOP U-10",
+"unit": "KG",
+"orders": 2,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "14925",
+"name": "SOFT DRINK - RED BULL - ENERGY DRINK",
+"unit": "CS",
+"orders": 2,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "14151",
+"name": "JASMINE RICE - 10KG THAI VLLA",
+"unit": "BAG",
+"orders": 5,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "17058",
+"name": "BISCUIT CHEESE CRACKER",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "15652",
+"name": "BEER LION LAGER KEG 30 L",
+"unit": "KEG",
+"orders": 6,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "15227",
+"name": "WALNUT",
+"unit": "KG",
+"orders": 4,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "21654",
+"name": "HIGHLIGHTER PEN - YELLOW",
+"unit": "EA",
+"orders": 2,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "15260",
+"name": "WHITE VINEGAR CAN",
+"unit": "BTL",
+"orders": 4,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "15583",
+"name": "ANTIBACTERIAL CLEAN AND SMOOTH HAND SOAP",
+"unit": "EA",
+"orders": 5,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "16228",
+"name": "MUSLIM SHOWER HANDLE WITH HOSE",
+"unit": "EA",
+"orders": 2,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "14292",
+"name": "LOBSTER 1000 / 1200 Grm",
+"unit": "KG",
+"orders": 2,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "15300",
+"name": "YEAST - 500G",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "27466",
+"name": "MUFFIN CUP 5.5X6CM 50PCS",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "15009",
+"name": "SULTHANA",
+"unit": "KG",
+"orders": 4,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "13206",
+"name": "10W E27 LED BULB - W/WHITE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "13501",
+"name": "CARTRIDGE FILTER 10\" (05 MICRON)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "15004",
+"name": "SUGAR - BROWN (REDMAN) 1KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 40.0,
+"avg_weekly": 1.96,
+"origin": "foreign"
+},
+{
+"code": "13738",
+"name": "DEGGI MIRCHI (MDH)",
+"unit": "KG",
+"orders": 7,
+"total_qty": 38.0,
+"avg_weekly": 1.86,
+"origin": "foreign"
+},
+{
+"code": "14962",
+"name": "SPRAY PAINT WHITE",
+"unit": "EA",
+"orders": 2,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "14115",
+"name": "ICE CREAM FRUIT AND NUT",
+"unit": "CAN",
+"orders": 4,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "13597",
+"name": "CINNAMON STICK",
+"unit": "KG",
+"orders": 3,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "30993",
+"name": "WHITE WINE STONEBURN SAUVIGNON BLANC",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "16748",
+"name": "WHISKY - JOHNNIE WALKER RED",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "14744",
+"name": "RED WINE - FONTANAFREDDA MOSCATO D ASTI",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "14584",
+"name": "PASTA EGG PAPPARDELLE",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "29997",
+"name": "RED WINE YALUMBA ORGANIC SHIRAZ 2021",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "14437",
+"name": "MUSTARD OIL",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "13264",
+"name": "AMUL GHEE-1KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "13345",
+"name": "BATTERY WATER LITER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "17585",
+"name": "GIN - GORDONS DRY",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "14788",
+"name": "ROSE SYRUP - 750ML",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "14853",
+"name": "SAUCE CHILLE (MAGGI) 3KG",
+"unit": "TIN",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "30855",
+"name": "CHATEAU SOUVERAIN CABERNET SAUVIGNON 750ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "13418",
+"name": "BLEACH LIQUID -1LTR",
+"unit": "EA",
+"orders": 1,
+"total_qty": 36.0,
+"avg_weekly": 1.76,
+"origin": "foreign"
+},
+{
+"code": "15047",
+"name": "TAMARIND",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 34.0,
+"avg_weekly": 1.66,
+"origin": "foreign"
+},
+{
+"code": "15378",
+"name": "DETOL CAN - 5LTR",
+"unit": "EA",
+"orders": 5,
+"total_qty": 33.0,
+"avg_weekly": 1.62,
+"origin": "foreign"
+},
+{
+"code": "14378",
+"name": "MELITTA CHOCOLATE POWDER 1 KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 32.0,
+"avg_weekly": 1.57,
+"origin": "foreign"
+},
+{
+"code": "13990",
+"name": "GARLIC 10KG",
+"unit": "BAG",
+"orders": 8,
+"total_qty": 32.0,
+"avg_weekly": 1.57,
+"origin": "local"
+},
+{
+"code": "14450",
+"name": "NESCAFE DRINK LATTE-220ML",
+"unit": "CS",
+"orders": 4,
+"total_qty": 32.0,
+"avg_weekly": 1.57,
+"origin": "foreign"
+},
+{
+"code": "13765",
+"name": "DILMAH MOROCCAN MINT GREN TEA 50 X 2GRM",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 32.0,
+"avg_weekly": 1.57,
+"origin": "foreign"
+},
+{
+"code": "15734",
+"name": "CEREAL - CHOCOS -375GRM",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 32.0,
+"avg_weekly": 1.57,
+"origin": "foreign"
+},
+{
+"code": "14154",
+"name": "JUICE - APPLE",
+"unit": "CS",
+"orders": 7,
+"total_qty": 31.0,
+"avg_weekly": 1.52,
+"origin": "foreign"
+},
+{
+"code": "15144",
+"name": "TURMERIC - POWDER - 1KG ACHI",
+"unit": "KG",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13590",
+"name": "CHOCOLATE MARS 51 GM",
+"unit": "BOX",
+"orders": 6,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13911",
+"name": "FLOUR GRAM 01KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "",
+"name": "TRIGGER SPRAY",
+"unit": "EA",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13493",
+"name": "CANDLE BULB 4W E27 DIMMABLE W/W",
+"unit": "EA",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "14113",
+"name": "ICE CREAM CHOCOLATE",
+"unit": "CAN",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13572",
+"name": "CHICK PEAS WHITE 1KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "15799",
+"name": "CHROMOL 500ML (CLEANER & POLISHER)",
+"unit": "EA",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13959",
+"name": "FROZEN LEMON PUREE-1 KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13749",
+"name": "DESECATED COCONUT",
+"unit": "KG",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "local"
+},
+{
+"code": "14533",
+"name": "OLIVES - GREEN PITTED",
+"unit": "TIN",
+"orders": 2,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "14116",
+"name": "ICE CREAM MANGO",
+"unit": "CAN",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13497",
+"name": "CAPERS",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "30619",
+"name": "RED WINE RICASOLI CHIANTI DOCG",
+"unit": "EA",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "14560",
+"name": "PAINT BRUSH - 2.5''",
+"unit": "EA",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "14561",
+"name": "PAINT BRUSH 1\"",
+"unit": "EA",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "14780",
+"name": "ROLLER BRUSH WITH LONG HANDLE 7\"",
+"unit": "EA",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13778",
+"name": "DISPOSABLE PIPING BAG",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "14559",
+"name": "PAINT BRUSH - 2''",
+"unit": "EA",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "14089",
+"name": "HOPPER MIX 400G",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "13251",
+"name": "ALMOND MILK",
+"unit": "LTR",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "15632",
+"name": "BEEF BACON - STAFF",
+"unit": "KG",
+"orders": 1,
+"total_qty": 30.0,
+"avg_weekly": 1.47,
+"origin": "foreign"
+},
+{
+"code": "16540",
+"name": "SOLID POWER XL 9LB",
+"unit": "EA",
+"orders": 5,
+"total_qty": 28.0,
+"avg_weekly": 1.37,
+"origin": "foreign"
+},
+{
+"code": "13764",
+"name": "DILMAH MANGO & STRAWBERRY 50 X 2GRM",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 28.0,
+"avg_weekly": 1.37,
+"origin": "foreign"
+},
+{
+"code": "28474",
+"name": "FROZEN GINGER JUICE 5 LTR",
+"unit": "CAN",
+"orders": 4,
+"total_qty": 28.0,
+"avg_weekly": 1.37,
+"origin": "foreign"
+},
+{
+"code": "15003",
+"name": "SUGAR - 50KG",
+"unit": "BAG",
+"orders": 6,
+"total_qty": 27.0,
+"avg_weekly": 1.32,
+"origin": "foreign"
+},
+{
+"code": "13253",
+"name": "ALMOND POWDER - 01KG",
+"unit": "KG",
+"orders": 5,
+"total_qty": 27.0,
+"avg_weekly": 1.32,
+"origin": "foreign"
+},
+{
+"code": "13912",
+"name": "FLOUR ORDINARY",
+"unit": "BAG",
+"orders": 7,
+"total_qty": 26.0,
+"avg_weekly": 1.27,
+"origin": "foreign"
+},
+{
+"code": "14455",
+"name": "NESCAFE DRINK MOCHA-240ML",
+"unit": "CS",
+"orders": 4,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "15039",
+"name": "TABLE SALT (FINEESE) 500GM",
+"unit": "CS",
+"orders": 5,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "17479",
+"name": "LP GAS CYLINDER 10KGS",
+"unit": "EA",
+"orders": 15,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "13408",
+"name": "BISCUIT CREAM CRAKER 3KG (JK BRAND)",
+"unit": "TIN",
+"orders": 5,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "14198",
+"name": "KITHUL JAGGARY",
+"unit": "KG",
+"orders": 2,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "14931",
+"name": "SOFT DRINK BITTER LEMON TIN 320 ML",
+"unit": "CS",
+"orders": 3,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "13732",
+"name": "DATES-500 GRM",
+"unit": "KG",
+"orders": 3,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "18442",
+"name": "VACUUM BAG 250MM X 300MM",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "20525",
+"name": "HONEY COMB IN FRAME",
+"unit": "EA",
+"orders": 5,
+"total_qty": 25.0,
+"avg_weekly": 1.22,
+"origin": "foreign"
+},
+{
+"code": "16556",
+"name": "SPRAY PAINT - BLUE",
+"unit": "EA",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14960",
+"name": "SPRAY PAINT MEDIUM GRAY",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14118",
+"name": "ICE CREAM STRAWBERY 4 LTR",
+"unit": "CAN",
+"orders": 4,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13392",
+"name": "BINDER CLIPS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14044",
+"name": "GREEN TEA POWDER MACHA",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14795",
+"name": "ROSE WINES - CHATEAU MINUTY",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "16126",
+"name": "LEMON EZE (BATHROOM CLEANER)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13290",
+"name": "APPLE PUREE GREEN FROZEN",
+"unit": "KG",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13956",
+"name": "FROZEN FRUIT PUREE RASPBERRY W/O SUGAR BOIRON 6X1 KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13966",
+"name": "FROZEN PUREE PASSION FRUIT BOIRON 6X1 KG",
+"unit": "KG",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14358",
+"name": "MASKING TAPE 1''",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14904",
+"name": "SIKAFLEX 221 BLACK",
+"unit": "EA",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "21573",
+"name": "SIKAFLEX WHITE",
+"unit": "EA",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "30994",
+"name": "WHITE WINE TATIANA GUILLOT BOURGOGNE CHARDONNAY AOP",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14017",
+"name": "GIN - BOMBAY SAPPHIRE 1000ml",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14272",
+"name": "LIQUEUR - APEROL",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "16348",
+"name": "R/W CAMBRIDGE CROSSING SHIRAZ",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14746",
+"name": "RED WINE - MAISON CASTEL PINOT NOIR GRANDE RESERVE",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "15184",
+"name": "VODKA GREY GOOSE",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14863",
+"name": "SAUCE WORCHESTASIRE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14789",
+"name": "ROSE WATER 400ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "15796",
+"name": "CHOCOLATE SYRUP-700ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14194",
+"name": "KIF POWDER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14728",
+"name": "R/W IMBUKO ISWITHI PINOTAGE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "15277",
+"name": "WHITE WINES - RICHMOND PLAINS PINOT GRIS",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13295",
+"name": "ASAFETIDA (HING) POWDER",
+"unit": "TIN",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13242",
+"name": "AIR FRESHNER - 400ML",
+"unit": "EA",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13208",
+"name": "PLUG TOP 13A",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "15041",
+"name": "TAHINA PASTE (AL AMEERA)- 400GRM",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14428",
+"name": "MULTY SOCKET / THREE PIN SOCKET 13A",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "15236",
+"name": "WD - 40",
+"unit": "EA",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13763",
+"name": "DILMAH GREEN TEA WITH JASMINE FLOWERS 50 X 2GRM",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "13539",
+"name": "CHAMPAGNE & SPRAKLING-CRUEST SPARKLING BLANC DE BLANCS",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "30854",
+"name": "PIERRE CHAVIN COTES DE-PROVENCE ROSE ORGANIC 750ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14882",
+"name": "SEENI SAMBOL-400GRM",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 24.0,
+"avg_weekly": 1.17,
+"origin": "foreign"
+},
+{
+"code": "14509",
+"name": "NUTBARI 52G",
+"unit": "CS",
+"orders": 5,
+"total_qty": 23.0,
+"avg_weekly": 1.13,
+"origin": "foreign"
+},
+{
+"code": "13762",
+"name": "DILMAH CEYLON YOUNG HYSON GREEN TEA 50 X 2GRM",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 22.0,
+"avg_weekly": 1.08,
+"origin": "foreign"
+},
+{
+"code": "13579",
+"name": "CHILI POWDER",
+"unit": "KG",
+"orders": 2,
+"total_qty": 22.0,
+"avg_weekly": 1.08,
+"origin": "foreign"
+},
+{
+"code": "13820",
+"name": "DUCK BREAST MARGRET",
+"unit": "KG",
+"orders": 1,
+"total_qty": 21.4,
+"avg_weekly": 1.05,
+"origin": "foreign"
+},
+{
+"code": "15898",
+"name": "ECO-STAR BUILDER C - 20L (LAUNDRY LIQ.)",
+"unit": "EA",
+"orders": 8,
+"total_qty": 21.0,
+"avg_weekly": 1.03,
+"origin": "foreign"
+},
+{
+"code": "14043",
+"name": "GREEN PEAS - FROZEN",
+"unit": "KG",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "14635",
+"name": "PLASTIC PUNCH FILE(CLEAR FILE)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "13853",
+"name": "PENCIL ERASERS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "18835",
+"name": "DART - STEEL TIP 3PCS",
+"unit": "EA",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "13292",
+"name": "APPLE VINEGAR 5% - 1LTR",
+"unit": "BTL",
+"orders": 4,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "13624",
+"name": "COCOA POWDER (REDMAN)",
+"unit": "KG",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "13669",
+"name": "CORRIANDER SEEDS",
+"unit": "KG",
+"orders": 3,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "20245",
+"name": "COCONUT WATER ORIGINAL-330ML CHABAA",
+"unit": "CS",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "local"
+},
+{
+"code": "13753",
+"name": "DEVILD CASHEW(HOT & SPICY)-50GRM",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "14835",
+"name": "SALTED CASHEW 50GRM",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "16137",
+"name": "LIME A WAY - 4L",
+"unit": "EA",
+"orders": 3,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "local"
+},
+{
+"code": "16415",
+"name": "RINSE DRY 3.8L (MC ADDITIVE)",
+"unit": "EA",
+"orders": 4,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "13475",
+"name": "CABLE TIE 100PCS - 08 INCH",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "13819",
+"name": "DRY CHILLIE",
+"unit": "KG",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "19459",
+"name": "PAPER ODDY SNOW WHITE 140GSM-A4 SIZE",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "14924",
+"name": "SOFT DRINK - GINGER BEER 330ML",
+"unit": "CS",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "21245",
+"name": "SOOJI RAVA",
+"unit": "KG",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "15682",
+"name": "BOX FILE 3''",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "14819",
+"name": "SAGO-1KG",
+"unit": "KG",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "16497",
+"name": "SHARP JALAPENOS & CREAM CHEESE POTATO CHIPS-56GRM",
+"unit": "CS",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "26703",
+"name": "RAMEN NOODLES 300GMPKT",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "14890",
+"name": "SESAME SEED WHITE",
+"unit": "KG",
+"orders": 2,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "15944",
+"name": "FLOOR WIPER 24''",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "15254",
+"name": "WHITE BOARD MARKER - BLACK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "15255",
+"name": "WHITE BOARD MARKER - BLUE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "15256",
+"name": "WHITE BOARD MARKER - GREEN",
+"unit": "EA",
+"orders": 1,
+"total_qty": 20.0,
+"avg_weekly": 0.98,
+"origin": "foreign"
+},
+{
+"code": "15058",
+"name": "TEA DILMAH STRING & TEA BAG 1000 X 2grm",
+"unit": "PKT",
+"orders": 3,
+"total_qty": 19.0,
+"avg_weekly": 0.93,
+"origin": "foreign"
+},
+{
+"code": "14308",
+"name": "FILTER - LUBE OIL LF 777",
+"unit": "EA",
+"orders": 3,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "14730",
+"name": "FILTER - RACOR 2020",
+"unit": "EA",
+"orders": 2,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "14579",
+"name": "PARATA PLAIN",
+"unit": "BOX",
+"orders": 2,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "16543",
+"name": "SOLITAIRE 05LB",
+"unit": "EA",
+"orders": 4,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "16541",
+"name": "SOLID SILVER POWER 8LB",
+"unit": "EA",
+"orders": 4,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "14306",
+"name": "FILTER - LUBE OIL LF 3325",
+"unit": "EA",
+"orders": 2,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "15200",
+"name": "W/W - FAT BARREL CHENIN BLANC",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "13953",
+"name": "FROZEN COCONUT PUREE-1KG",
+"unit": "KG",
+"orders": 1,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "local"
+},
+{
+"code": "15069",
+"name": "TEQUILA - SIERRA SILVER",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "15036",
+"name": "SYRUP ELDERFLOWER",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "14808",
+"name": "RUM - BAGHEERA 1000ml",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "15279",
+"name": "WHITE WINES - YALUMBA UNWOODED CHARDONNAY(ORGANIC)",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "14727",
+"name": "R/W GANCIA CHIANTI",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "14753",
+"name": "RED WINES - MUGA RESERVA",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "foreign"
+},
+{
+"code": "14630",
+"name": "PINEAPPLE SLICE - TIN",
+"unit": "TIN",
+"orders": 1,
+"total_qty": 18.0,
+"avg_weekly": 0.88,
+"origin": "local"
+},
+{
+"code": "13854",
+"name": "ESSENCE VANILLA /LTR",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 17.0,
+"avg_weekly": 0.83,
+"origin": "foreign"
+},
+{
+"code": "13625",
+"name": "COCONUT FLAKES 500G",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 17.0,
+"avg_weekly": 0.83,
+"origin": "local"
+},
+{
+"code": "25132",
+"name": "FACIAL TISSUE PAPER SCOTT 2 PLY",
+"unit": "BOX",
+"orders": 4,
+"total_qty": 17.0,
+"avg_weekly": 0.83,
+"origin": "foreign"
+},
+{
+"code": "13250",
+"name": "ALMOND FLAKES - 01KG",
+"unit": "KG",
+"orders": 3,
+"total_qty": 17.0,
+"avg_weekly": 0.83,
+"origin": "foreign"
+},
+{
+"code": "15040",
+"name": "TABLE TENNIS RACKET",
+"unit": "EA",
+"orders": 3,
+"total_qty": 16.0,
+"avg_weekly": 0.78,
+"origin": "foreign"
+},
+{
+"code": "22348",
+"name": "COOKING WINE WHITE 5 LTR PACK",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 16.0,
+"avg_weekly": 0.78,
+"origin": "foreign"
+},
+{
+"code": "13760",
+"name": "DILMAH BRILLIANT BREAKFAST 50 X 2GRM",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 16.0,
+"avg_weekly": 0.78,
+"origin": "foreign"
+},
+{
+"code": "13766",
+"name": "DILMAH PURE CHAMOMILE FLOWERS 30 X 2GRM",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 16.0,
+"avg_weekly": 0.78,
+"origin": "foreign"
+},
+{
+"code": "13771",
+"name": "DILMAH THE ORIGINAL EARL GREY 50 X 2GRM",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 16.0,
+"avg_weekly": 0.78,
+"origin": "foreign"
+},
+{
+"code": "14158",
+"name": "JUICE - GRAPE FRUIT JUICE",
+"unit": "CS",
+"orders": 3,
+"total_qty": 15.0,
+"avg_weekly": 0.73,
+"origin": "foreign"
+},
+{
+"code": "13895",
+"name": "FISH CURRY POWDER (EYE BRAND)",
+"unit": "KG",
+"orders": 2,
+"total_qty": 15.0,
+"avg_weekly": 0.73,
+"origin": "foreign"
+},
+{
+"code": "14572",
+"name": "PAPADAM- 120GRM",
+"unit": "CS",
+"orders": 2,
+"total_qty": 15.0,
+"avg_weekly": 0.73,
+"origin": "foreign"
+},
+{
+"code": "13951",
+"name": "FROSTIES - PKT",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 15.0,
+"avg_weekly": 0.73,
+"origin": "foreign"
+},
+{
+"code": "18916",
+"name": "FROZEN POTATO WEDGES",
+"unit": "KG",
+"orders": 1,
+"total_qty": 15.0,
+"avg_weekly": 0.73,
+"origin": "foreign"
+},
+{
+"code": "13455",
+"name": "BROCCOLI",
+"unit": "KG",
+"orders": 1,
+"total_qty": 15.0,
+"avg_weekly": 0.73,
+"origin": "foreign"
+},
+{
+"code": "15167",
+"name": "VERMOP SPRINTMOP TRONIC 50CM",
+"unit": "PC",
+"orders": 1,
+"total_qty": 15.0,
+"avg_weekly": 0.73,
+"origin": "foreign"
+},
+{
+"code": "13481",
+"name": "CALLEBAUT CHOCOLATE STICK - 1.60KG",
+"unit": "PQ",
+"orders": 2,
+"total_qty": 14.0,
+"avg_weekly": 0.69,
+"origin": "foreign"
+},
+{
+"code": "15899",
+"name": "ECO-STAR OXY-BRITE 50 - 20L (LAUNDRY LIQ.)",
+"unit": "EA",
+"orders": 7,
+"total_qty": 14.0,
+"avg_weekly": 0.69,
+"origin": "foreign"
+},
+{
+"code": "15900",
+"name": "ECO-STAR SOFT - 20L (LAUNDRY LIQ.)",
+"unit": "EA",
+"orders": 6,
+"total_qty": 13.0,
+"avg_weekly": 0.64,
+"origin": "foreign"
+},
+{
+"code": "13785",
+"name": "DOOR LOCK EPO WITH KEY",
+"unit": "EA",
+"orders": 2,
+"total_qty": 13.0,
+"avg_weekly": 0.64,
+"origin": "foreign"
+},
+{
+"code": "17704",
+"name": "COFFEE CLEANING POWDER-01KG",
+"unit": "TIN",
+"orders": 3,
+"total_qty": 13.0,
+"avg_weekly": 0.64,
+"origin": "foreign"
+},
+{
+"code": "14527",
+"name": "OIL FILTER 17424051",
+"unit": "EA",
+"orders": 3,
+"total_qty": 13.0,
+"avg_weekly": 0.64,
+"origin": "foreign"
+},
+{
+"code": "15655",
+"name": "BEERS - DRAUGHT BEER CARLSBERG",
+"unit": "KEG",
+"orders": 3,
+"total_qty": 13.0,
+"avg_weekly": 0.64,
+"origin": "foreign"
+},
+{
+"code": "14072",
+"name": "PAPER CUP HD - 8 OZ",
+"unit": "CTN",
+"orders": 3,
+"total_qty": 13.0,
+"avg_weekly": 0.64,
+"origin": "foreign"
+},
+{
+"code": "14006",
+"name": "GHERKIN IN BRINE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16558",
+"name": "SPRAY PAINT - SILVER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14861",
+"name": "SAUCE TOBASCO RED 60ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14398",
+"name": "MILO POWDER 1.5 KG",
+"unit": "TIN",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14852",
+"name": "SAUCE BBQ",
+"unit": "KG",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14159",
+"name": "JUICE - GUAVA",
+"unit": "CS",
+"orders": 4,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "local"
+},
+{
+"code": "17035",
+"name": "R/W - CANTINA DI SOAVE AMARONE VALPOLICELLA",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "",
+"name": "NESCAFE COFFEE GOLD 200GM",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13632",
+"name": "COFFEE NESCAFE - GOLD BLEND 200G",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16527",
+"name": "SISU AIR FILTER REPLACEMENT SPONGE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "17061",
+"name": "BRAGG ORGANIC APPLE CIDER W.THE MOTHER",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "15331",
+"name": "ZUCCHINI GREEN",
+"unit": "KG",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "15332",
+"name": "ZUCCHINI YELLOW",
+"unit": "KG",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14794",
+"name": "ROSE WINE -EMILIANA ADOBE RESERVA ROSE RAPEL VALLEY",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13955",
+"name": "FROZEN FRUIT PUREE LIME BOIRON 6X1 KG",
+"unit": "KG",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "local"
+},
+{
+"code": "14695",
+"name": "PUREE BLUEBERRY FROZEN",
+"unit": "KG",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "15049",
+"name": "TEA DILMAH CAMOMILE 100 X 1.5grm",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16027",
+"name": "GREASE CUTTER 3.8L",
+"unit": "EA",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13739",
+"name": "DEMI GLACE POWDER (KNOOR)",
+"unit": "KG",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13241",
+"name": "AIR FRESHNER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16701",
+"name": "VODKA - ABSOLUTE VANILLA",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13759",
+"name": "DIJON MUSTARD (MAILE) 865GM",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14809",
+"name": "RUM - CACHACA",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14741",
+"name": "RED WINE - ALLEGRO PRIMITIVO PUGLIA IGT",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14273",
+"name": "LIQUEUR - BAILEYS IRISH CREAM",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16725",
+"name": "WATER FILTER WF 2076",
+"unit": "EA",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13322",
+"name": "BAKING SODA - 100GRM",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13284",
+"name": "APERITIF - MARTINI ROSSO 1000 ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "15183",
+"name": "VODKA - SMIRNOFF RED",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14277",
+"name": "LIQUEUR - CURACAO BLUE 700ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "15266",
+"name": "WHITE WINES - CHATEAU SOUVERAIN CHARDONY",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "20945",
+"name": "ELEMENT 10 MICRON LARGE TYPE-PART # 907944691100",
+"unit": "EA",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14084",
+"name": "HOI SIN SAUCE - 2.20KG",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "20163",
+"name": "SPRAY PAINT - FLAT BLACK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14961",
+"name": "SPRAY PAINT PRIMER RED",
+"unit": "EA",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16391",
+"name": "RED WINES - TENUTA LA CALCININAIE CHIANTI DEI CILLI SENESI",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "15273",
+"name": "WHITE WINES - LE DUO TORRI PINOT GRIGIO FRIULI DOC",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "15275",
+"name": "WHITE WINES - PAS SI PETIT CHABLISIENNE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16735",
+"name": "WHISKY - CANADIAN CLUB 1000ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14810",
+"name": "RUM - CAPTAIN MORGAN DARK",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16743",
+"name": "WHISKY - JACK DANIELS",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13524",
+"name": "CERIAL COCO POPS-375GRM",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14812",
+"name": "RUM BLACK HEAD GOLD",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14236",
+"name": "LAVAZZA DECAFINATO POWDER 250 GRM",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13823",
+"name": "DUCO HIGH GLOSS THINNER",
+"unit": "EA",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16567",
+"name": "ST-PAPER STRAW BAMBOO PRINT-30 X 100NO'S",
+"unit": "CS",
+"orders": 4,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "13476",
+"name": "CABLE TIE WHITE 12\" 300 X 4.8MM",
+"unit": "PK",
+"orders": 2,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "16163",
+"name": "LIQUEURS - LYCHEE 700ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 12.0,
+"avg_weekly": 0.59,
+"origin": "foreign"
+},
+{
+"code": "14160",
+"name": "JUICE - MANGO",
+"unit": "CS",
+"orders": 3,
+"total_qty": 11.0,
+"avg_weekly": 0.54,
+"origin": "foreign"
+},
+{
+"code": "15952",
+"name": "FORWARD - 20L (LAUNDRY LIQ.)",
+"unit": "EA",
+"orders": 5,
+"total_qty": 11.0,
+"avg_weekly": 0.54,
+"origin": "foreign"
+},
+{
+"code": "19355",
+"name": "YAMALUBE O/M GEAR OIL 90790BS81100 750ml",
+"unit": "EA",
+"orders": 2,
+"total_qty": 11.0,
+"avg_weekly": 0.54,
+"origin": "foreign"
+},
+{
+"code": "23267",
+"name": "KASHMIRI CHILLY POWDER",
+"unit": "KG",
+"orders": 2,
+"total_qty": 11.0,
+"avg_weekly": 0.54,
+"origin": "foreign"
+},
+{
+"code": "19534",
+"name": "SOFT DRINK FANTA STRAWBERRY TIN 320 ML",
+"unit": "CS",
+"orders": 2,
+"total_qty": 11.0,
+"avg_weekly": 0.54,
+"origin": "foreign"
+},
+{
+"code": "13695",
+"name": "CUMMIN SEEDS",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14883",
+"name": "SELLEYS EPOXY FIX GLUE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "SAMPLE",
+"name": "CASH REGISTER THERMAL ROLL 80 X 70 X 12",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14901",
+"name": "SHRIMPS 100/200",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "",
+"name": "LONG NOZZLE FOAM TRIGGER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "13880",
+"name": "FENNEL SEED",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14661",
+"name": "POP CORN DRY - 1KG",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "13656",
+"name": "CONDENSED MILK 390GRM",
+"unit": "CS",
+"orders": 3,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "15921",
+"name": "FACE MASK",
+"unit": "BOX",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14595",
+"name": "PEANUT SKINLESS 1KGS",
+"unit": "KG",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14609",
+"name": "PENCIL SHARPNER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "15032",
+"name": "SUSHI RICE GINSHARI BRAND 20KG",
+"unit": "BAG",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "13913",
+"name": "FLOUR RICE FLOUR",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "23280",
+"name": "MELITTA FILTER BAGS SET OF 80 PCS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "23333",
+"name": "VERMOP SPRINT MOP 50CM",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "22347",
+"name": "COOKING WINE RED 5 LTR PACK",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14042",
+"name": "GREEN GRAM 500Grm",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "23093",
+"name": "CABLE TIE WHITE 300 X 3.6MM",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "23089",
+"name": "CABLE TIE WHITE 4\" 100 X 2.5MM",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "13477",
+"name": "CABLE TIE WHITE 18\" 45MM",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14936",
+"name": "SOFT DRINK GINGER ALE TIN 320 ML",
+"unit": "CS",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "23073",
+"name": "BRISTLE BOARD ASSORTED COLORS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "31365",
+"name": "LABOOM B.DUCK FEATHERS LBDC14 3PCS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14777",
+"name": "ROCK SALT-1KG",
+"unit": "KG",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14377",
+"name": "MELITTA CAPPUCHINO TOPPING 1 KG",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "13570",
+"name": "CHIA SEED",
+"unit": "KG",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14087",
+"name": "HONDASHI - SOUP STOCK POWDER",
+"unit": "KG",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "15084",
+"name": "TOA GLIPTON ENAMEL BASE B 8433 - 4L",
+"unit": "EA",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "22385",
+"name": "CHALK PEN",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14581",
+"name": "PARMESAN CHEESE POWDER-1KG",
+"unit": "KG",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "22479",
+"name": "LAUNDRY MARKER - BLACK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "13303",
+"name": "AUTOSOL METAL POLISH",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "27406",
+"name": "PAPER TISSUE Z FOLD 200SHEET",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "14183",
+"name": "KASOORI METHI 100GRM",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "15938",
+"name": "FISHING LINE 70",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "15939",
+"name": "FISHING LINE 90LBS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "17651",
+"name": "PAPER CUP HD - 12 OZ",
+"unit": "CTN",
+"orders": 2,
+"total_qty": 10.0,
+"avg_weekly": 0.49,
+"origin": "foreign"
+},
+{
+"code": "15294",
+"name": "XEROX TONER CARTRIGE B230/ B225/ B235 (006R04404)",
+"unit": "EA",
+"orders": 5,
+"total_qty": 9.0,
+"avg_weekly": 0.44,
+"origin": "foreign"
+},
+{
+"code": "15897",
+"name": "EC DETERGENT 20L (LAUNDRY LIQ.)",
+"unit": "EA",
+"orders": 5,
+"total_qty": 9.0,
+"avg_weekly": 0.44,
+"origin": "foreign"
+},
+{
+"code": "13321",
+"name": "BAKING PAPER SHEET",
+"unit": "EA",
+"orders": 2,
+"total_qty": 9.0,
+"avg_weekly": 0.44,
+"origin": "foreign"
+},
+{
+"code": "13786",
+"name": "DOOR LOCK EPO WITH OUT KEY",
+"unit": "EA",
+"orders": 2,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "14833",
+"name": "SALMON LOIN / SASHIMI GRADE A",
+"unit": "KG",
+"orders": 1,
+"total_qty": 7.9,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "14691",
+"name": "PUMPKIN SEED",
+"unit": "KG",
+"orders": 1,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "",
+"name": "BEEF SAMPLE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "16539",
+"name": "SOLID BRILLIANCE 2.5LB",
+"unit": "EA",
+"orders": 1,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "15816",
+"name": "COGNAC - CALVADOS MAITRE PIERRE",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "14175",
+"name": "JUICE - TOMATO JUICE",
+"unit": "CS",
+"orders": 2,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "local"
+},
+{
+"code": "13234",
+"name": "ACTIVATED CHARCOL POWDER",
+"unit": "TIN",
+"orders": 2,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "14817",
+"name": "S.S.WELDING ROD 2.6MM 5KG",
+"unit": "EA",
+"orders": 1,
+"total_qty": 8.0,
+"avg_weekly": 0.39,
+"origin": "foreign"
+},
+{
+"code": "15640",
+"name": "BEEF STRIPLOIN CHILLED ANGUS AUST GRAIN FED",
+"unit": "KG",
+"orders": 1,
+"total_qty": 7.5,
+"avg_weekly": 0.37,
+"origin": "foreign"
+},
+{
+"code": "15140",
+"name": "TUNA CAN FISH 185GM",
+"unit": "CS",
+"orders": 2,
+"total_qty": 7.0,
+"avg_weekly": 0.34,
+"origin": "foreign"
+},
+{
+"code": "24448",
+"name": "HTH CHLORINE GRANULAR 65% - 25KG",
+"unit": "TUB",
+"orders": 2,
+"total_qty": 7.0,
+"avg_weekly": 0.34,
+"origin": "foreign"
+},
+{
+"code": "17649",
+"name": "PH BOOSTER-20KG",
+"unit": "EA",
+"orders": 2,
+"total_qty": 7.0,
+"avg_weekly": 0.34,
+"origin": "foreign"
+},
+{
+"code": "16083",
+"name": "ICE CREAM CONE WAFFLE CONOARTIC (125X50 MM)",
+"unit": "EA",
+"orders": 2,
+"total_qty": 7.0,
+"avg_weekly": 0.34,
+"origin": "foreign"
+},
+{
+"code": "15104",
+"name": "XEROX TONER PHASER 3020/ 3025 (106R02773)",
+"unit": "EA",
+"orders": 4,
+"total_qty": 7.0,
+"avg_weekly": 0.34,
+"origin": "foreign"
+},
+{
+"code": "14173",
+"name": "JUICE - SUN QUICK JUICE -MIX FRUIT 4LR",
+"unit": "CS",
+"orders": 2,
+"total_qty": 7.0,
+"avg_weekly": 0.34,
+"origin": "foreign"
+},
+{
+"code": "14288",
+"name": "LIQUID GLUCOSE - 6KG",
+"unit": "BKT",
+"orders": 2,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "14858",
+"name": "SAUCE PLUM 700ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15674",
+"name": "BLUEBERRY PUREE 1LIT",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "14736",
+"name": "RASPBERRY PUREE 1LTR",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "20031",
+"name": "SHELL RIMULA R4 X 15W40",
+"unit": "EA",
+"orders": 2,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "14998",
+"name": "STRAP ROLLS VG 13 250M",
+"unit": "EA",
+"orders": 2,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "13975",
+"name": "FILTER - FUEL SEPARATOR FS1006",
+"unit": "EA",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15232",
+"name": "FILTER - WATER WF 2075",
+"unit": "EA",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15265",
+"name": "WHITE WINES - CATENA ZAPATA APPELLATION CHARDONNA",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15973",
+"name": "FROZEN YUZU PUREE-1 KG",
+"unit": "KG",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "14270",
+"name": "LINSEED (FLAX SEED)",
+"unit": "PKT",
+"orders": 2,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "16571",
+"name": "STAMP PAD INK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "13964",
+"name": "FROZEN PUREE BLOOD ORANGE",
+"unit": "KG",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "local"
+},
+{
+"code": "13280",
+"name": "APERITIF - DISARANO",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "16750",
+"name": "WHISKY - MACALLAN 12Y FINE OAK",
+"unit": "BTL",
+"orders": 3,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15737",
+"name": "CEREAL SPECIAL K",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15272",
+"name": "WHITE WINES - LA SCOLCA GAVI WHITE LABLE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15052",
+"name": "TEA DILMAH GINGER & HONEY 100 X 2grm",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15065",
+"name": "TEQUILA - JOSE CUREVO ESPECIAL GOLD 1L",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15066",
+"name": "TEQUILA - JOSE CUREVO ESPECIAL SILVER",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "17048",
+"name": "LIQUEURS - CREME DE CASSIS -750ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "16162",
+"name": "LIQUEURS - LIMONCIELLO VIL",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "19247",
+"name": "4 STROKE YAMALUBE OIL 4LTR 90790BS45600",
+"unit": "EA",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "24404",
+"name": "ELEMENT ASSY OIL CLEANER 69J134400300 69J134400400",
+"unit": "EA",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "16374",
+"name": "RED WINES - FATTORIA DEI BARBEI BRUNELLO DI MONTALCINO",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "16380",
+"name": "RED WINES - MAESTROBARDINO TAURASI RADICI",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "15278",
+"name": "WHITE WINES - SPRINGFIELD LFS SAUVIGNON BLANC",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "16160",
+"name": "LIQUEURS - KAHLUA",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "13535",
+"name": "CHA & SPRK WINES - MOET & CHANDON BRUT",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "16260",
+"name": "OASIS ISLAND WAVE ROOM REFRESHERS (ODOR CONTROL)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "14739",
+"name": "RED VINEGER 1L",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "13831",
+"name": "DUST PAN WITH HOOK-32.3CM x 13.9CM x 95.8CM",
+"unit": "EA",
+"orders": 1,
+"total_qty": 6.0,
+"avg_weekly": 0.29,
+"origin": "foreign"
+},
+{
+"code": "14952",
+"name": "SPECIALTY GRADE COFFEE RETAIL 100 GRM",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13856",
+"name": "ESSENTIAL OIL - LEMONGRASS 1L",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13881",
+"name": "FENUGREEK SEEDS",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "14889",
+"name": "SESAME SEED BLACK",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "16120",
+"name": "LAUNDRY IRON CONTROL SOUR 20L (LAUNDRY LIQ.)",
+"unit": "CAN",
+"orders": 2,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "24953",
+"name": "GP SOLAR 06183 1-4KG",
+"unit": "BKT",
+"orders": 2,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "22084",
+"name": "JUICE LYCHEE 1LIT",
+"unit": "CS",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13997",
+"name": "GELATINE LEAVES",
+"unit": "KG",
+"orders": 2,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "15015",
+"name": "SUNFLOWER SEED 1KG",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "31369",
+"name": "SCISSORS LEFT HAND 5.5\"",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "31368",
+"name": "UNO CARD - PAPER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "14602",
+"name": "PECAN NUTS",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "14824",
+"name": "SAKE - KIKU MASAMUNE JOSEN HONJOZO",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "14207",
+"name": "KOPIKO CAPPUCCINO COFFEE CANDY 800GRM",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13499",
+"name": "CARDAMOM - GREEN",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "14438",
+"name": "MUSTARD SEEDS",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "14041",
+"name": "GREEN CURRY PASTE (MAEPLOY)",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13543",
+"name": "SHISHA - CHARCOAL",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13378",
+"name": "BETEK BETAKRIL RG 3 GREY - 15L CL-000465 ( STAFF ROOM)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13385",
+"name": "BETEK SYNTHETIC MATT INTERRIOR B-1 2.5 L 28S1 (FURNITURE)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13818",
+"name": "DRY APRICOT",
+"unit": "KG",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "15602",
+"name": "BAMBOO LOOPED SKEWERS 15 CM",
+"unit": "CTN",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "15604",
+"name": "BAMBOO SKEWERS 6\"",
+"unit": "CTN",
+"orders": 1,
+"total_qty": 5.0,
+"avg_weekly": 0.24,
+"origin": "foreign"
+},
+{
+"code": "13278",
+"name": "APERITIF - ANGOSTURA BITTER",
+"unit": "BTL",
+"orders": 2,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "14170",
+"name": "JUICE - SUN QUICK JUICE - MANGO 4LT",
+"unit": "CS",
+"orders": 3,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "30701",
+"name": "EMPTY GAS CYLINDER 45KG (DEPOSIT)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "13518",
+"name": "CEREAL RICE KRISPIES-375GRM",
+"unit": "CS",
+"orders": 3,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "31367",
+"name": "MAM CLAY VARNISH GLOSS 120ML",
+"unit": "EA",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "17592",
+"name": "LIQUID CHLORINE-20KG",
+"unit": "EA",
+"orders": 2,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "13947",
+"name": "FREON GAS (R - 410 A)",
+"unit": "EA",
+"orders": 2,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "13641",
+"name": "COGNAC - REMY MARTIN VSOP",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "14149",
+"name": "JAM STRAWBERRY TIN",
+"unit": "TIN",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "17051",
+"name": "COCKBURNS PORT- 750ml",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "16159",
+"name": "LIQUEURS - GRAND MANIAR 1000ml",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "13976",
+"name": "FUEL FILTER 17414022",
+"unit": "EA",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "14531",
+"name": "OLIVE OIL EXTRA VERGIN - 5LTS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "16344",
+"name": "QUEST 05L (MC DETERGENT)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "15139",
+"name": "TUNA BONITO FLAKES (HANAKATSUO UMEO)",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "15100",
+"name": "TOM YAM PASTE MAEPLOY",
+"unit": "TIN",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "14985",
+"name": "ST-KRAFT LIDS FOR SOUP CUPS-1X500 NO'S",
+"unit": "CS",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "14987",
+"name": "ST-KRAFT SOUP CUPS-1 X 500 NO'S",
+"unit": "CS",
+"orders": 1,
+"total_qty": 4.0,
+"avg_weekly": 0.2,
+"origin": "foreign"
+},
+{
+"code": "13346",
+"name": "BAY LEAVES DRY - 500GRM",
+"unit": "KG",
+"orders": 2,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "13596",
+"name": "CINNAMON POWDER",
+"unit": "KG",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "22203",
+"name": "COLOR PENCILS-12COLOURS/BOX",
+"unit": "BOX",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14169",
+"name": "JUICE - SUN QUICK JUICE - APPLE 4 LR",
+"unit": "CS",
+"orders": 3,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14171",
+"name": "JUICE - SUN QUICK JUICE - ORANGE 4LR",
+"unit": "CS",
+"orders": 3,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "local"
+},
+{
+"code": "13619",
+"name": "CLOVES",
+"unit": "KG",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "18141",
+"name": "COURVOISIER VS",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14823",
+"name": "SAKE - CHUM CHURUM SOJU",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "13637",
+"name": "COGNAC - COURVOISIER VSOP",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "24400",
+"name": "OIL FILTER 877761Q01",
+"unit": "EA",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "22400",
+"name": "CARROM BOARD POWDER",
+"unit": "EA",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "13623",
+"name": "COCOA BUTTER - 3KG",
+"unit": "BKT",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "15231",
+"name": "WATER - ACQUA PANNA - 750 ML",
+"unit": "CS",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "13534",
+"name": "CHA & SPRK WINES - FRANCIACORTA BELLAVISTA",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14284",
+"name": "LIQUEUR - QUINTESSENTIA AMARO NONINO",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14825",
+"name": "SAKE - KIKU MASAMUNE JUNMAI DAI GINJO",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14869",
+"name": "SCISSORS - MEADIUM",
+"unit": "EA",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14738",
+"name": "RED OXIDE PAINT",
+"unit": "TIN",
+"orders": 1,
+"total_qty": 3.0,
+"avg_weekly": 0.15,
+"origin": "foreign"
+},
+{
+"code": "14155",
+"name": "JUICE - CRANBERRY JUICE 1L",
+"unit": "CS",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "14162",
+"name": "JUICE - PASSION FRUIT",
+"unit": "CS",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "13928",
+"name": "FOOD COLOURING RED-500ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "15170",
+"name": "VERSALINK C8000 TONER CARTRIDGES CYAN",
+"unit": "EA",
+"orders": 2,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "15006",
+"name": "SUGAR CUBE WHITE (LA PERRUCHE) 750 GM",
+"unit": "PQ",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "30159",
+"name": "VEGAN YOGHURT COCOBELL COCONUT 500GM",
+"unit": "TUB",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "local"
+},
+{
+"code": "15889",
+"name": "DRY MANGO",
+"unit": "KG",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "31275",
+"name": "XEROX TONER VERSALINK C410/C415 - BLACK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "31273",
+"name": "XEROX TONER VERSALINK C410/C415 - CYAN",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "31274",
+"name": "XEROX TONER VERSALINK C410/C415 - MAGENTAM",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "31276",
+"name": "XEROX TONER VERSALINK C410/C415 - YELLOW",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "14993",
+"name": "STAR ANIES",
+"unit": "KG",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "16453",
+"name": "SAKE - SA KEN ICE METODO CLASSICO",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "16005",
+"name": "GIN HENDRICKS 1000ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "13462",
+"name": "BUBBLE BATH 5LTR",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "14174",
+"name": "JUICE - SUN QUICK JUICE -PINK GUAVA",
+"unit": "CS",
+"orders": 2,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "local"
+},
+{
+"code": "16000",
+"name": "GIN - GIN MARE",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "17023",
+"name": "S/W SAUTERNES 375ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "13812",
+"name": "DRIED DASHI KOMBU - 1KG",
+"unit": "KG",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "20204",
+"name": "TEA JAPAN SENCHA GREEN TEA 1 KG",
+"unit": "PKT",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "15169",
+"name": "VERSALINK C8000 TONER CARTRIDGES BLACK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "13349",
+"name": "BEANSPROUTS - 425GRM",
+"unit": "KG",
+"orders": 1,
+"total_qty": 2.1,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "14641",
+"name": "POLENTA - 1KG",
+"unit": "KG",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "15295",
+"name": "XEROX TONER CARTRIGE B305/ B310/ B315 (006R04381)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 2.0,
+"avg_weekly": 0.1,
+"origin": "foreign"
+},
+{
+"code": "16142",
+"name": "LIQUEURS - BENEDICTINE 01 Liter",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "16151",
+"name": "LIQUEURS - CREME DE BANANA",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "local"
+},
+{
+"code": "21150",
+"name": "FLEETGUARD PREMIXED RADIATOR COOLANT",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "17650",
+"name": "DIP IT - 20KG",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "23259",
+"name": "FENDER POLYFORM BLACK F6",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "17104",
+"name": "BRISTLE DART BOARD",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "",
+"name": "GARBAGE BAG",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "31364",
+"name": "ACRYLIC PAINT PENS FINE TIP 12PCS",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "31366",
+"name": "BABY WIPES",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "16737",
+"name": "WHISKY - CHIVAS REGAL 18Y 750ML",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "16157",
+"name": "LIQUEURS - FRANGLICO",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "16443",
+"name": "RUM RON ZACAPA CENTENARIO",
+"unit": "BTL",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "24936",
+"name": "LID PAPER CUP HD 8 OZ",
+"unit": "CTN",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "",
+"name": "RICE - BASMATHI",
+"unit": "BAG",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "28847",
+"name": "PROTEIN 2O INFUSED WATER",
+"unit": "CS",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "15171",
+"name": "VERSALINK C8000 TONER CARTRIDGES MAGENTA",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "15103",
+"name": "XEROX TONER CARTRIDGE 3330/ 3335/3345 (106R03623)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "16332",
+"name": "PRINTER CARTRIDGE HP 128A BLACK",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "18559",
+"name": "PRINTER CARTRIDGE HP 128A CYAN",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "16333",
+"name": "PRINTER CARTRIDGE HP 128A MAGENTA",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "16334",
+"name": "PRINTER CARTRIDGE HP 128A YELLOW",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "15168",
+"name": "VERSALINK C8000 / C9000 WASTE CARTRIDGE",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "30388",
+"name": "MOTOR ASSY 69J438802000",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "14235",
+"name": "LAUNDRI DRY BLEACH 25KG (LAUNDRY POWDER)",
+"unit": "EA",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+},
+{
+"code": "14764",
+"name": "RICE VINEGAR 3% HENGSHUN 500ML",
+"unit": "CS",
+"orders": 1,
+"total_qty": 1.0,
+"avg_weekly": 0.05,
+"origin": "foreign"
+}
+]
+}

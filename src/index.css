@@ -68,33 +68,93 @@ tr.row-none     > td:first-child { box-shadow: inset 3px 0 0 0 #475569; }
 
 /* ── Light mode overrides ───────────────────────────────── */
 html.light-mode {
-  --lm-bg:      #f1f5f9;
+  --lm-bg:      #eef2f7;
   --lm-card:    #ffffff;
-  --lm-border:  #e2e8f0;
-  --lm-text:    #0f172a;
-  --lm-sub:     #475569;
-  --lm-input:   #f8fafc;
+  --lm-border:  #d7dee8;
+  --lm-text:    #0f172a;   /* near-black headings / body */
+  --lm-sub:     #475569;   /* secondary text */
+  --lm-muted:   #64748b;   /* tertiary text */
+  --lm-input:   #ffffff;
   --lm-sidebar: #1e293b;
 }
 
 html.light-mode body               { background: var(--lm-bg) !important; color: var(--lm-text) !important; }
-html.light-mode .bg-slate-900      { background: var(--lm-bg) !important; }
-html.light-mode .bg-slate-800      { background: var(--lm-card) !important; }
-html.light-mode .bg-slate-700      { background: #e2e8f0 !important; }
-html.light-mode .border-slate-700  { border-color: var(--lm-border) !important; }
-html.light-mode .border-slate-600  { border-color: #cbd5e1 !important; }
-html.light-mode .text-slate-100    { color: var(--lm-text) !important; }
+
+/* ── Surfaces (handle solid + opacity variants Tailwind emits) ────────────── */
+html.light-mode .bg-slate-900,
+html.light-mode [class*="bg-slate-900"] { background-color: var(--lm-bg) !important; }
+html.light-mode .bg-slate-800,
+html.light-mode [class*="bg-slate-800"] { background-color: var(--lm-card) !important; }
+html.light-mode .bg-slate-700,
+html.light-mode [class*="bg-slate-700"] { background-color: #eef2f7 !important; }
+
+/* ── Borders ──────────────────────────────────────────────────────────────── */
+html.light-mode .border-slate-700,
+html.light-mode [class*="border-slate-700"] { border-color: var(--lm-border) !important; }
+html.light-mode .border-slate-600,
+html.light-mode [class*="border-slate-600"] { border-color: #c3ccd9 !important; }
+
+/* ── Text — every slate shade maps to a readable dark tone ─────────────────── */
+html.light-mode .text-slate-100,
+html.light-mode .text-white        { color: var(--lm-text) !important; }
 html.light-mode .text-slate-200    { color: #1e293b !important; }
 html.light-mode .text-slate-300    { color: #334155 !important; }
 html.light-mode .text-slate-400    { color: var(--lm-sub) !important; }
-html.light-mode .text-slate-500    { color: #64748b !important; }
-html.light-mode .input             { background: var(--lm-input) !important; border-color: #cbd5e1 !important; color: var(--lm-text) !important; }
+html.light-mode .text-slate-500    { color: var(--lm-muted) !important; }
+html.light-mode .text-slate-600    { color: #475569 !important; }
+html.light-mode .placeholder-slate-400::placeholder { color: #94a3b8 !important; }
+
+/* ── Inputs / selects / textareas ──────────────────────────────────────────── */
+html.light-mode .input,
+html.light-mode input,
+html.light-mode select,
+html.light-mode textarea           { background: var(--lm-input) !important; border-color: #c3ccd9 !important; color: var(--lm-text) !important; }
+html.light-mode input::placeholder,
+html.light-mode textarea::placeholder { color: #94a3b8 !important; }
+/* native date / number controls stay legible */
+html.light-mode input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.4); }
+
+/* ── Cards ──────────────────────────────────────────────────────────────────── */
 html.light-mode .card,
-html.light-mode .card-sm           { background: var(--lm-card) !important; border-color: var(--lm-border) !important; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-/* Keep sidebar dark in light mode */
-html.light-mode aside              { background: #1e293b !important; border-color: #334155 !important; }
-html.light-mode aside *            { } /* sidebar text stays as-is */
+html.light-mode .card-sm           { background: var(--lm-card) !important; border-color: var(--lm-border) !important; box-shadow: 0 1px 3px rgba(15,23,42,0.06); }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+html.light-mode .btn-secondary     { background: #eef2f7 !important; border-color: #c3ccd9 !important; color: #1e293b !important; }
+html.light-mode .btn-secondary:hover{ background: #e2e8f0 !important; }
+html.light-mode .btn-ghost         { color: #475569 !important; }
+html.light-mode .btn-ghost:hover   { background: #e2e8f0 !important; color: #0f172a !important; }
+html.light-mode kbd                { background: #e2e8f0 !important; color: #334155 !important; }
+
+/* ── Hover rows / interactive slate tints become subtle grey, not dark ─────── */
+html.light-mode .hover\:bg-slate-700:hover,
+html.light-mode .hover\:bg-slate-700\/60:hover,
+html.light-mode .hover\:bg-slate-700\/30:hover,
+html.light-mode .hover\:bg-slate-700\/50:hover { background-color: #e2e8f0 !important; }
+html.light-mode tr:hover > td      { background-color: #f1f5f9 !important; }
+
+/* ── Table header band stays readable ──────────────────────────────────────── */
+html.light-mode thead th           { color: #334155 !important; }
+
+/* ── Toast keeps its dark style (set inline) — leave as-is ─────────────────── */
+
+/* ── Keep sidebar + its text dark-on-dark (unchanged in light mode) ────────── */
+html.light-mode aside              { background: var(--lm-sidebar) !important; border-color: #334155 !important; }
+html.light-mode aside .text-slate-100,
+html.light-mode aside .text-slate-200,
+html.light-mode aside .text-slate-300 { color: #e2e8f0 !important; }
+html.light-mode aside .text-slate-400 { color: #94a3b8 !important; }
+html.light-mode aside .text-slate-500 { color: #64748b !important; }
+html.light-mode aside .bg-slate-800,
+html.light-mode aside [class*="bg-slate-8"] { background-color: var(--lm-sidebar) !important; }
+html.light-mode aside .border-slate-700 { border-color: #334155 !important; }
+html.light-mode aside .hover\:bg-slate-700\/60:hover { background-color: #334155 !important; }
+
 html.light-mode header             { background: var(--lm-card) !important; border-color: var(--lm-border) !important; }
+html.light-mode header .bg-slate-700\/60 { background-color: #eef2f7 !important; }
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+html.light-mode ::-webkit-scrollbar-track { background: #e2e8f0; }
+html.light-mode ::-webkit-scrollbar-thumb { background: #b9c2d0; }
 
 /* ── Animations ─────────────────────────────────────────── */
 @keyframes pulse-slow {

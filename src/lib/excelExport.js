@@ -233,3 +233,160 @@ export async function exportOrderExcel(grouped, meta = {}) {
   const buf = await wb.xlsx.writeBuffer()
   downloadBuffer(buf, meta.filename || `Order_${new Date().toISOString().split('T')[0]}.xlsx`)
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 3) ITEM MOVEMENT REPORT  (fast / moderate / slow / dead movers)
+//   rows: [{ part_number, name, store, unit, stock, issued, txns, perWeek,
+//            cover, daysSince, movement }]
+//   meta: { periodLabel, rangeLabel, resortName, counts:{fast,moderate,slow,dead}, filename }
+// ═════════════════════════════════════════════════════════════════════════════
+const MOVE_COLORS = {
+  fast:     { bg: 'FFDCFCE7', txt: 'FF15803D', label: 'Fast' },
+  moderate: { bg: 'FFE0F2FE', txt: 'FF0369A1', label: 'Moderate' },
+  slow:     { bg: 'FFFFEDD5', txt: 'FFC2410C', label: 'Slow' },
+  dead:     { bg: 'FFFFE4E6', txt: 'FFB91C1C', label: 'Non-Moving' },
+}
+
+export async function exportMovementExcel(rows, meta = {}) {
+  const { default: ExcelJS } = await import('exceljs')
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Outrigger Maafushivaru Inventory'
+  wb.created = new Date()
+
+  const counts = meta.counts || rows.reduce((a, r) => { a[r.movement] = (a[r.movement] || 0) + 1; return a }, {})
+
+  // ── Summary sheet ──────────────────────────────────────────────────────────
+  const sum = wb.addWorksheet('Summary', { pageSetup: { orientation: 'portrait' } })
+  sum.columns = [{ width: 26 }, { width: 16 }, { width: 40 }]
+  addTitleBand(sum, 'Stock Movement Report',
+    `${meta.resortName || 'Outrigger Maafushivaru Resort'}  ·  ${meta.periodLabel || ''}  ·  ${meta.rangeLabel || ''}`, 3)
+  styleHeaderRow(sum, 4, ['Category', 'Items', 'Meaning'])
+  const summaryRows = [
+    ['Fast moving',     counts.fast     || 0, 'Highest issuance velocity'],
+    ['Moderate moving', counts.moderate || 0, 'Steady movers'],
+    ['Slow moving',     counts.slow     || 0, 'Lowest active velocity'],
+    ['Non-moving (dead)', counts.dead   || 0, 'No issuance in the selected period'],
+  ]
+  summaryRows.forEach((vals, idx) => {
+    const key = ['fast', 'moderate', 'slow', 'dead'][idx]
+    const col = MOVE_COLORS[key]
+    const row = sum.getRow(idx + 5)
+    vals.forEach((v, i) => {
+      const c = row.getCell(i + 1)
+      c.value = v; c.border = border()
+      c.font = { name: 'Calibri', size: 11, bold: i === 0, color: { argb: i === 0 ? col.txt : 'FF1E293B' } }
+      c.alignment = { vertical: 'middle', horizontal: i === 1 ? 'center' : 'left', indent: i === 1 ? 0 : 1 }
+      if (i === 0) c.fill = fill(col.bg)
+    })
+    row.height = 22
+  })
+
+  // ── Detail sheet ───────────────────────────────────────────────────────────
+  const ws = wb.addWorksheet('Detail', {
+    views: [{ state: 'frozen', ySplit: 4 }],
+    pageSetup: { fitToPage: true, fitToWidth: 1, orientation: 'landscape' },
+  })
+  const headers = ['#', 'Part #', 'Item Name', 'Store', 'Unit', 'In Stock', 'Issued', 'Txns', 'Avg/Week', 'Weeks Cover', 'Last Issued', 'Movement']
+  ws.columns = [
+    { width: 5 }, { width: 13 }, { width: 34 }, { width: 18 }, { width: 8 },
+    { width: 10 }, { width: 10 }, { width: 8 }, { width: 11 }, { width: 12 }, { width: 13 }, { width: 14 },
+  ]
+  addTitleBand(ws, 'Stock Movement — Detailed',
+    `${meta.periodLabel || ''}  ·  ${rows.length} item(s)`, headers.length)
+  styleHeaderRow(ws, 4, headers)
+
+  rows.forEach((r, idx) => {
+    const rowIdx = idx + 5
+    const col = MOVE_COLORS[r.movement] || MOVE_COLORS.moderate
+    const cover = r.cover === Infinity ? '∞' : r.cover >= 999 ? '999+' : (r.cover != null ? Math.round(r.cover) : '—')
+    const last = r.daysSince == null ? '—' : `${r.daysSince}d ago`
+    const vals = [idx + 1, r.part_number || '—', r.name || '', r.store || '—', r.unit || '',
+      Number(r.stock) || 0, r.issued ?? 0, r.txns ?? 0, r.perWeek ?? 0, cover, last, col.label]
+    const row = ws.getRow(rowIdx)
+    vals.forEach((v, i) => {
+      const c = row.getCell(i + 1)
+      c.value = v; c.border = border()
+      c.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } }
+      c.alignment = { vertical: 'middle', horizontal: [0, 4, 5, 6, 7, 8, 9, 10].includes(i) ? 'center' : 'left', indent: [0, 4, 5, 6, 7, 8, 9, 10].includes(i) ? 0 : 1 }
+      if (idx % 2 === 1) c.fill = fill(GREY_ROW)
+    })
+    const mc = row.getCell(headers.length)
+    mc.fill = fill(col.bg)
+    mc.font = { name: 'Calibri', size: 10, bold: true, color: { argb: col.txt } }
+    row.height = 19
+  })
+
+  const buf = await wb.xlsx.writeBuffer()
+  downloadBuffer(buf, meta.filename || `Movement_Report_${new Date().toISOString().split('T')[0]}.xlsx`)
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 4) STOCKTAKE VARIANCE REPORT  (uploaded physical count vs system stock)
+//   rows: [{ part_number, item_name, unit, system_qty, counted_qty, variance,
+//            variance_pct, variance_value, matched }]
+//   meta: { sessionLabel, date, resortName, filename }
+// ═════════════════════════════════════════════════════════════════════════════
+function varianceColor(v) {
+  if (v === 0)  return { bg: 'FFDCFCE7', txt: 'FF15803D' }   // match – green
+  if (v > 0)    return { bg: 'FFE0F2FE', txt: 'FF0369A1' }   // surplus – blue
+  return { bg: 'FFFFE4E6', txt: 'FFB91C1C' }                 // shortage – red
+}
+
+export async function exportStocktakeVarianceExcel(rows, meta = {}) {
+  const { default: ExcelJS } = await import('exceljs')
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Outrigger Maafushivaru Inventory'
+  wb.created = new Date()
+  const ws = wb.addWorksheet('Stocktake Variance', {
+    views: [{ state: 'frozen', ySplit: 4 }],
+    pageSetup: { fitToPage: true, fitToWidth: 1, orientation: 'landscape' },
+  })
+
+  const headers = ['#', 'Part #', 'Item Name', 'Unit', 'System Qty', 'Counted Qty', 'Variance', 'Variance %', 'Value Impact', 'Result']
+  ws.columns = [
+    { width: 5 }, { width: 13 }, { width: 36 }, { width: 8 }, { width: 12 },
+    { width: 12 }, { width: 11 }, { width: 11 }, { width: 13 }, { width: 14 },
+  ]
+
+  const matched = rows.filter(r => r.variance === 0).length
+  const short   = rows.filter(r => r.variance < 0).length
+  const over    = rows.filter(r => r.variance > 0).length
+  addTitleBand(ws, 'Stocktake Variance Report',
+    `${meta.resortName || 'Outrigger Maafushivaru Resort'}  ·  ${meta.sessionLabel || ''}  ·  ${meta.date || new Date().toLocaleDateString()}  ·  ${rows.length} item(s) · ${matched} match / ${short} short / ${over} over`, headers.length)
+  styleHeaderRow(ws, 4, headers)
+
+  rows.forEach((r, idx) => {
+    const rowIdx = idx + 5
+    const v = Number(r.variance) || 0
+    const col = varianceColor(v)
+    const result = v === 0 ? 'Match' : v > 0 ? `Surplus +${v}` : `Shortage ${v}`
+    const vals = [idx + 1, r.part_number || '—', r.item_name || '', r.unit || '',
+      Number(r.system_qty) || 0, Number(r.counted_qty) || 0,
+      v, (r.variance_pct == null ? '—' : `${r.variance_pct}%`),
+      (r.variance_value == null ? '—' : Number(r.variance_value)), result]
+    const row = ws.getRow(rowIdx)
+    vals.forEach((val, i) => {
+      const c = row.getCell(i + 1)
+      c.value = val; c.border = border()
+      c.font = { name: 'Calibri', size: 10, color: { argb: 'FF1E293B' } }
+      c.alignment = { vertical: 'middle', horizontal: [0, 3, 4, 5, 6, 7, 8].includes(i) ? 'center' : 'left', indent: [0, 3, 4, 5, 6, 7, 8].includes(i) ? 0 : 1 }
+      if (idx % 2 === 1) c.fill = fill(GREY_ROW)
+    })
+    ;[7, 10].forEach(ci => {
+      const c = row.getCell(ci)
+      c.fill = fill(col.bg)
+      c.font = { name: 'Calibri', size: 10, bold: true, color: { argb: col.txt } }
+    })
+    row.height = 19
+  })
+
+  // Footer note
+  const noteRow = rows.length + 6
+  ws.mergeCells(noteRow, 1, noteRow, headers.length)
+  const note = ws.getCell(noteRow, 1)
+  note.value = 'Variance = Counted − System. Negative = shortage (red), positive = surplus (blue). Generated by the Inventory Management System.'
+  note.font = { name: 'Calibri', size: 9, italic: true, color: { argb: 'FF94A3B8' } }
+
+  const buf = await wb.xlsx.writeBuffer()
+  downloadBuffer(buf, meta.filename || `Stocktake_Variance_${new Date().toISOString().split('T')[0]}.xlsx`)
+}

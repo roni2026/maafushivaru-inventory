@@ -14,11 +14,16 @@ import ExcelJS from 'exceljs'
 export const DEPARTMENTS = [
   'STORE', 'MAIN KITCHEN', 'STAFF KITCHEN', 'STAFF SHOP', 'HOST SHOP',
   'ENGINEERING', 'CLINIC', 'IT', 'HOUSEKEEPING', 'TRANSPORT', 'SPA',
+  // ALLOWANCE = items personally taken (e.g. by management / "sir"), not issued
+  // to a normal department. Tracked as its own destination location.
+  'ALLOWANCE',
 ]
 const DEPT_ALIASES = {
   'MAIN KIT': 'MAIN KITCHEN', 'STAFF KIT': 'STAFF KITCHEN', 'STAFFKIT': 'STAFF KITCHEN',
   'ENG': 'ENGINEERING', 'HOUSE KEEPING': 'HOUSEKEEPING', 'HK': 'HOUSEKEEPING',
   'MAIN STORE': 'STORE', 'NAVASANA SPA': 'SPA',
+  // Allowance spelling variants seen on notes
+  'ALLOWENCE': 'ALLOWANCE', 'ALLOWANCES': 'ALLOWANCE', 'ALLOWANCE (SIR)': 'ALLOWANCE',
 }
 export function normDept(s) {
   const t = String(s || '').trim().toUpperCase()

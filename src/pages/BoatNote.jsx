@@ -10,7 +10,7 @@ import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Input, { Select } from '../components/ui/Input'
-import { parseBoatNoteFile, classifyOrigin, isSampleRow } from '../lib/boatnote'
+import { parseBoatNoteFile, classifyOrigin, isSampleRow, DEPARTMENTS } from '../lib/boatnote'
 import { useSort } from '../hooks/useSort'
 
 const today = () => new Date().toISOString().split('T')[0]
@@ -129,6 +129,15 @@ function VerifyFlow({ onPosted }) {
   // Sortable result trees (edit + confirm).
   const { sorted: sortedRows,     thProps: editTh }    = useSort(rows, null, 'asc')
   const { sorted: sortedSelected, thProps: confirmTh } = useSort(selectedRows, null, 'asc')
+
+  // Float the currently-selected rows (ticked department + ticked to receive) to
+  // the TOP of the edit list so the user can instantly see what's selected. This
+  // recomputes live as departments / rows are toggled. Array sort is stable, so
+  // the active column-sort order is preserved within each group.
+  const displayRows = useMemo(() => {
+    const isSel = (r) => !!pickedDepts[r.department] && r.receive !== false
+    return [...sortedRows].sort((a, b) => (isSel(b) ? 1 : 0) - (isSel(a) ? 1 : 0))
+  }, [sortedRows, pickedDepts])
 
   const goConfirm = () => {
     if (!selectedRows.length) { toast.error('Tick at least one department with items'); return }
@@ -312,7 +321,7 @@ function VerifyFlow({ onPosted }) {
                 <Th></Th>
               </tr></Thead>
               <Tbody>
-                {sortedRows.map(r => {
+                {displayRows.map(r => {
                   const inDept   = !!pickedDepts[r.department]
                   const selected = inDept && r.receive !== false
                   return (
@@ -341,7 +350,7 @@ function VerifyFlow({ onPosted }) {
                     <Td><input type="number" className="input text-xs py-1 w-20" value={r.ordered_qty} onChange={e => editRow(r.id, 'ordered_qty', e.target.value)} /></Td>
                     <Td>
                       <select className="input text-xs py-1 w-32" value={r.department} onChange={e => editRow(r.id, 'department', e.target.value)}>
-                        {[...new Set([...allDepts, r.department])].map(d => <option key={d} value={d}>{d}</option>)}
+                        {[...new Set([...allDepts, ...DEPARTMENTS, r.department])].filter(Boolean).map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
                     </Td>
                     <Td>{r.matched ? <Badge variant="green">matched</Badge> : <Badge variant="gray">new</Badge>}</Td>

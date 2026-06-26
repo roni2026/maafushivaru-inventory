@@ -76,12 +76,27 @@ const HEADER_LINE_RE = new RegExp(
   '\\bRequestor\\b|\\bDepartment\\s*[:\\-]|\\bTitle\\s*[:\\-]|\\bSubject\\s*[:\\-]|' +
   'Product\\s*Desc|\\bUOM\\b\\s*Price|\\bExtension\\b)', 'i')
 
+// ── Report banner / title / location lines that OCR picks up but are NOT items.
+// Real Birchstreet printouts repeat a document title such as
+//   "2026 06 June MAM BALANCE SHEET 21 INV LIQUOR - EDGEWATER"
+// or location/outlet banners ("MAM EDGEWATER", "MAM STORE MAIN", "PLANTATION
+// BAR", an inventory/balance-sheet caption, a bare month + year, a page number,
+// etc). None of these are stock lines, so we reject any line that matches.
+const REPORT_BANNER_RE = new RegExp(
+  '(BALANCE\\s*SHEET|\\bINVENTORY\\b|\\bINV\\b\\s+(LIQUOR|WINE|BEER|FOOD|BEVERAGE|GENERAL)|' +
+  '\\bEDGEWATER\\b|\\bPLANTATION\\b|\\bSANDBANK\\b|\\bNAVASANA\\b|\\bBLU\\b|\\bMAM\\b\\s+(STORE|MAIN|EDGEWATER|BAR|RESTAURANT)|' +
+  '\\bSTOCK\\s*TAKE\\b|\\bPHYSICAL\\s*COUNT\\b|\\bSTORE\\s*ROOM\\b|\\bPAGE\\b\\s*\\d|\\bPRINTED\\s*(ON|BY)\\b|' +
+  '^\\s*\\d{0,4}\\s*\\d{1,2}\\s+(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\\b|' +
+  '\\b(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)[A-Z]*\\s+20\\d{2}\\b)', 'i')
+
 function parseItemLine(line) {
   const trimmed = line.replace(/\s+/g, ' ').trim()
   if (trimmed.length < 6) return null
 
   // Skip requisition header / metadata / column-title lines outright.
   if (HEADER_LINE_RE.test(trimmed)) return null
+  // Skip document title / balance-sheet / location banner lines.
+  if (REPORT_BANNER_RE.test(trimmed)) return null
 
   // leading line number
   const lnMatch = trimmed.match(/^(\d{1,3})\s+/)

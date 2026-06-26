@@ -16,6 +16,14 @@ import { CSV_CONFIGS } from '../lib/csvTemplates'
 import { exportOrderExcel } from '../lib/excelExport'
 import { classifyOrigin, deliveryDayFor, canDeliverOn, deliveryLabelFor } from '../lib/boatnote'
 import { useSort } from '../hooks/useSort'
+// Learned order pattern — pre-computed average weekly STORE order quantities
+// derived from a large batch of historical boat notes. Used as a fallback so the
+// "By Pattern" list is useful even before boat notes are posted to the database.
+import ORDER_PATTERN from '../lib/orderPattern.json'
+
+const PATTERN_BY_CODE = new Map(
+  (ORDER_PATTERN?.items || []).map(p => [String(p.code || '').replace(/^0+/, ''), p])
+)
 
 // ── Helpers ───────────────────────────────────────────────────
 function nextDelivery() {
@@ -150,7 +158,10 @@ export default function Orders() {
       const orderRows = (items || []).map(item => {
         const issAvg = (sum(thisIss, item.id) + sum(lastIss, item.id)) / 2
         const bn = bnByCode.get(code(item.part_number))
-        const bnAvg = bn ? bn.qty / bnWeeks : 0
+        // Posted boat-note history wins; otherwise fall back to the learned
+        // pattern computed from historical boat notes (lib/orderPattern.json).
+        const patt = PATTERN_BY_CODE.get(code(item.part_number))
+        const bnAvg = bn ? bn.qty / bnWeeks : (patt ? Number(patt.avg_weekly) || 0 : 0)
         // ── Generation mode ──────────────────────────────────────────────
         //  • BY PATTERN → the general/standard order list: typical ordered
         //    quantity from boat-note ordering history (what we normally buy).
@@ -168,7 +179,7 @@ export default function Orders() {
           unit: item.unit, current_stock: item.current_stock, min_stock: item.min_stock,
           thisWeek: Math.round(issAvg * 10) / 10, lastWeek: 0,
           avgWeekly: Math.round(avgWeekly * 10) / 10, suggested, ordered: suggested,
-          origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: !!bn, _fromBoatNote: bnAvg > 0,
+          origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: !!bn || !!patt, _fromBoatNote: bnAvg > 0,
           _fromPending: false, _pendingNote: '', _manuallyAdded: false,
         }
       })

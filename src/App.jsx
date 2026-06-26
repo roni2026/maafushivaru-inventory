@@ -12,6 +12,7 @@ import NotFound      from './pages/NotFound'
 const Dashboard     = lazy(() => import('./pages/Dashboard'))
 const Inventory     = lazy(() => import('./pages/Inventory'))
 const Issuance      = lazy(() => import('./pages/Issuance'))
+const IssueNoReq    = lazy(() => import('./pages/IssueWithoutReq'))
 const Reports       = lazy(() => import('./pages/Reports'))
 const Orders        = lazy(() => import('./pages/Orders'))
 const Analytics     = lazy(() => import('./pages/Analytics'))
@@ -80,6 +81,7 @@ export default function App() {
                   <Route path="inventory"     element={<Inventory />}     />
                   <Route path="inventory/:id" element={<ItemDetail />}    />
                   <Route path="issuance"      element={<Issuance />}      />
+                  <Route path="issue-no-req"  element={<IssueNoReq />}    />
                   <Route path="issuance-scan" element={<IssuanceScan />}  />
                   <Route path="receiving"     element={<Receiving />}     />
                   <Route path="boat-note"     element={<BoatNote />}      />

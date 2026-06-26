@@ -382,3 +382,35 @@ settings        (id, key TEXT UNIQUE, value TEXT, updated_at)
 ## 📜 License
 
 Internal use only — Outrigger Maafushivaru Resort.
+
+---
+
+## Latest updates (June 2026)
+
+> **Database:** run the new migration `supabase/migrations/012_manual_issues_and_stocktake.sql`
+> before using the features below (it adds the `manual_issues` table and the
+> stocktake session columns).
+
+- **Issue Without Requisition** (new sidebar item under *Operations*) — log items
+  given out before a requisition exists. Capture item, code number, quantity,
+  destination location and who took it. Each entry is **Pending Req** until the
+  requisition is provided, then marked **Req Provided**. A one-click *Email
+  Pending Reminder* emails everything still pending (via Brevo settings).
+- **Allowance** added as a destination location (alongside Main Kitchen, Staff
+  Kitchen, etc.) — for items personally taken (e.g. by management / "sir").
+- **Stocktake → Upload & Analyse** — upload a physical-count file (.xlsx/.csv);
+  it is matched to inventory, variances vs system stock are computed, shown
+  on-screen with colour coding, and exportable as a styled Excel report. Counts
+  can be saved for approval.
+- **Item Movement reports** — selectable **Weekly / Monthly / Quarterly /
+  Half-Year** windows for fast, slow and **non-moving** items, with a coloured,
+  well-formatted Excel export (summary + detailed sheets).
+- **Boat Note receiving** — when you tick a department, its items now float to
+  the **top of the list** and update live as you select, so they're easy to see.
+- **Order sheet** — the *By Pattern* list now falls back to a **learned pattern**
+  computed from historical boat notes (`src/lib/orderPattern.json`) when no
+  posted boat-note history exists yet; *By Usage* uses weekly issuance history.
+- **Requisition OCR** — document title / balance-sheet / location banner lines
+  (e.g. `… MAM BALANCE SHEET … INV LIQUOR - EDGEWATER`) are filtered out so they
+  no longer appear as items.
+- **Light (day) theme** — overhauled for proper contrast and readable fonts.
