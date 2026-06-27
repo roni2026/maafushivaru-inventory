@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Bell, X, AlertTriangle, Package, Clock, RefreshCw } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { fetchNotifications, getReadIds, saveReadIds } from '../lib/notifications'
+import { syncLocalNotifications } from '../lib/localNotifications'
 
 const SEVERITY = {
   critical: { dot:'bg-red-500',    text:'text-red-400',    bg:'bg-red-900/20'    },
@@ -30,9 +31,23 @@ export default function NotificationBell() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    try { setNotifs(await fetchNotifications()) } catch {}
+    try {
+      const data = await fetchNotifications()
+      setNotifs(data)
+      // Raise desktop notifications for any new critical/high alerts (no-op
+      // unless the user has enabled local notifications in Settings).
+      syncLocalNotifications(data)
+    } catch {}
     setLoading(false)
   }, [])
+
+  // Poll in the background (every 10 min) so the unread badge and local desktop
+  // notifications stay current even when the panel is never opened.
+  useEffect(() => {
+    load()
+    const id = setInterval(load, 10 * 60 * 1000)
+    return () => clearInterval(id)
+  }, [load])
 
   const toggle = () => {
     const next = !open

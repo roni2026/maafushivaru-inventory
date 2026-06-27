@@ -99,18 +99,34 @@ export default function Inventory() {
   const [page,     setPage]     = useState(1)
   const [pageSize, setPageSize] = useState(50)
 
-  const categories = useMemo(() => [...new Set(stores.map(s=>s.category))].sort(), [stores])
+  // Primary categories (the 3 mains). Ordered General → Food → Beverage, but
+  // only ones that actually exist in the data are shown.
+  const CAT_ORDER = ['General', 'Food', 'Beverage']
+  const categories = useMemo(() => {
+    const present = new Set(stores.map(s => s.category))
+    const ordered = CAT_ORDER.filter(c => present.has(c))
+    // include any unexpected categories at the end, just in case
+    ;[...present].forEach(c => { if (!ordered.includes(c)) ordered.push(c) })
+    return ordered
+  }, [stores])
+  // Sub-categories (stores) belonging to the selected primary category.
+  const subStores = useMemo(
+    () => stores.filter(s => !filterCat || s.category === filterCat),
+    [stores, filterCat]
+  )
 
   const filtered = useMemo(() => {
-    // Nothing is shown until a store (or "All Stores") is explicitly chosen.
-    if (!filterStore) return []
+    // Primary category is the gate: nothing is shown until one of the main
+    // categories (General / Food / Beverage) is chosen. The sub-category
+    // (store) is an optional second filter.
+    if (!filterCat) return []
     let list=[...items]
     if (search) {
       const q=search.toLowerCase()
       list=list.filter(i=>(i[searchField]||'').toLowerCase().includes(q))
     }
-    if (filterStore && filterStore!=='__all__') list=list.filter(i=>i.store_id===filterStore)
     if (filterCat)   list=list.filter(i=>i.stores?.category===filterCat)
+    if (filterStore) list=list.filter(i=>i.store_id===filterStore)
     if (filterActive==='active')   list=list.filter(i=>i.active!==false)
     if (filterActive==='inactive') list=list.filter(i=>i.active===false)
     if (filterExp) {
@@ -431,15 +447,18 @@ export default function Inventory() {
             )}
           </div>
         </div>
-        <select value={filterStore} onChange={e=>setFilterStore(e.target.value)}
-          className={`input text-sm w-auto ${!filterStore ? 'ring-2 ring-teal-500/50 border-teal-500/60' : ''}`}>
-          <option value="">Select a Store…</option>
-          <option value="__all__">All Stores</option>
-          {stores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
-        <select value={filterCat} onChange={e=>setFilterCat(e.target.value)} className="input text-sm w-auto">
-          <option value="">All Categories</option>
+        {/* Primary: main category (General / Food / Beverage) — gates the list */}
+        <select value={filterCat} onChange={e=>{ setFilterCat(e.target.value); setFilterStore('') }}
+          className={`input text-sm w-auto ${!filterCat ? 'ring-2 ring-teal-500/50 border-teal-500/60' : ''}`}>
+          <option value="">Select a Category…</option>
           {categories.map(c=><option key={c} value={c}>{c}</option>)}
+        </select>
+        {/* Optional: sub-category (store) within the chosen category */}
+        <select value={filterStore} onChange={e=>setFilterStore(e.target.value)}
+          disabled={!filterCat}
+          className="input text-sm w-auto disabled:opacity-50 disabled:cursor-not-allowed">
+          <option value="">All sub-categories</option>
+          {subStores.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <select value={filterExp} onChange={e=>setFilterExp(e.target.value)} className="input text-sm w-auto">
           <option value="">All Expiry</option>
@@ -491,11 +510,11 @@ export default function Inventory() {
       {/* Table */}
       {loading ? (
         <div className="flex justify-center py-20"><div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>
-      ) : !filterStore ? (
+      ) : !filterCat ? (
         <div className="card text-center py-16 text-slate-400">
           <MapPin className="w-10 h-10 mx-auto mb-3 text-teal-500/70" />
-          <p className="font-semibold text-slate-200">Select a store to view its inventory</p>
-          <p className="text-sm mt-1">Choose a store from the dropdown above — or pick <strong>"All Stores"</strong> to see everything.</p>
+          <p className="font-semibold text-slate-200">Select a category to view its inventory</p>
+          <p className="text-sm mt-1">Pick a main category (<strong>General</strong>, <strong>Food</strong> or <strong>Beverage</strong>) above. Then optionally narrow by sub-category.</p>
         </div>
       ) : filtered.length===0 ? (
         <div className="card text-center py-16 text-slate-500">

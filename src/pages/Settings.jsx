@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Save, RefreshCw, Eye, EyeOff, ExternalLink, Mail } from 'lucide-react'
+import { Save, RefreshCw, Eye, EyeOff, ExternalLink, Mail, Bell, BellOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
 import Input, { Select } from '../components/ui/Input'
+import {
+  localNotifsSupported, getLocalNotifPref, permissionState,
+  enableLocalNotifs, disableLocalNotifs, sendTestNotification,
+} from '../lib/localNotifications'
 
 const DEFAULTS = {
   resort_name:            'Outrigger Maafushivaru Resort',
@@ -23,6 +27,31 @@ export default function Settings() {
   const [saving,  setSaving]  = useState(false)
   const [loading, setLoading] = useState(true)
   const [showKey, setShowKey] = useState(false)
+
+  // Local (browser/desktop) notifications — per-device, stored in localStorage.
+  const [localNotif, setLocalNotif] = useState(getLocalNotifPref())
+  const [perm,       setPerm]       = useState(permissionState())
+
+  const toggleLocalNotif = async () => {
+    if (localNotif) {
+      disableLocalNotifs()
+      setLocalNotif(false)
+      toast.success('Local notifications turned off')
+      return
+    }
+    const { ok, reason } = await enableLocalNotifs()
+    setPerm(permissionState())
+    if (ok) {
+      setLocalNotif(true)
+      toast.success('Local notifications enabled')
+    } else if (reason === 'unsupported') {
+      toast.error('This browser does not support notifications')
+    } else if (reason === 'denied') {
+      toast.error('Permission blocked — allow notifications in your browser settings')
+    } else {
+      toast('Permission request dismissed', { icon: 'ℹ️' })
+    }
+  }
 
   useEffect(() => {
     supabase.from('settings').select('key,value').then(({ data }) => {
@@ -189,6 +218,60 @@ export default function Settings() {
             <span className="w-2 h-2 rounded-full bg-slate-500" />
             Not fully configured — fill in API key, sender email, and recipient email.
           </div>
+        )}
+      </div>
+
+      {/* ── Local Notifications (browser / desktop) ───────────────── */}
+      <div className="card space-y-5">
+        <div className="flex items-start gap-3">
+          <div className="w-9 h-9 rounded-xl bg-teal-900/30 border border-teal-700/30 flex items-center justify-center shrink-0">
+            <Bell className="w-5 h-5 text-teal-400" />
+          </div>
+          <div>
+            <p className="font-display text-base font-semibold text-slate-100">Local Notifications</p>
+            <p className="text-sm text-slate-400 mt-0.5">
+              Get instant desktop/browser alerts for low stock, out-of-stock and expiring items —
+              works <strong>alongside</strong> the Brevo email reports. This is a per-device setting.
+            </p>
+          </div>
+        </div>
+
+        {!localNotifsSupported() ? (
+          <div className="bg-slate-700/30 border border-slate-600/40 rounded-xl p-3 text-sm text-slate-400">
+            This browser does not support local notifications.
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-3 bg-slate-700/20 border border-slate-600/40 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                {localNotif ? <Bell className="w-5 h-5 text-teal-400" /> : <BellOff className="w-5 h-5 text-slate-500" />}
+                <div>
+                  <p className="text-sm font-medium text-slate-200">
+                    {localNotif ? 'Local notifications are ON' : 'Local notifications are OFF'}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Permission: <span className="text-slate-400">{perm}</span>
+                  </p>
+                </div>
+              </div>
+              <button onClick={toggleLocalNotif}
+                className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${localNotif ? 'bg-teal-500' : 'bg-slate-600'}`}
+                title={localNotif ? 'Disable' : 'Enable'}>
+                <span className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${localNotif ? 'left-6' : 'left-1'}`} />
+              </button>
+            </div>
+            {localNotif && perm === 'granted' && (
+              <button onClick={() => { if (!sendTestNotification()) toast.error('Could not send test') }}
+                className="text-sm text-teal-400 hover:text-teal-300 transition-colors">
+                → Send a test notification
+              </button>
+            )}
+            {perm === 'denied' && (
+              <div className="bg-orange-900/20 border border-orange-700/30 rounded-xl p-3 text-sm text-orange-300">
+                Notifications are blocked for this site. Enable them in your browser's site settings, then toggle again.
+              </div>
+            )}
+          </>
         )}
       </div>
 

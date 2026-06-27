@@ -123,14 +123,14 @@ export default function Orders() {
 
   // ── Check undelivered from previous orders ─────────────────
   const checkUndeliveredItems = useCallback(async () => {
-    const { data: oldOrders } = await supabase.from('order_history')
+    const { data: oldOrders } = (await supabase.from('order_history')
       .select('id,delivery_date,delivery_day,status')
       .in('status', ['pending','partial'])
-      .order('created_at', { ascending: false }).limit(3)
+      .order('created_at', { ascending: false }).limit(3)) || {}
     if (!oldOrders?.length) { setPendingItems([]); return }
     const undelivered = []
     for (const order of oldOrders) {
-      const { data: oItems } = await supabase.from('order_history_items').select('*').eq('order_id', order.id)
+      const { data: oItems } = (await supabase.from('order_history_items').select('*').eq('order_id', order.id)) || {}
       ;(oItems || []).forEach(i => {
         const shortfall = Number(i.ordered_qty) - Number(i.received_qty)
         if (shortfall > 0) undelivered.push({ ...i, shortfall, orderDate: order.delivery_date, orderDay: order.delivery_day || 'Previous', orderId: order.id, orderStatus: order.status })
@@ -144,16 +144,21 @@ export default function Orders() {
   const generate = useCallback(async () => {
     setLoading(true); setPendingItems([]); setPendingDismissed(false)
     try {
-      const { data: settings } = await supabase.from('settings').select('key,value')
+      const { data: settings } = (await supabase.from('settings').select('key,value')) || {}
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
-      const { data: items } = await selectAll(() => supabase.from('items').select('*, stores(name,category)').eq('active', true))
+      const { data: items } = (await selectAll(() => supabase.from('items').select('*, stores(name,category)').eq('active', true))) || {}
+      if (!items || items.length === 0) {
+        toast.error('No active items found. Add items in Inventory first.')
+        setRows([]); setLoading(false); return
+      }
 
       // ── Boat-note demand: avg weekly ordered qty per item code, from the STORE
       //    department of every posted boat note (this is what we actually re-order).
-      const { data: bnItems } = await selectAll(() =>
-        supabase.from('boat_note_items').select('part_number,ordered_qty,department,boat_note_id'))
-      const { data: bnotes } = await supabase.from('boat_notes').select('id,note_date')
+      //    These tables may not exist yet on a fresh database — guard every read.
+      const { data: bnItems } = (await selectAll(() =>
+        supabase.from('boat_note_items').select('part_number,ordered_qty,department,boat_note_id'))) || {}
+      const { data: bnotes } = (await supabase.from('boat_notes').select('id,note_date')) || {}
       const noteDate = new Map((bnotes || []).map(n => [n.id, n.note_date]))
       const code = (s) => String(s || '').replace(/^0+/, '')
       const storeBn = (bnItems || []).filter(b => (b.department || '').toUpperCase() === 'STORE')
@@ -170,8 +175,8 @@ export default function Orders() {
 
       // ── Issuance demand (2-week average) — used as a fallback / cross-check ──
       const tw = weekRange(0); const lw = weekRange(1)
-      const { data: thisIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', tw.from).lte('date', tw.to))
-      const { data: lastIss } = await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', lw.from).lte('date', lw.to))
+      const { data: thisIss } = (await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', tw.from).lte('date', tw.to))) || {}
+      const { data: lastIss } = (await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', lw.from).lte('date', lw.to))) || {}
       const sum = (list, id) => (list || []).filter(i => i.item_id === id).reduce((s, i) => s + Number(i.quantity_issued), 0)
 
       const orderRows = (items || []).map(item => {
@@ -211,16 +216,30 @@ export default function Orders() {
           _fromPending: false, _pendingNote: '', _manuallyAdded: false,
         }
       })
-      // STORE-only = items that appear in the STORE department of past boat notes.
-      .filter(r => storeOnly ? r._inBoatNote : true)
       // PATTERN mode shows the full general list; USAGE mode shows only what
       // actually needs reordering based on consumption.
       .filter(r => orderMode === 'pattern' ? true : (r.suggested > 0 || r.current_stock <= r.min_stock))
-      .sort((a, b) => a.origin.localeCompare(b.origin) || a.name.localeCompare(b.name))
 
-      setRows(orderRows); setDelivery(nextDeliveryFor(deliveryDay))
+      // STORE-only = items that appear in the STORE department of past boat notes
+      // (or the learned pattern). Honour the toggle, but never return an empty
+      // sheet when we actually have items: fall back to the full list if
+      // STORE-only is on yet matches nothing (e.g. no boat notes posted yet).
+      const storeRows = orderRows.filter(r => r._inBoatNote)
+      let finalRows = storeOnly ? storeRows : orderRows
+      if (storeOnly && finalRows.length === 0 && orderRows.length > 0) {
+        finalRows = orderRows
+        toast('No boat-note history yet — showing the full item list.', { icon: 'ℹ️' })
+      }
+      finalRows = [...finalRows].sort((a, b) =>
+        (a.origin || '').localeCompare(b.origin || '') || (a.name || '').localeCompare(b.name || ''))
+
+      setRows(finalRows); setDelivery(nextDeliveryFor(deliveryDay))
       await checkUndeliveredItems()
-    } catch (err) { toast.error('Failed: ' + err.message) }
+    } catch (err) {
+      console.error('Order generation failed:', err)
+      toast.error('Order generation failed: ' + (err?.message || 'unexpected error'))
+      setRows([])
+    }
     setLoading(false)
   }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, multiplier, backupWeeks, subtractStock])
 
@@ -592,19 +611,6 @@ export default function Orders() {
               <span className="text-[11px] text-slate-500">Order rounds up to whole packs · edit any qty / pack below.</span>
             </div>
 
-            {/* Inventory category + sub-category filters */}
-            <div className="flex items-center gap-3 flex-wrap border-t border-slate-700/50 pt-3">
-              <span className="text-xs text-slate-400 uppercase tracking-wide">Category</span>
-              <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setSubFilter('') }} className="input text-sm w-auto py-1.5">
-                <option value="">All categories</option>
-                {MAIN_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <span className="text-xs text-slate-400 uppercase tracking-wide">Sub-category</span>
-              <select value={subFilter} onChange={e => setSubFilter(e.target.value)} className="input text-sm w-auto py-1.5">
-                <option value="">All sub-categories</option>
-                {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
             <div className="flex items-center justify-between gap-3 flex-wrap border-t border-slate-700/50 pt-3">
               <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                 <input type="checkbox" checked={storeOnly} onChange={e => setStoreOnly(e.target.checked)} className="accent-teal-500 w-4 h-4" />
