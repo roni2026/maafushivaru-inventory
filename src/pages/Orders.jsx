@@ -122,7 +122,9 @@ export default function Orders() {
   const loadAllItems = async () => {
     if (allItems.length) return
     const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,active,stores(name)').order('name'))
-    setAllItems((data || []).filter(isActiveItem))
+    let list = (data || []).filter(isActiveItem)
+    if (list.length === 0 && (data || []).length > 0) list = data
+    setAllItems(list)
   }
 
   // ── Check undelivered from previous orders ─────────────────
@@ -151,8 +153,19 @@ export default function Orders() {
       const { data: settings } = (await supabase.from('settings').select('key,value')) || {}
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
-      const { data: allItems } = (await selectAll(() => supabase.from('items').select('*, stores(name,category)'))) || {}
-      const items = (allItems || []).filter(isActiveItem)
+      // Fetch items. Try WITH the store join first; if that yields nothing
+      // (e.g. the items→stores relationship can't be embedded on this DB),
+      // retry a plain select so the order can still be generated.
+      let allItems = ((await selectAll(() => supabase.from('items').select('*, stores(name,category)'))) || {}).data
+      if (!allItems || allItems.length === 0) {
+        allItems = (((await selectAll(() => supabase.from('items').select('*'))) || {}).data) || []
+      }
+      // Active unless explicitly deactivated. But if that would hide EVERY item
+      // (e.g. every row has active=false / NULL on this DB), fall back to the
+      // full list so the sheet is never empty when items actually exist.
+      let items = allItems.filter(isActiveItem)
+      if (items.length === 0 && allItems.length > 0) items = allItems
+      console.info('[orders] generate — items fetched:', allItems.length, '· usable:', items.length)
       if (items.length === 0) {
         toast.error('No items found. Add items in Inventory first.')
         setRows([]); setLoading(false); return
