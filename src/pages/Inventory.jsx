@@ -9,6 +9,7 @@ import toast from 'react-hot-toast'
 import { useItems } from '../hooks/useItems'
 import { chunkedWrite } from '../lib/supabase'
 import { parseCSV } from '../lib/csvTemplates'
+import { resolveStore } from '../lib/storeMatch'
 import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
@@ -326,7 +327,6 @@ export default function Inventory() {
       if(missing.length){ toast.error(`CSV missing columns: ${missing.join(', ')}`); return }
 
       const norm=(s)=>(s||'').trim().replace(/\s+/g,' ').toLowerCase()
-      const storeByName=new Map(stores.map(s=>[norm(s.name),s]))
 
       const parsed=[]; const errs=[]; const missingSet=new Map()
       rawRows.forEach((row,idx)=>{
@@ -334,7 +334,10 @@ export default function Inventory() {
           errs.push(`Row ${idx+2}: missing part_number or name`); return
         }
         const rawStore=(row.store_name||'').trim() || 'Unassigned'
-        const store=storeByName.get(norm(rawStore))
+        // Resolve by store name first, then by main category (so "beverage"
+        // files under the Beverage store instead of falling through to the
+        // General default). Also honours an optional `category` column.
+        const { store } = resolveStore(rawStore, stores, row.category)
         if(!store){ missingSet.set(norm(rawStore), rawStore) }
         parsed.push({
           part_number:row.part_number.trim(),

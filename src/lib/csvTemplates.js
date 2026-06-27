@@ -6,6 +6,8 @@
 // ─────────────────────────────────────────────────────────────
 
 // ── CSV parser (handles quoted fields) ───────────────────────
+import { resolveStore, resolveStoreId } from './storeMatch'
+
 export function parseCSV(text) {
   const lines = text.split('\n')
   // Skip comment lines starting with #
@@ -75,7 +77,7 @@ export const CSV_CONFIGS = {
     required: ['part_number','name','store_name','unit'],
     descriptions: {
       part_number:   'Unique item code, e.g. BEV-001. Must be unique across all items.',
-      store_name:    'Must exactly match a store name in your system (case-insensitive).',
+      store_name:    'A store name, OR a main category (Food / General / Beverage) to file it under that category\u2019s store. Case-insensitive.',
       unit:          'Unit of measure: pcs / kg / g / L / mL / bottle / box / can / bag / pack etc.',
       current_stock: 'Current quantity in stock (number).',
       min_stock:     'Minimum stock level before low-stock alert (number).',
@@ -94,7 +96,7 @@ export const CSV_CONFIGS = {
     transform: (row, { stores }) => ({
       part_number:   row.part_number?.trim(),
       name:          row.name?.trim(),
-      store_id:      stores?.find(s => s.name.toLowerCase() === row.store_name?.trim().toLowerCase())?.id || null,
+      store_id:      resolveStoreId(row.store_name, stores, row.category),
       unit:          row.unit?.trim() || 'pcs',
       current_stock: Number(row.current_stock) || 0,
       min_stock:     Number(row.min_stock)     || 0,
@@ -108,8 +110,8 @@ export const CSV_CONFIGS = {
       const e = []
       if (!row.part_number?.trim()) e.push('Part # is required')
       if (!row.name?.trim())        e.push('Name is required')
-      const store = stores?.find(s => s.name.toLowerCase() === row.store_name?.trim().toLowerCase())
-      if (!store) e.push(`Store "${row.store_name}" not found — check store name`)
+      const { store } = resolveStore(row.store_name, stores, row.category)
+      if (!store) e.push(`Store "${row.store_name}" not found — use a store name or a main category (Food / General / Beverage)`)
       if (row.expiry_date && !/^\d{4}-\d{2}-\d{2}$/.test(row.expiry_date.trim())) e.push('Expiry must be YYYY-MM-DD')
       return e
     },
