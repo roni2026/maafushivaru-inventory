@@ -99,15 +99,15 @@ export default function Inventory() {
   const [page,     setPage]     = useState(1)
   const [pageSize, setPageSize] = useState(50)
 
-  // Primary categories (the 3 mains). Ordered General → Food → Beverage, but
-  // only ones that actually exist in the data are shown.
-  const CAT_ORDER = ['General', 'Food', 'Beverage']
+  // The 3 main categories, always shown in this fixed order so they are
+  // consistent everywhere in the app: Food · General · Beverage.
+  const MAIN_CATEGORIES = ['Food', 'General', 'Beverage']
   const categories = useMemo(() => {
-    const present = new Set(stores.map(s => s.category))
-    const ordered = CAT_ORDER.filter(c => present.has(c))
-    // include any unexpected categories at the end, just in case
-    ;[...present].forEach(c => { if (!ordered.includes(c)) ordered.push(c) })
-    return ordered
+    const present = new Set(stores.map(s => s.category).filter(Boolean))
+    // Always list the 3 mains first (even if a store for one doesn't exist yet),
+    // then append any unexpected category found in the data.
+    const extra = [...present].filter(c => !MAIN_CATEGORIES.includes(c))
+    return [...MAIN_CATEGORIES, ...extra]
   }, [stores])
   // Sub-categories (stores) belonging to the selected primary category.
   const subStores = useMemo(

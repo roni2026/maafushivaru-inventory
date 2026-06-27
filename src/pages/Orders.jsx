@@ -60,7 +60,11 @@ function roundToPack(qty, pack) {
   if (p <= 1) return Math.max(0, Math.ceil(qty))
   return Math.max(0, Math.ceil(Math.ceil(qty) / p) * p)
 }
-const MAIN_CATEGORIES = ['Food', 'Beverage', 'General']
+const MAIN_CATEGORIES = ['Food', 'General', 'Beverage']
+// An item counts as active unless it has been explicitly deactivated. This
+// tolerates databases where the `active` column is missing or NULL (which a
+// strict `.eq('active', true)` filter would wrongly treat as "no items").
+const isActiveItem = (i) => i && i.active !== false
 
 export default function Orders() {
   const [tab,       setTab]      = useState('generate')
@@ -117,8 +121,8 @@ export default function Orders() {
   // ── Load all items for manual add ─────────────────────────
   const loadAllItems = async () => {
     if (allItems.length) return
-    const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,stores(name)').eq('active', true).order('name'))
-    setAllItems(data || [])
+    const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,active,stores(name)').order('name'))
+    setAllItems((data || []).filter(isActiveItem))
   }
 
   // ── Check undelivered from previous orders ─────────────────
@@ -147,9 +151,10 @@ export default function Orders() {
       const { data: settings } = (await supabase.from('settings').select('key,value')) || {}
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
-      const { data: items } = (await selectAll(() => supabase.from('items').select('*, stores(name,category)').eq('active', true))) || {}
-      if (!items || items.length === 0) {
-        toast.error('No active items found. Add items in Inventory first.')
+      const { data: allItems } = (await selectAll(() => supabase.from('items').select('*, stores(name,category)'))) || {}
+      const items = (allItems || []).filter(isActiveItem)
+      if (items.length === 0) {
+        toast.error('No items found. Add items in Inventory first.')
         setRows([]); setLoading(false); return
       }
 
