@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { supabase, selectAll } from '../lib/supabase'
 import {
   ShoppingCart, Download, RefreshCw, Minus, Plus, Save,
@@ -38,7 +38,7 @@ function nextDelivery() {
 }
 // Next occurrence of a specific weekday (Monday / Thursday) for a targeted order.
 function nextDeliveryFor(dayName) {
-  if (!dayName || dayName === 'auto') return nextDelivery()
+  if (!dayName || dayName === 'auto' || dayName === 'week') return nextDelivery()
   const map = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 }
   const target = map[dayName] ?? 1
   const today = new Date(); let diff = (target - today.getDay() + 7) % 7; if (diff === 0) diff = 7
@@ -54,19 +54,38 @@ function weekRange(weeksBack = 0) {
 
 const STATUS_BADGE = { pending:'yellow', partial:'orange', received:'green', cancelled:'red' }
 
+// Round an order quantity UP to a whole number of packs (e.g. pack of 6/10/12).
+function roundToPack(qty, pack) {
+  const p = Number(pack) || 1
+  if (p <= 1) return Math.max(0, Math.ceil(qty))
+  return Math.max(0, Math.ceil(Math.ceil(qty) / p) * p)
+}
+const MAIN_CATEGORIES = ['Food', 'Beverage', 'General']
+
 export default function Orders() {
   const [tab,       setTab]      = useState('generate')
   const [orderMode, setOrderMode]= useState('pattern')  // 'pattern' | 'usage'
-  const [deliveryDay, setDeliveryDay] = useState('auto') // 'auto' | 'Monday' | 'Thursday'
+  const [deliveryDay, setDeliveryDay] = useState('week') // 'week' | 'Monday' | 'Thursday'
   const [storeOnly, setStoreOnly]= useState(true)   // STORE-only, boat-note driven
   const [boatStats, setBoatStats]= useState(null)   // { weeks, items: Map<code,{qty,n}> }
   const [rows,      setRows]     = useState([])
   const [delivery,  setDelivery] = useState(null)
   const [loading,   setLoading]  = useState(false)
-  const [exporting, setExporting]= useState(false)
+  const [exportingPdf,  setExportingPdf]  = useState(false)
+  const [exportingXlsx, setExportingXlsx] = useState(false)
   const [saving,    setSaving]   = useState(false)
   const [resortName,setResortName]=useState('Outrigger Maafushivaru Resort')
   const [showCSV,   setShowCSV]  = useState(false)
+
+  // ── Order-quantity controls ────────────────────────────────────────────────
+  const [multiplier,   setMultiplier]   = useState(1)   // ×1..×5 on weekly average
+  const [backupWeeks,  setBackupWeeks]  = useState(0)   // extra weeks of safety stock
+  const [subtractStock,setSubtractStock]= useState(true)// net need vs gross target
+
+  // ── List filters (category / sub-category / needed) ────────────────────────
+  const [catFilter,  setCatFilter]  = useState('')   // '' | Food | Beverage | General
+  const [subFilter,  setSubFilter]  = useState('')   // store (sub-category) name
+  const [needFilter, setNeedFilter] = useState('all')// all | selected | unselected
 
   // ── Pending (undelivered) from last orders ─────────────────
   const [pendingItems,    setPendingItems]    = useState([])
@@ -171,14 +190,23 @@ export default function Orders() {
         const avgWeekly = orderMode === 'usage'
           ? (issAvg > 0 ? issAvg : bnAvg)
           : (bnAvg > 0 ? bnAvg : issAvg)
-        const suggested = Math.max(0, Math.ceil(avgWeekly * 2 - Number(item.current_stock)))
+        // Whole-week target = weekly average × multiplier × (1 + backup weeks).
+        // Multiplier scales the weekly sum (a day's usage ≈ week ÷ ~5-6 since we
+        // rarely issue on the supply day); backup weeks add safety cover. The
+        // result is rounded UP to a whole number of packs.
+        const pack = Number(item.pack_size) || 1
+        const target = avgWeekly * multiplier * (1 + backupWeeks)
+        const net = subtractStock ? target - Number(item.current_stock || 0) : target
+        const suggested = roundToPack(Math.max(0, net), pack)
         const origin = item.origin || classifyOrigin(item.name)
         return {
           id: item.id, part_number: item.part_number, name: item.name,
           store: item.stores?.name || '', category: item.stores?.category || '',
           unit: item.unit, current_stock: item.current_stock, min_stock: item.min_stock,
+          pack,
           thisWeek: Math.round(issAvg * 10) / 10, lastWeek: 0,
           avgWeekly: Math.round(avgWeekly * 10) / 10, suggested, ordered: suggested,
+          selected: suggested > 0, _edited: false,
           origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: !!bn || !!patt, _fromBoatNote: bnAvg > 0,
           _fromPending: false, _pendingNote: '', _manuallyAdded: false,
         }
@@ -194,7 +222,7 @@ export default function Orders() {
       await checkUndeliveredItems()
     } catch (err) { toast.error('Failed: ' + err.message) }
     setLoading(false)
-  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay])
+  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, multiplier, backupWeeks, subtractStock])
 
   // ── Add undelivered to current order ──────────────────────
   const addPendingToOrder = () => {
@@ -279,14 +307,38 @@ export default function Orders() {
   }
 
   // ── Quantity helpers ───────────────────────────────────────
-  const adjustQty = (id, delta) => setRows(prev => prev.map(r => r.id === id ? { ...r, ordered: Math.max(0, (r.ordered || 0) + delta) } : r))
-  const setQty    = (id, val) => { const n = parseInt(val, 10); if (!isNaN(n) && n >= 0) setRows(prev => prev.map(r => r.id === id ? { ...r, ordered: n } : r)) }
+  const adjustQty = (id, delta) => setRows(prev => prev.map(r => r.id === id ? { ...r, ordered: Math.max(0, (Number(r.ordered) || 0) + delta * (Number(r.pack) || 1)), _edited: true } : r))
+  const setQty    = (id, val) => { const n = parseFloat(val); if (!isNaN(n) && n >= 0) setRows(prev => prev.map(r => r.id === id ? { ...r, ordered: n, _edited: true } : r)) }
+  const setPack   = (id, val) => { const p = Math.max(1, parseInt(val, 10) || 1); setRows(prev => prev.map(r => r.id === id ? { ...r, pack: p, ordered: roundToPack(Number(r.ordered) || 0, p) } : r)) }
   const removeRow = (id) => { setRows(prev => prev.filter(r => r.id !== id)); toast.success('Item removed from order') }
+
+  // ── Row selection (only selected rows go into the order) ────────────────────
+  const toggleSelect    = (id) => setRows(prev => prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r))
+  const selectAll       = () => setRows(prev => prev.map(r => ({ ...r, selected: true })))
+  const clearSelection  = () => setRows(prev => prev.map(r => ({ ...r, selected: false })))
+  // "Low stock / needs more" — items at or below min stock, or with a suggested qty.
+  const selectLowStock  = () => setRows(prev => prev.map(r =>
+    (Number(r.current_stock) <= Number(r.min_stock) || r.suggested > 0) ? { ...r, selected: true } : r))
+
+  // ── Live re-apply of multiplier / backup weeks / subtract-stock ─────────────
+  // Recomputes suggested + order qty for rows the user hasn't manually edited,
+  // so changing the controls updates the list instantly (manual edits kept).
+  useEffect(() => {
+    setRows(prev => prev.map(r => {
+      if (r._manuallyAdded || r._fromPending || r._edited) return r
+      const pack = Number(r.pack) || 1
+      const target = (Number(r.avgWeekly) || 0) * multiplier * (1 + backupWeeks)
+      const net = subtractStock ? target - Number(r.current_stock || 0) : target
+      const suggested = roundToPack(Math.max(0, net), pack)
+      return { ...r, suggested, ordered: suggested, selected: suggested > 0 ? true : r.selected }
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [multiplier, backupWeeks, subtractStock])
 
   // ── Export PDF ─────────────────────────────────────────────
   const exportPDF = async () => {
-    if (!visibleRows.length || !delivery) return
-    setExporting(true)
+    if (!orderRows.length || !delivery) { toast.error('No selected items to export'); return }
+    setExportingPdf(true)
     try {
       const { default: jsPDF }     = await import('jspdf')
       const { default: autoTable } = await import('jspdf-autotable')
@@ -299,32 +351,32 @@ export default function Orders() {
       doc.text(resortName, 14, 12)
       doc.setFontSize(13); doc.setFont('helvetica','normal')
       doc.text(`Order for ${delivDay} – ${delivDate}`, 14, 21)
-      const grouped = visibleRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
+      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
       let y = 36
       for (const [store, items] of Object.entries(grouped)) {
         doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold')
         doc.text(store || 'Unassigned', 14, y)
         autoTable(doc, {
           startY: y + 3,
-          head: [['Part #','Item','Unit','In Stock','Avg/Wk','Suggested','Order Qty','Notes']],
-          body: items.map(i => [i.part_number, i.name, i.unit, i.current_stock, i.avgWeekly, i.suggested, i.ordered, i._pendingNote || (i._manuallyAdded ? 'Manual' : '')]),
+          head: [['Part #','Item','Unit','Pack','In Stock','Avg/Wk','Suggested','Order Qty','Notes']],
+          body: items.map(i => [i.part_number, i.name, i.unit, i.pack || 1, i.current_stock, i.avgWeekly, i.suggested, i.ordered, i._pendingNote || (i._manuallyAdded ? 'Manual' : '')]),
           headStyles: { fillColor: cyan, fontSize: 8 }, styles: { fontSize: 8 },
-          alternateRowStyles: { fillColor: [248,250,252] }, columnStyles: { 7: { cellWidth: 35, fontSize: 7 } },
+          alternateRowStyles: { fillColor: [248,250,252] }, columnStyles: { 8: { cellWidth: 32, fontSize: 7 } },
         })
         y = doc.lastAutoTable.finalY + 8
       }
       doc.save(`Order_${delivDay}_${delivery.date.toISOString().split('T')[0]}.pdf`)
       toast.success('PDF exported')
     } catch (err) { toast.error('Export failed: ' + err.message) }
-    setExporting(false)
+    setExportingPdf(false)
   }
 
   // ── Export styled Excel ────────────────────────────────────────────────────
   const exportExcel = async () => {
-    if (!visibleRows.length || !delivery) return
-    setExporting(true)
+    if (!orderRows.length || !delivery) { toast.error('No selected items to export'); return }
+    setExportingXlsx(true)
     try {
-      const grouped = visibleRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
+      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
       const delivDay  = delivery.date.toLocaleDateString('en-US', { weekday:'long' })
       const delivDate = delivery.date.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
       await exportOrderExcel(grouped, {
@@ -334,7 +386,7 @@ export default function Orders() {
       })
       toast.success('Excel exported')
     } catch (err) { toast.error('Export failed: ' + err.message) }
-    setExporting(false)
+    setExportingXlsx(false)
   }
 
   // ── Save order ─────────────────────────────────────────────
@@ -400,15 +452,37 @@ export default function Orders() {
   //  Foreign items only arrive Monday; local items can arrive both days (mainly
   //  Thursday). Picking a day instantly narrows the list to what can actually
   //  be delivered that day — no regenerate needed.
-  const visibleRows = useMemo(() => (
-    deliveryDay === 'auto' ? rows : rows.filter(r => canDeliverOn(r.origin, deliveryDay))
-  ), [rows, deliveryDay])
+  const visibleRows = useMemo(() => {
+    // 'week' (whole-week order) and 'Monday'/'Thursday' (day-targeted) views.
+    let list = (deliveryDay === 'Monday' || deliveryDay === 'Thursday')
+      ? rows.filter(r => canDeliverOn(r.origin, deliveryDay))
+      : rows
+    if (catFilter) list = list.filter(r => (r.category || '') === catFilter)
+    if (subFilter) list = list.filter(r => (r.store || '') === subFilter)
+    if (needFilter === 'selected')   list = list.filter(r => r.selected)
+    if (needFilter === 'unselected') list = list.filter(r => !r.selected)
+    return list
+  }, [rows, deliveryDay, catFilter, subFilter, needFilter])
   const { sorted: sortedRows, thProps } = useSort(visibleRows, null, 'asc')
+  // Float selected (needed) rows to the top so they're easy to see/scan.
+  const displayRows = useMemo(() =>
+    [...sortedRows].sort((a, b) => (b.selected ? 1 : 0) - (a.selected ? 1 : 0)), [sortedRows])
+
+  // Sub-category (store) options grouped by main category, derived from the data.
+  const subOptions = useMemo(() => {
+    const all = [...new Set(rows
+      .filter(r => !catFilter || (r.category || '') === catFilter)
+      .map(r => r.store).filter(Boolean))]
+    return all.sort()
+  }, [rows, catFilter])
 
   // Switch the targeted delivery day live (also re-dates the order header).
   const pickDeliveryDay = (day) => { setDeliveryDay(day); setDelivery(nextDeliveryFor(day)) }
 
-  const toOrder          = visibleRows.filter(r => r.ordered > 0)
+  // Only SELECTED rows with a quantity make it into the order (faded/unselected
+  // = not needed, so they're excluded from export & save).
+  const orderRows        = visibleRows.filter(r => r.selected && r.ordered > 0)
+  const toOrder          = orderRows
   const showPendingAlert = pendingItems.length > 0 && !pendingDismissed && rows.length > 0
   const pendingSources   = [...new Set(pendingItems.map(i => `${i.orderDay} · ${i.orderDate}`))]
 
@@ -434,8 +508,8 @@ export default function Orders() {
             <>
               <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
               <Button variant="secondary" onClick={openAddItem}><PlusCircle className="w-4 h-4" /> Add Item</Button>
-              <Button variant="secondary" onClick={exportExcel} loading={exporting}><Download className="w-4 h-4" /> Excel</Button>
-              <Button variant="secondary" onClick={exportPDF} loading={exporting}><Download className="w-4 h-4" /> PDF</Button>
+              <Button variant="secondary" onClick={exportExcel} loading={exportingXlsx}><Download className="w-4 h-4" /> Download Excel</Button>
+              <Button variant="secondary" onClick={exportPDF} loading={exportingPdf}><Download className="w-4 h-4" /> Download PDF</Button>
               <Button variant="secondary" onClick={saveOrder} loading={saving}><Save className="w-4 h-4" /> Save Order</Button>
             </>
           )}
@@ -483,14 +557,53 @@ export default function Orders() {
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400 uppercase tracking-wide">Delivery</span>
                 <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
-                  {['auto','Monday','Thursday'].map(d => (
+                  {['week','Monday','Thursday'].map(d => (
                     <button key={d} onClick={() => pickDeliveryDay(d)}
                       className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${deliveryDay === d ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-                      {d === 'auto' ? 'Auto' : d}
+                      {d === 'week' ? 'Whole Week' : d}
                     </button>
                   ))}
                 </div>
               </div>
+            </div>
+
+            {/* Order quantity controls: multiplier · backup weeks · subtract stock */}
+            <div className="flex items-center gap-4 flex-wrap border-t border-slate-700/50 pt-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Multiply order</span>
+                <select value={multiplier} onChange={e => setMultiplier(Number(e.target.value))} className="input text-sm w-auto py-1.5">
+                  {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>×{n}</option>)}
+                </select>
+                <span className="text-xs text-slate-500 hidden sm:inline">× weekly average (e.g. ×5 ≈ a week from daily usage)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Backup weeks</span>
+                <select value={backupWeeks} onChange={e => setBackupWeeks(Number(e.target.value))} className="input text-sm w-auto py-1.5">
+                  <option value={0}>This week only</option>
+                  <option value={1}>+1 week backup</option>
+                  <option value={2}>+2 weeks backup</option>
+                  <option value={3}>+3 weeks backup</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                <input type="checkbox" checked={subtractStock} onChange={e => setSubtractStock(e.target.checked)} className="accent-teal-500 w-4 h-4" />
+                Subtract current stock
+              </label>
+              <span className="text-[11px] text-slate-500">Order rounds up to whole packs · edit any qty / pack below.</span>
+            </div>
+
+            {/* Inventory category + sub-category filters */}
+            <div className="flex items-center gap-3 flex-wrap border-t border-slate-700/50 pt-3">
+              <span className="text-xs text-slate-400 uppercase tracking-wide">Category</span>
+              <select value={catFilter} onChange={e => { setCatFilter(e.target.value); setSubFilter('') }} className="input text-sm w-auto py-1.5">
+                <option value="">All categories</option>
+                {MAIN_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <span className="text-xs text-slate-400 uppercase tracking-wide">Sub-category</span>
+              <select value={subFilter} onChange={e => setSubFilter(e.target.value)} className="input text-sm w-auto py-1.5">
+                <option value="">All sub-categories</option>
+                {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
             <div className="flex items-center justify-between gap-3 flex-wrap border-t border-slate-700/50 pt-3">
               <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
@@ -555,17 +668,40 @@ export default function Orders() {
 
               {/* Order table */}
               <div className="card">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs text-slate-400">Suggested = (Avg/Wk × 2) − Stock. <span className="text-orange-300">Orange</span> = undelivered carried over. <span className="text-blue-400">Blue</span> = manually added.</p>
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                  <p className="text-xs text-slate-400">
+                    Order = Avg/Wk × {multiplier} × {1 + backupWeeks}wk{subtractStock ? ' − Stock' : ''}, rounded to packs.
+                    {' '}<span className="text-slate-200">Highlighted = needed (in order)</span>, <span className="opacity-50">faded = not needed</span>.
+                  </p>
                   <Button onClick={openAddItem} variant="secondary"><PlusCircle className="w-4 h-4" /> Add Item Manually</Button>
+                </div>
+                {/* Selection toolbar */}
+                <div className="flex items-center gap-2 flex-wrap mb-3">
+                  <span className="text-xs text-slate-400 uppercase tracking-wide">Select</span>
+                  <button onClick={selectAll} className="btn-secondary btn-sm">Select All</button>
+                  <button onClick={selectLowStock} className="btn-secondary btn-sm">Select Low Stock</button>
+                  <button onClick={clearSelection} className="btn-ghost btn-sm">Clear</button>
+                  <span className="mx-1 text-slate-600">·</span>
+                  <span className="text-xs text-slate-400 uppercase tracking-wide">Show</span>
+                  <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+                    {[{k:'all',l:'All'},{k:'selected',l:'Needed'},{k:'unselected',l:'Not needed'}].map(o => (
+                      <button key={o.k} onClick={() => setNeedFilter(o.k)}
+                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${needFilter === o.k ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                        {o.l}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="ml-auto text-xs text-slate-400"><strong className="text-teal-300">{orderRows.length}</strong> selected · {orderRows.reduce((s,r)=>s+Number(r.ordered||0),0)} units</span>
                 </div>
                 <Table>
                   <Thead><tr>
+                    <Th>✓</Th>
                     <Th {...thProps('part_number')}>Part #</Th>
                     <Th {...thProps('name')}>Item Name</Th>
-                    <Th {...thProps('store')}>Store</Th>
+                    <Th {...thProps('store')}>Sub-Category</Th>
                     <Th {...thProps('origin')}>Origin · Day</Th>
                     <Th {...thProps('unit')}>Unit</Th>
+                    <Th {...thProps('pack')}>Pack</Th>
                     <Th {...thProps('current_stock')}>In Stock</Th>
                     <Th {...thProps('avgWeekly')}>Avg/Wk</Th>
                     <Th {...thProps('suggested')}>Suggested</Th>
@@ -573,13 +709,18 @@ export default function Orders() {
                     <Th></Th>
                   </tr></Thead>
                   <Tbody>
-                    {sortedRows.map(row => (
+                    {displayRows.map(row => (
                       <Tr key={row.id}
                         className={[
-                          row.ordered === 0 ? 'opacity-40' : '',
+                          !row.selected ? 'opacity-40' : '',
                           row._fromPending ? 'bg-orange-900/10' : '',
                           row._manuallyAdded && !row._fromPending ? 'bg-blue-900/10' : '',
                         ].join(' ')}>
+                        <Td>
+                          <input type="checkbox" checked={!!row.selected} onChange={() => toggleSelect(row.id)}
+                            title={row.selected ? 'Needed — included in order' : 'Not needed — excluded'}
+                            className="accent-teal-500 w-4 h-4" />
+                        </Td>
                         <Td className="font-mono text-xs text-slate-300">{row.part_number}</Td>
                         <Td className="max-w-xs">
                           <p className={`text-sm font-medium truncate ${row._fromPending ? 'text-orange-200' : row._manuallyAdded ? 'text-blue-200' : 'text-slate-100'}`}>{row.name}</p>
@@ -592,6 +733,11 @@ export default function Orders() {
                           </Badge>
                         </Td>
                         <Td className="text-xs text-slate-400">{row.unit}</Td>
+                        <Td>
+                          <input type="number" min="1" step="1" value={row.pack || 1} onChange={e => setPack(row.id, e.target.value)}
+                            title="Pack size — order rounds up to whole packs"
+                            className="w-14 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
+                        </Td>
                         <Td className={Number(row.current_stock) <= Number(row.min_stock) ? 'text-red-400 font-semibold' : 'text-slate-300'}>{row.current_stock}</Td>
                         <Td className="text-slate-300">{row.avgWeekly || '—'}</Td>
                         <Td><Badge variant={row._fromPending ? 'orange' : row._manuallyAdded ? 'blue' : 'teal'}>{row.suggested}</Badge></Td>
