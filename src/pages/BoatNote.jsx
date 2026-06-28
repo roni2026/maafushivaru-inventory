@@ -418,8 +418,24 @@ function BoatNoteHistory() {
   const [expanded, setExp]  = useState(null)
   const [itemsMap, setItemsMap] = useState({})
 
+  const [retentionDays, setRetentionDays] = useState(6)
+
+  // Auto-purge boat notes older than the retention window (default 6 days).
+  // Runs once before the first load so stale notes never linger.
+  const purgeExpired = async () => {
+    const { data: s } = await supabase.from('settings').select('value').eq('key', 'boat_note_retention_days').maybeSingle()
+    const days = Math.max(0, Number(s?.value) || 6)
+    setRetentionDays(days)
+    if (days <= 0) return
+    const cutoff = new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate() - days)
+    const cutoffStr = cutoff.toISOString().split('T')[0]
+    // boat_note_items cascade-delete via FK ON DELETE CASCADE.
+    await supabase.from('boat_notes').delete().lt('note_date', cutoffStr)
+  }
+
   const load = async () => {
     setLoad(true)
+    await purgeExpired()
     let q = supabase.from('boat_notes').select('*').order('note_date', { ascending: false }).limit(100)
     if (range.from) q = q.gte('note_date', range.from)
     if (range.to)   q = q.lte('note_date', range.to)
@@ -427,6 +443,15 @@ function BoatNoteHistory() {
     setNotes(data || []); setLoad(false)
   }
   useEffect(() => { load() }, [range.from, range.to])
+
+  const deleteNote = async (id, label) => {
+    if (!confirm(`Delete boat note “${label || 'Boat note'}”? This removes its received items record. This cannot be undone.`)) return
+    const { error } = await supabase.from('boat_notes').delete().eq('id', id)
+    if (error) { toast.error(error.message); return }
+    setNotes(prev => prev.filter(n => n.id !== id))
+    if (expanded === id) setExp(null)
+    toast.success('Boat note deleted')
+  }
 
   const openNote = async (id) => {
     if (expanded === id) { setExp(null); return }
@@ -446,7 +471,8 @@ function BoatNoteHistory() {
         <label className="text-xs text-slate-400">To</label>
         <input type="date" value={range.to} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} className="input text-sm py-1.5 w-auto" />
         {(range.from || range.to) && <button onClick={() => setRange({ from: '', to: '' })} className="btn-ghost btn-sm"><X className="w-4 h-4" /> Clear</button>}
-        <button onClick={load} className="btn-ghost btn-sm ml-auto"><RefreshCw className="w-4 h-4" /></button>
+        <span className="ml-auto text-[11px] text-slate-500">Notes auto-delete after {retentionDays} day{retentionDays !== 1 ? 's' : ''}</span>
+        <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
       </div>
 
       {loading ? (
@@ -455,19 +481,23 @@ function BoatNoteHistory() {
         <div className="card text-center text-slate-500 py-12">No boat notes posted yet</div>
       ) : notes.map(n => (
         <div key={n.id} className="card p-0 overflow-hidden">
-          <button onClick={() => openNote(n.id)} className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-700/30 text-left">
-            <div className="flex items-center gap-3 min-w-0">
+          <div className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-700/30">
+            <button onClick={() => openNote(n.id)} className="flex items-center gap-3 min-w-0 text-left flex-1">
               {expanded === n.id ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
               <div className="min-w-0">
                 <p className="font-medium text-slate-100 truncate">{n.label || 'Boat note'}</p>
                 <p className="text-xs text-slate-500">{n.note_date} · {n.delivery_day}</p>
               </div>
-            </div>
+            </button>
             <div className="flex items-center gap-2 shrink-0">
               {(n.departments || []).slice(0, 4).map(d => <Badge key={d} variant="blue">{d}</Badge>)}
               <Badge variant="teal">{n.posted_items}/{n.total_items} posted</Badge>
+              <button onClick={() => deleteNote(n.id, n.label)} title="Delete boat note"
+                className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
+                <Trash2 className="w-4 h-4" />
+              </button>
             </div>
-          </button>
+          </div>
           {expanded === n.id && (
             <div className="border-t border-slate-700 overflow-x-auto">
               <NoteItemsTable items={itemsMap[n.id] || []} />

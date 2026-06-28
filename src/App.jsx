@@ -29,6 +29,7 @@ const Receiving     = lazy(() => import('./pages/Receiving'))
 const BoatNote      = lazy(() => import('./pages/BoatNote'))
 const Movement      = lazy(() => import('./pages/Movement'))
 const Expiry        = lazy(() => import('./pages/Expiry'))
+const Fuel          = lazy(() => import('./pages/Fuel'))
 
 function PageLoader() {
   return (
@@ -85,6 +86,7 @@ export default function App() {
                   <Route path="issuance-scan" element={<IssuanceScan />}  />
                   <Route path="receiving"     element={<Receiving />}     />
                   <Route path="boat-note"     element={<BoatNote />}      />
+                  <Route path="fuel"          element={<Fuel />}          />
                   <Route path="transfers"     element={<Transfers />}     />
                   <Route path="waste"         element={<Waste />}         />
                   <Route path="stocktake"     element={<Stocktake />}     />

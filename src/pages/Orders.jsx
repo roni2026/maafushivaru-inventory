@@ -82,9 +82,15 @@ export default function Orders() {
   const [showCSV,   setShowCSV]  = useState(false)
 
   // ── Order-quantity controls ────────────────────────────────────────────────
-  const [multiplier,   setMultiplier]   = useState(1)   // ×1..×5 on weekly average
   const [backupWeeks,  setBackupWeeks]  = useState(0)   // extra weeks of safety stock
   const [subtractStock,setSubtractStock]= useState(true)// net need vs gross target
+
+  // Export layout: 'normal' (regular sorting) | 'category' (Beverage → Food → General)
+  const [exportMode, setExportMode] = useState('normal')
+
+  // Thresholds (from Settings): per-category MAX order qty + usual order UOM.
+  // A blank / 0 max means "no cap" for that category.
+  const [thresholds, setThresholds] = useState({ Food: null, General: null, Beverage: null, uom: 'pcs' })
 
   // ── List filters (category / sub-category / needed) ────────────────────────
   const [catFilter,  setCatFilter]  = useState('')   // '' | Food | Beverage | General
@@ -153,6 +159,15 @@ export default function Orders() {
       const { data: settings } = (await supabase.from('settings').select('key,value')) || {}
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
+      // Per-category order caps + usual UOM (blank = no cap).
+      const numOrNull = (v) => { const n = Number(v); return isFinite(n) && n > 0 ? n : null }
+      const caps = {
+        Food:     numOrNull(smap.order_max_food),
+        General:  numOrNull(smap.order_max_general),
+        Beverage: numOrNull(smap.order_max_beverage),
+        uom:      smap.order_default_uom || 'pcs',
+      }
+      setThresholds(caps)
       // Fetch items. Try WITH the store join first; if that yields nothing
       // (e.g. the items→stores relationship can't be embedded on this DB),
       // retry a plain select so the order can still be generated.
@@ -218,9 +233,13 @@ export default function Orders() {
         // rarely issue on the supply day); backup weeks add safety cover. The
         // result is rounded UP to a whole number of packs.
         const pack = Number(item.pack_size) || 1
-        const target = avgWeekly * multiplier * (1 + backupWeeks)
+        const category = item.stores?.category || ''
+        const target = avgWeekly * (1 + backupWeeks)
         const net = subtractStock ? target - Number(item.current_stock || 0) : target
-        const suggested = roundToPack(Math.max(0, net), pack)
+        let suggested = roundToPack(Math.max(0, net), pack)
+        // Apply per-category maximum (threshold) if one is configured.
+        const capRaw = caps[category]
+        if (capRaw != null) suggested = Math.min(suggested, roundToPack(capRaw, pack))
         const origin = item.origin || classifyOrigin(item.name)
         return {
           id: item.id, part_number: item.part_number, name: item.name,
@@ -259,7 +278,7 @@ export default function Orders() {
       setRows([])
     }
     setLoading(false)
-  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, multiplier, backupWeeks, subtractStock])
+  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, backupWeeks, subtractStock])
 
   // ── Add undelivered to current order ──────────────────────
   const addPendingToOrder = () => {
@@ -364,13 +383,43 @@ export default function Orders() {
     setRows(prev => prev.map(r => {
       if (r._manuallyAdded || r._fromPending || r._edited) return r
       const pack = Number(r.pack) || 1
-      const target = (Number(r.avgWeekly) || 0) * multiplier * (1 + backupWeeks)
+      const target = (Number(r.avgWeekly) || 0) * (1 + backupWeeks)
       const net = subtractStock ? target - Number(r.current_stock || 0) : target
-      const suggested = roundToPack(Math.max(0, net), pack)
+      let suggested = roundToPack(Math.max(0, net), pack)
+      const cap = thresholds[r.category]
+      if (cap != null) suggested = Math.min(suggested, roundToPack(cap, pack))
       return { ...r, suggested, ordered: suggested, selected: suggested > 0 ? true : r.selected }
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [multiplier, backupWeeks, subtractStock])
+  }, [backupWeeks, subtractStock, thresholds])
+
+  // ── Build export groups: 'normal' = by sub-category (store), 'category' =
+  //    by main category in fixed order Beverage → Food → General. ──────────
+  const CATEGORY_ORDER = ['Beverage', 'Food', 'General']
+  const buildGroups = (list) => {
+    if (exportMode === 'category') {
+      const grouped = {}
+      // seed in the required display order so iteration follows Beverage→Food→General
+      for (const c of CATEGORY_ORDER) {
+        if (list.some(r => (r.category || 'Uncategorised') === c)) grouped[c] = []
+      }
+      for (const r of list) {
+        const key = r.category || 'Uncategorised'
+        ;(grouped[key] = grouped[key] || []).push(r)
+      }
+      // within each category, sort by sub-category then name for a clean sheet
+      for (const k of Object.keys(grouped)) {
+        grouped[k].sort((a, b) => (a.store || '').localeCompare(b.store || '') || (a.name || '').localeCompare(b.name || ''))
+      }
+      return grouped
+    }
+    // normal — group by sub-category (store), regular alphabetical sorting
+    const grouped = {}
+    for (const r of [...list].sort((a, b) => (a.store || '').localeCompare(b.store || '') || (a.name || '').localeCompare(b.name || ''))) {
+      ;(grouped[r.store || 'Unassigned'] = grouped[r.store || 'Unassigned'] || []).push(r)
+    }
+    return grouped
+  }
 
   // ── Export PDF ─────────────────────────────────────────────
   const exportPDF = async () => {
@@ -388,7 +437,7 @@ export default function Orders() {
       doc.text(resortName, 14, 12)
       doc.setFontSize(13); doc.setFont('helvetica','normal')
       doc.text(`Order for ${delivDay} – ${delivDate}`, 14, 21)
-      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
+      const grouped = buildGroups(orderRows)
       let y = 36
       for (const [store, items] of Object.entries(grouped)) {
         doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold')
@@ -413,7 +462,7 @@ export default function Orders() {
     if (!orderRows.length || !delivery) { toast.error('No selected items to export'); return }
     setExportingXlsx(true)
     try {
-      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
+      const grouped = buildGroups(orderRows)
       const delivDay  = delivery.date.toLocaleDateString('en-US', { weekday:'long' })
       const delivDate = delivery.date.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
       await exportOrderExcel(grouped, {
@@ -604,15 +653,41 @@ export default function Orders() {
               </div>
             </div>
 
-            {/* Order quantity controls: multiplier · backup weeks · subtract stock */}
-            <div className="flex items-center gap-4 flex-wrap border-t border-slate-700/50 pt-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Multiply order</span>
-                <select value={multiplier} onChange={e => setMultiplier(Number(e.target.value))} className="input text-sm w-auto py-1.5">
-                  {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>×{n}</option>)}
-                </select>
-                <span className="text-xs text-slate-500 hidden sm:inline">× weekly average (e.g. ×5 ≈ a week from daily usage)</span>
+            {/* Category filter + export layout */}
+            <div className="flex items-center justify-between gap-3 flex-wrap border-t border-slate-700/50 pt-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Category</span>
+                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+                  {[{k:'',l:'All'}, {k:'Beverage',l:'Beverage'}, {k:'Food',l:'Food'}, {k:'General',l:'General'}].map(c => (
+                    <button key={c.k} onClick={() => setCatFilter(c.k)}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${catFilter === c.k ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                      {c.l}
+                    </button>
+                  ))}
+                </div>
+                {subOptions.length > 0 && (
+                  <select value={subFilter} onChange={e => setSubFilter(e.target.value)} className="input text-sm w-auto py-1.5">
+                    <option value="">All sub-categories</option>
+                    {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                )}
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Export layout</span>
+                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
+                  {[{k:'normal',l:'Normal'}, {k:'category',l:'By Category'}].map(m => (
+                    <button key={m.k} onClick={() => setExportMode(m.k)}
+                      title={m.k === 'category' ? 'Beverage → Food → General' : 'Regular sorting by sub-category'}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${exportMode === m.k ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                      {m.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Order quantity controls: backup weeks · subtract stock */}
+            <div className="flex items-center gap-4 flex-wrap border-t border-slate-700/50 pt-3">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400 uppercase tracking-wide">Backup weeks</span>
                 <select value={backupWeeks} onChange={e => setBackupWeeks(Number(e.target.value))} className="input text-sm w-auto py-1.5">
@@ -694,7 +769,7 @@ export default function Orders() {
               <div className="card">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <p className="text-xs text-slate-400">
-                    Order = Avg/Wk × {multiplier} × {1 + backupWeeks}wk{subtractStock ? ' − Stock' : ''}, rounded to packs.
+                    Order = Avg/Wk × {1 + backupWeeks}wk{subtractStock ? ' − Stock' : ''}, capped by category max, rounded to packs.
                     {' '}<span className="text-slate-200">Highlighted = needed (in order)</span>, <span className="opacity-50">faded = not needed</span>.
                   </p>
                   <Button onClick={openAddItem} variant="secondary"><PlusCircle className="w-4 h-4" /> Add Item Manually</Button>

@@ -20,6 +20,13 @@ const DEFAULTS = {
   brevo_sender_name:      'Roni — Store Assistant',
   report_recipient_email: '',
   report_recipient_name:  'Manager',
+  // Order generation: per-category maximum order qty + usual order UOM
+  order_max_food:         '',
+  order_max_general:      '',
+  order_max_beverage:     '',
+  order_default_uom:      'pcs',
+  // Boat note retention (auto-delete after N days)
+  boat_note_retention_days: '6',
 }
 
 export default function Settings() {
@@ -116,6 +123,28 @@ export default function Settings() {
           <option value="MVR">MVR (Rf)</option>
           <option value="AED">AED (د.إ)</option>
         </Select>
+      </div>
+
+      {/* ── Orders & Boat Notes ──────────────────── */}
+      <div className="card space-y-4">
+        <div>
+          <p className="font-display text-base font-semibold text-slate-100">Order Generation & Boat Notes</p>
+          <p className="text-xs text-slate-400 mt-0.5">Cap how much of any item is ordered per category, set the usual order unit, and control boat-note retention.</p>
+        </div>
+
+        <p className="text-sm font-medium text-slate-300">Maximum order quantity per item (by category)</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Input label="Beverage max" type="number" min="0" value={form.order_max_beverage} onChange={f('order_max_beverage')} placeholder="No cap" />
+          <Input label="Food max"     type="number" min="0" value={form.order_max_food}     onChange={f('order_max_food')}     placeholder="No cap" />
+          <Input label="General max"  type="number" min="0" value={form.order_max_general}  onChange={f('order_max_general')}  placeholder="No cap" />
+        </div>
+        <p className="text-xs text-slate-500">Leave blank for no limit. The generated order qty for an item is never higher than its category's max.</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Input label="Usual order unit (UOM)" value={form.order_default_uom} onChange={f('order_default_uom')} placeholder="pcs" />
+          <Input label="Boat note retention (days)" type="number" min="0" value={form.boat_note_retention_days} onChange={f('boat_note_retention_days')} placeholder="6" />
+        </div>
+        <p className="text-xs text-slate-500">Boat notes are automatically deleted this many days after their note date (0 = keep forever). You can also delete any note manually.</p>
       </div>
 
       {/* ── Email Reports (Brevo) ────────────────────── */}
