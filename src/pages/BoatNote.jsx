@@ -20,6 +20,38 @@ const rid = () => Math.random().toString(36).slice(2)
 // ── Upload flow stages ────────────────────────────────────────────────────
 const STAGE = { UPLOAD: 'upload', PREVIEW: 'preview' }
 
+// Per-line outcome badge.
+function StatusBadge({ status }) {
+  if (status === 'received')    return <Badge variant="green">received</Badge>
+  if (status === 'not_arrived') return <Badge variant="red">not arrived</Badge>
+  if (status === 'wrong_item')  return <Badge variant="orange">wrong item</Badge>
+  if (status === 'skipped')     return <Badge variant="orange">unmatched</Badge>
+  return <Badge variant="gray">pending</Badge>
+}
+
+// Broad department/store selector (chips). Tick one or more; empty = all.
+function DeptFilter({ depts, picked, onToggle, onAll }) {
+  if (!depts.length) return null
+  return (
+    <div className="flex items-center gap-2 flex-wrap px-4 py-2.5 border-b border-slate-700 bg-slate-800/40">
+      <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide mr-1">Store / Dept</span>
+      <button onClick={onAll}
+        className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${!picked.length ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+        All
+      </button>
+      {depts.map(d => {
+        const on = picked.includes(d)
+        return (
+          <button key={d} onClick={() => onToggle(d)}
+            className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+            {on ? '✓ ' : ''}{d}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function BoatNote() {
   const [tab, setTab] = useState('upload')   // 'upload' | 'history' | 'samples'
   return (
@@ -38,6 +70,10 @@ export default function BoatNote() {
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'history' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
             <HistoryIcon className="w-4 h-4 inline mr-1.5" />History
           </button>
+          <button onClick={() => setTab('notarrived')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'notarrived' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+            <AlertTriangle className="w-4 h-4 inline mr-1.5" />Not Arrived
+          </button>
           <button onClick={() => setTab('samples')}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'samples' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
             <FlaskConical className="w-4 h-4 inline mr-1.5" />Samples
@@ -46,6 +82,7 @@ export default function BoatNote() {
       </div>
       {tab === 'upload' ? <UploadFlow onSaved={() => setTab('history')} />
         : tab === 'samples' ? <SamplesTab />
+        : tab === 'notarrived' ? <NotArrivedTab />
         : <BoatNoteHistory />}
     </div>
   )
@@ -252,6 +289,7 @@ function BoatNoteHistory() {
   const [itemsMap, setItemsMap] = useState({})
   const [inventory, setInventory] = useState([])
   const [receiving, setReceiving] = useState(null)   // boat_note_item being received
+  const [issuing, setIssuing]     = useState(null)   // boat_note_item being flagged not-arrived/wrong
 
   useEffect(() => {
     selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,expiry_date,origin').eq('active', true))
@@ -287,7 +325,7 @@ function BoatNoteHistory() {
     toast.success('Boat note deleted')
   }
 
-  // Called after an item is successfully received into inventory.
+  // Called after a line changes (received, or flagged not-arrived/wrong).
   const onReceived = (noteId, lineId, patch, postedDelta) => {
     setItemsMap(m => ({ ...m, [noteId]: (m[noteId] || []).map(it => it.id === lineId ? { ...it, ...patch } : it) }))
     if (postedDelta) {
@@ -329,9 +367,11 @@ function BoatNoteHistory() {
             </div>
           </div>
           {expanded === n.id && (
-            <div className="border-t border-slate-700 overflow-x-auto">
-              <NoteItemsTable items={itemsMap[n.id] || []} onReceive={(line) => setReceiving({ note: n, line })} />
-            </div>
+            <NoteItemsTable
+              items={itemsMap[n.id] || []}
+              onReceive={(line) => setReceiving({ note: n, line })}
+              onIssue={(line) => setIssuing({ note: n, line })}
+            />
           )}
         </div>
       ))}
@@ -345,50 +385,76 @@ function BoatNoteHistory() {
           onDone={(patch, postedDelta) => { onReceived(receiving.note.id, receiving.line.id, patch, postedDelta); setReceiving(null) }}
         />
       )}
+
+      {issuing && (
+        <IssueItemModal
+          line={issuing.line}
+          onClose={() => setIssuing(null)}
+          onDone={(patch) => { onReceived(issuing.note.id, issuing.line.id, patch, 0); setIssuing(null) }}
+        />
+      )}
     </div>
   )
 }
 
-// Sortable per-note items table with a "Receive" action per line.
-function NoteItemsTable({ items, onReceive }) {
-  const { sorted, thProps } = useSort(items, 'line_no', 'asc')
+// Sortable per-note items table with department/store filter + per-line actions
+// (Receive into inventory, or flag as not-arrived / wrong item).
+function NoteItemsTable({ items, onReceive, onIssue }) {
+  const [picked, setPicked] = useState([])   // selected departments (empty = all)
+  const depts = useMemo(() => [...new Set(items.map(i => i.department).filter(Boolean))].sort(), [items])
+  const filtered = useMemo(() => picked.length ? items.filter(i => picked.includes(i.department)) : items, [items, picked])
+  const { sorted, thProps } = useSort(filtered, 'line_no', 'asc')
+  const toggle = (d) => setPicked(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])
+
   return (
-    <Table>
-      <Thead><tr>
-        <Th {...thProps('line_no')}>#</Th>
-        <Th {...thProps('part_number')}>Code</Th>
-        <Th {...thProps('product_name')}>Product</Th>
-        <Th {...thProps('department')}>Dept</Th>
-        <Th {...thProps('unit')}>Unit</Th>
-        <Th {...thProps('ordered_qty')}>Ordered</Th>
-        <Th {...thProps('received_qty')}>Received</Th>
-        <Th {...thProps('expiry_date')}>Expiry</Th>
-        <Th {...thProps('status')}>Status</Th>
-        <Th></Th>
-      </tr></Thead>
-      <Tbody>
-        {sorted.map(it => (
-          <Tr key={it.id} className={it.is_sample ? 'bg-purple-900/10' : ''}>
-            <Td className="text-slate-500 text-xs">{it.line_no}</Td>
-            <Td className="font-mono text-xs text-[#00AEEF]">{it.part_number}</Td>
-            <Td className="text-slate-200 text-sm">
-              <span className="inline-flex items-center gap-1.5">{it.product_name}{it.is_sample && <Badge variant="purple">sample</Badge>}</span>
-            </Td>
-            <Td className="text-slate-400 text-xs">{it.department}</Td>
-            <Td className="text-slate-400 text-xs">{it.unit}</Td>
-            <Td className="text-slate-400 text-xs">{it.ordered_qty}</Td>
-            <Td className="text-slate-200">{it.received_qty ?? '—'}</Td>
-            <Td className="text-slate-400 text-xs">{it.expiry_date || '—'}</Td>
-            <Td>{it.status === 'received' ? <Badge variant="green">received</Badge> : it.status === 'skipped' ? <Badge variant="orange">unmatched</Badge> : <Badge variant="gray">pending</Badge>}</Td>
-            <Td>
-              {it.status === 'received'
-                ? <span className="text-xs text-green-400 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> done</span>
-                : <Button size="sm" variant="secondary" onClick={() => onReceive(it)}><PackageCheck className="w-4 h-4" /> Receive</Button>}
-            </Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
+    <div className="border-t border-slate-700">
+      <DeptFilter depts={depts} picked={picked} onToggle={toggle} onAll={() => setPicked([])} />
+      <div className="overflow-x-auto">
+        <Table>
+          <Thead><tr>
+            <Th {...thProps('line_no')}>#</Th>
+            <Th {...thProps('part_number')}>Code</Th>
+            <Th {...thProps('product_name')}>Product</Th>
+            <Th {...thProps('department')}>Dept</Th>
+            <Th {...thProps('unit')}>Unit</Th>
+            <Th {...thProps('ordered_qty')}>Ordered</Th>
+            <Th {...thProps('received_qty')}>Received</Th>
+            <Th {...thProps('expiry_date')}>Expiry</Th>
+            <Th {...thProps('status')}>Status</Th>
+            <Th></Th>
+          </tr></Thead>
+          <Tbody>
+            {sorted.map(it => (
+              <Tr key={it.id} className={it.is_sample ? 'bg-purple-900/10' : ''}>
+                <Td className="text-slate-500 text-xs">{it.line_no}</Td>
+                <Td className="font-mono text-xs text-[#00AEEF]">{it.part_number}</Td>
+                <Td className="text-slate-200 text-sm">
+                  <span className="inline-flex items-center gap-1.5">{it.product_name}{it.is_sample && <Badge variant="purple">sample</Badge>}</span>
+                  {it.note && <p className="text-xs text-amber-400/80 mt-0.5">⚠ {it.note}</p>}
+                </Td>
+                <Td className="text-slate-400 text-xs">{it.department}</Td>
+                <Td className="text-slate-400 text-xs">{it.unit}</Td>
+                <Td className="text-slate-400 text-xs">{it.ordered_qty}</Td>
+                <Td className="text-slate-200">{it.received_qty ?? '—'}</Td>
+                <Td className="text-slate-400 text-xs">{it.expiry_date || '—'}</Td>
+                <Td><StatusBadge status={it.status} /></Td>
+                <Td>
+                  {it.status === 'received' ? (
+                    <span className="text-xs text-green-400 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> done</span>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" variant="secondary" onClick={() => onReceive(it)}><PackageCheck className="w-4 h-4" /> Receive</Button>
+                      <button onClick={() => onIssue(it)} title="Not arrived / wrong item"
+                        className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-900/20"><AlertTriangle className="w-4 h-4" /></button>
+                    </div>
+                  )}
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </div>
+    </div>
   )
 }
 
@@ -542,6 +608,187 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
         </div>
       </div>
     </Modal>
+  )
+}
+
+// ── Flag a line as NOT ARRIVED or WRONG ITEM, with a note ────────────────────
+function IssueItemModal({ line, onClose, onDone }) {
+  const [kind, setKind] = useState(line.status === 'wrong_item' ? 'wrong_item' : 'not_arrived')
+  const [note, setNote] = useState(line.note || '')
+  const [busy, setBusy] = useState(false)
+
+  const save = async () => {
+    setBusy(true)
+    try {
+      const patch = { status: kind, note: note.trim() || null }
+      const { error } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
+      if (error) throw error
+      toast.success(kind === 'not_arrived' ? 'Marked as not arrived' : 'Marked as wrong item')
+      onDone(patch)
+    } catch (e) { toast.error(e.message) }
+    setBusy(false)
+  }
+
+  return (
+    <Modal isOpen onClose={onClose} title="Report a delivery problem" size="sm"
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="danger" loading={busy} onClick={save}><AlertTriangle className="w-4 h-4" /> Save</Button>
+      </>}>
+      <div className="space-y-4">
+        <div className="bg-slate-700/30 rounded-lg p-3">
+          <p className="text-sm text-slate-100 font-medium">{line.product_name}</p>
+          <p className="text-xs text-slate-400 mt-0.5">Code <span className="font-mono text-[#00AEEF]">{line.part_number || '—'}</span> · {line.department || '—'} · ordered {line.ordered_qty} {line.unit}</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={() => setKind('not_arrived')}
+            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'not_arrived' ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+            Not arrived
+          </button>
+          <button onClick={() => setKind('wrong_item')}
+            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'wrong_item' ? 'bg-orange-600/20 border-orange-500 text-orange-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+            Wrong item
+          </button>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Note</label>
+          <textarea rows={3} value={note} onChange={e => setNote(e.target.value)}
+            placeholder={kind === 'not_arrived' ? 'e.g. 2 cases short — supplier to redeliver Thursday' : 'e.g. sent 1.5L bottles instead of 500mL'}
+            className="input w-full mt-1.5 text-sm" />
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// NOT ARRIVED — every line flagged not-arrived / wrong item, across all notes,
+// filterable by store/department so you can see exactly what is outstanding.
+// ════════════════════════════════════════════════════════════════════════════
+function NotArrivedTab() {
+  const [rows, setRows]     = useState([])
+  const [loading, setLoad]  = useState(true)
+  const [range, setRange]   = useState({ from: '', to: '' })
+  const [search, setSearch] = useState('')
+  const [picked, setPicked] = useState([])
+
+  const load = async () => {
+    setLoad(true)
+    const { data } = await selectAll(() =>
+      supabase.from('boat_note_items')
+        .select('*, boat_notes(note_date,label,delivery_day)')
+        .in('status', ['not_arrived', 'wrong_item']))
+    let list = (data || []).map(r => ({
+      ...r,
+      note_date:  r.boat_notes?.note_date || null,
+      note_label: r.boat_notes?.label || '',
+    }))
+    list.sort((a, b) => String(b.note_date || '').localeCompare(String(a.note_date || '')))
+    setRows(list); setLoad(false)
+  }
+  useEffect(() => { load() }, [])
+
+  const resolve = async (r) => {
+    if (!confirm('Move this line back to "pending" (problem resolved)?')) return
+    const { error } = await supabase.from('boat_note_items').update({ status: 'pending' }).eq('id', r.id)
+    if (error) { toast.error(error.message); return }
+    setRows(list => list.filter(x => x.id !== r.id))
+    toast.success('Moved back to pending')
+  }
+
+  const depts = useMemo(() => [...new Set(rows.map(r => r.department).filter(Boolean))].sort(), [rows])
+  const toggle = (d) => setPicked(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])
+
+  const filtered = useMemo(() => rows.filter(r => {
+    if (picked.length && !picked.includes(r.department)) return false
+    if (range.from && (r.note_date || '') < range.from) return false
+    if (range.to   && (r.note_date || '') > range.to)   return false
+    if (search) {
+      const q = search.toLowerCase()
+      if (!(`${r.product_name} ${r.part_number} ${r.supplier} ${r.note_label} ${r.note}`.toLowerCase().includes(q))) return false
+    }
+    return true
+  }), [rows, picked, range, search])
+
+  const { sorted, thProps } = useSort(filtered, 'note_date', 'desc')
+
+  return (
+    <div className="space-y-4">
+      <div className="bg-red-900/15 border border-red-700/30 rounded-lg p-4 text-sm text-red-200">
+        <p className="font-semibold flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4" /> Outstanding deliveries</p>
+        <p>Every boat-note line marked <strong>not arrived</strong> or <strong>wrong item</strong>. Filter by store / department to see what is still outstanding for each store.</p>
+      </div>
+
+      <div className="card-sm flex items-center gap-3 flex-wrap">
+        <CalendarDays className="w-4 h-4 text-slate-400" />
+        <label className="text-xs text-slate-400">From</label>
+        <input type="date" value={range.from} onChange={e => setRange(r => ({ ...r, from: e.target.value }))} className="input text-sm py-1.5 w-auto" />
+        <label className="text-xs text-slate-400">To</label>
+        <input type="date" value={range.to} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} className="input text-sm py-1.5 w-auto" />
+        <div className="flex items-center gap-1.5 ml-auto">
+          <Search className="w-4 h-4 text-slate-400" />
+          <input placeholder="Search…" value={search} onChange={e => setSearch(e.target.value)} className="input text-sm py-1.5 w-44" />
+        </div>
+        <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+      </div>
+
+      {depts.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide mr-1">Store / Dept</span>
+          <button onClick={() => setPicked([])}
+            className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${!picked.length ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>All</button>
+          {depts.map(d => {
+            const on = picked.includes(d)
+            return (
+              <button key={d} onClick={() => toggle(d)}
+                className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+                {on ? '✓ ' : ''}{d}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="card text-center text-slate-500 py-12">Nothing outstanding 🎉</div>
+      ) : (
+        <>
+          <p className="text-xs text-slate-400">{filtered.length} outstanding line{filtered.length !== 1 ? 's' : ''}</p>
+          <div className="card overflow-x-auto p-0">
+            <Table>
+              <Thead><tr>
+                <Th {...thProps('note_date')}>Date</Th>
+                <Th {...thProps('note_label')}>Boat Note</Th>
+                <Th {...thProps('department')}>Store / Dept</Th>
+                <Th {...thProps('part_number')}>Code</Th>
+                <Th {...thProps('product_name')}>Product</Th>
+                <Th {...thProps('ordered_qty')}>Ordered</Th>
+                <Th {...thProps('status')}>Problem</Th>
+                <Th>Note</Th>
+                <Th></Th>
+              </tr></Thead>
+              <Tbody>
+                {sorted.map(r => (
+                  <Tr key={r.id}>
+                    <Td className="text-slate-300 text-xs whitespace-nowrap">{r.note_date || '—'}</Td>
+                    <Td className="text-slate-300 text-sm">{r.note_label || '—'}</Td>
+                    <Td><Badge variant="blue">{r.department || '—'}</Badge></Td>
+                    <Td className="font-mono text-xs text-[#00AEEF]">{r.part_number}</Td>
+                    <Td className="text-slate-100 text-sm">{r.product_name}</Td>
+                    <Td className="text-slate-400 text-xs">{r.ordered_qty} {r.unit}</Td>
+                    <Td><StatusBadge status={r.status} /></Td>
+                    <Td className="text-slate-400 text-xs max-w-[220px]">{r.note || '—'}</Td>
+                    <Td><Button size="sm" variant="ghost" onClick={() => resolve(r)}><CheckCircle2 className="w-4 h-4" /> Resolve</Button></Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </div>
+        </>
+      )}
+    </div>
   )
 }
 
