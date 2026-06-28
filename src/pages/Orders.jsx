@@ -82,19 +82,16 @@ export default function Orders() {
   const [showCSV,   setShowCSV]  = useState(false)
 
   // ── Order-quantity controls ────────────────────────────────────────────────
+  const [multiplier,   setMultiplier]   = useState(1)   // ×1..×5 on weekly average
   const [backupWeeks,  setBackupWeeks]  = useState(0)   // extra weeks of safety stock
   const [subtractStock,setSubtractStock]= useState(true)// net need vs gross target
-
-  // Export layout: 'normal' (regular sorting) | 'category' (Beverage → Food → General)
-  const [exportMode, setExportMode] = useState('normal')
-
-  // Thresholds (from Settings): per-category MAX order qty + usual order UOM.
-  // A blank / 0 max means "no cap" for that category.
-  const [thresholds, setThresholds] = useState({ Food: null, General: null, Beverage: null, uom: 'pcs' })
 
   // ── List filters (category / sub-category / needed) ────────────────────────
   const [catFilter,  setCatFilter]  = useState('')   // '' | Food | Beverage | General
   const [subFilter,  setSubFilter]  = useState('')   // store (sub-category) name
+  // Tick-selectable categories that get included when generating an order.
+  const [genCats,    setGenCats]    = useState({ Food: true, General: true, Beverage: true })
+  const toggleGenCat = (c) => setGenCats(s => ({ ...s, [c]: !s[c] }))
   const [needFilter, setNeedFilter] = useState('all')// all | selected | unselected
 
   // ── Pending (undelivered) from last orders ─────────────────
@@ -123,11 +120,6 @@ export default function Orders() {
   const [savedQty,       setSavedQty]         = useState('')
   const [savedNote,      setSavedNote]        = useState('')
   const [addingToOrder,  setAddingToOrder]    = useState(false)
-
-  // ── Manual Order builder (search items → add qty → export) ────────────────
-  const [manualRows,   setManualRows]   = useState([])
-  const [manualSearch, setManualSearch] = useState('')
-  const [manualExporting, setManualExporting] = useState(false)
 
   // ── Load all items for manual add ─────────────────────────
   const loadAllItems = async () => {
@@ -164,42 +156,30 @@ export default function Orders() {
       const { data: settings } = (await supabase.from('settings').select('key,value')) || {}
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
-      // Per-category order caps + usual UOM (blank = no cap).
-      const numOrNull = (v) => { const n = Number(v); return isFinite(n) && n > 0 ? n : null }
-      const caps = {
-        Food:     numOrNull(smap.order_max_food),
-        General:  numOrNull(smap.order_max_general),
-        Beverage: numOrNull(smap.order_max_beverage),
-        uom:      smap.order_default_uom || 'pcs',
+      // Fetch items. Try WITH the store join first; if that yields nothing
+      // (e.g. the items→stores relationship can't be embedded on this DB),
+      // retry a plain select so the order can still be generated.
+      let allItems = ((await selectAll(() => supabase.from('items').select('*, stores(name,category)'))) || {}).data
+      if (!allItems || allItems.length === 0) {
+        allItems = (((await selectAll(() => supabase.from('items').select('*'))) || {}).data) || []
       }
-      setThresholds(caps)
-      // Fetch items as ROBUSTLY as possible. We do NOT rely on the items→stores
-      // embed (which silently returns an empty/erroring set on some databases and
-      // was the cause of the "No items found" message). Instead we fetch items
-      // with a plain select and join the store name/category in JS.
-      let allItems = []
-      // a) paginated plain select (handles >1000 rows)
-      const plain = await selectAll(() => supabase.from('items').select('*'))
-      if (plain?.data?.length) allItems = plain.data
-      // b) last-resort direct select if pagination wrapper failed for any reason
-      if (allItems.length === 0) {
-        const direct = await supabase.from('items').select('*').limit(10000)
-        if (direct?.data?.length) allItems = direct.data
-      }
-      // Attach store name + category from the stores table (client-side join).
-      try {
-        const { data: storesData } = await supabase.from('stores').select('id,name,category')
-        const storeMap = new Map((storesData || []).map(st => [st.id, st]))
-        allItems = allItems.map(i => ({ ...i, stores: i.stores || storeMap.get(i.store_id) || null }))
-      } catch { /* stores optional — proceed without category */ }
-
-      // Active unless explicitly deactivated. If that hides EVERY item
-      // (e.g. every row has active=false / NULL on this DB), fall back to all.
+      // Active unless explicitly deactivated. But if that would hide EVERY item
+      // (e.g. every row has active=false / NULL on this DB), fall back to the
+      // full list so the sheet is never empty when items actually exist.
       let items = allItems.filter(isActiveItem)
       if (items.length === 0 && allItems.length > 0) items = allItems
+      // Honour the ticked categories: only items in a selected category are
+      // included. Items with no resolvable category are kept (can't classify).
+      const activeCats = MAIN_CATEGORIES.filter(c => genCats[c])
+      if (activeCats.length && activeCats.length < MAIN_CATEGORIES.length) {
+        items = items.filter(it => {
+          const cat = it.stores?.category
+          return !cat || activeCats.includes(cat)
+        })
+      }
       console.info('[orders] generate — items fetched:', allItems.length, '· usable:', items.length)
       if (items.length === 0) {
-        toast.error('No items found. Add items in Inventory first, or use the Manual Order tab.')
+        toast.error('No items found. Add items in Inventory first.')
         setRows([]); setLoading(false); return
       }
 
@@ -250,13 +230,9 @@ export default function Orders() {
         // rarely issue on the supply day); backup weeks add safety cover. The
         // result is rounded UP to a whole number of packs.
         const pack = Number(item.pack_size) || 1
-        const category = item.stores?.category || ''
-        const target = avgWeekly * (1 + backupWeeks)
+        const target = avgWeekly * multiplier * (1 + backupWeeks)
         const net = subtractStock ? target - Number(item.current_stock || 0) : target
-        let suggested = roundToPack(Math.max(0, net), pack)
-        // Apply per-category maximum (threshold) if one is configured.
-        const capRaw = caps[category]
-        if (capRaw != null) suggested = Math.min(suggested, roundToPack(capRaw, pack))
+        const suggested = roundToPack(Math.max(0, net), pack)
         const origin = item.origin || classifyOrigin(item.name)
         return {
           id: item.id, part_number: item.part_number, name: item.name,
@@ -295,7 +271,7 @@ export default function Orders() {
       setRows([])
     }
     setLoading(false)
-  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, backupWeeks, subtractStock])
+  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, multiplier, backupWeeks, subtractStock, genCats])
 
   // ── Add undelivered to current order ──────────────────────
   const addPendingToOrder = () => {
@@ -400,43 +376,13 @@ export default function Orders() {
     setRows(prev => prev.map(r => {
       if (r._manuallyAdded || r._fromPending || r._edited) return r
       const pack = Number(r.pack) || 1
-      const target = (Number(r.avgWeekly) || 0) * (1 + backupWeeks)
+      const target = (Number(r.avgWeekly) || 0) * multiplier * (1 + backupWeeks)
       const net = subtractStock ? target - Number(r.current_stock || 0) : target
-      let suggested = roundToPack(Math.max(0, net), pack)
-      const cap = thresholds[r.category]
-      if (cap != null) suggested = Math.min(suggested, roundToPack(cap, pack))
+      const suggested = roundToPack(Math.max(0, net), pack)
       return { ...r, suggested, ordered: suggested, selected: suggested > 0 ? true : r.selected }
     }))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [backupWeeks, subtractStock, thresholds])
-
-  // ── Build export groups: 'normal' = by sub-category (store), 'category' =
-  //    by main category in fixed order Beverage → Food → General. ──────────
-  const CATEGORY_ORDER = ['Beverage', 'Food', 'General']
-  const buildGroups = (list) => {
-    if (exportMode === 'category') {
-      const grouped = {}
-      // seed in the required display order so iteration follows Beverage→Food→General
-      for (const c of CATEGORY_ORDER) {
-        if (list.some(r => (r.category || 'Uncategorised') === c)) grouped[c] = []
-      }
-      for (const r of list) {
-        const key = r.category || 'Uncategorised'
-        ;(grouped[key] = grouped[key] || []).push(r)
-      }
-      // within each category, sort by sub-category then name for a clean sheet
-      for (const k of Object.keys(grouped)) {
-        grouped[k].sort((a, b) => (a.store || '').localeCompare(b.store || '') || (a.name || '').localeCompare(b.name || ''))
-      }
-      return grouped
-    }
-    // normal — group by sub-category (store), regular alphabetical sorting
-    const grouped = {}
-    for (const r of [...list].sort((a, b) => (a.store || '').localeCompare(b.store || '') || (a.name || '').localeCompare(b.name || ''))) {
-      ;(grouped[r.store || 'Unassigned'] = grouped[r.store || 'Unassigned'] || []).push(r)
-    }
-    return grouped
-  }
+  }, [multiplier, backupWeeks, subtractStock])
 
   // ── Export PDF ─────────────────────────────────────────────
   const exportPDF = async () => {
@@ -454,7 +400,7 @@ export default function Orders() {
       doc.text(resortName, 14, 12)
       doc.setFontSize(13); doc.setFont('helvetica','normal')
       doc.text(`Order for ${delivDay} – ${delivDate}`, 14, 21)
-      const grouped = buildGroups(orderRows)
+      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
       let y = 36
       for (const [store, items] of Object.entries(grouped)) {
         doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold')
@@ -479,7 +425,7 @@ export default function Orders() {
     if (!orderRows.length || !delivery) { toast.error('No selected items to export'); return }
     setExportingXlsx(true)
     try {
-      const grouped = buildGroups(orderRows)
+      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
       const delivDay  = delivery.date.toLocaleDateString('en-US', { weekday:'long' })
       const delivDate = delivery.date.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
       await exportOrderExcel(grouped, {
@@ -597,72 +543,6 @@ export default function Orders() {
     !savedItemSearch || i.name.toLowerCase().includes(savedItemSearch.toLowerCase()) || i.part_number.toLowerCase().includes(savedItemSearch.toLowerCase())
   ).slice(0, 8)
 
-  // ── Manual Order handlers ───────────────────────────────────────
-  const openManual = async () => { setTab('manual'); await loadAllItems() }
-  const manualFiltered = allItems.filter(i =>
-    !manualSearch || i.name.toLowerCase().includes(manualSearch.toLowerCase()) ||
-    (i.part_number || '').toLowerCase().includes(manualSearch.toLowerCase())
-  ).slice(0, 10)
-  const addManual = (item) => {
-    setManualRows(prev => {
-      if (prev.some(r => r.id === item.id)) { toast('Already in the list', { icon: 'ℹ️' }); return prev }
-      return [...prev, {
-        id: item.id, part_number: item.part_number, name: item.name,
-        store: item.stores?.name || '', category: item.stores?.category || '',
-        unit: item.unit || thresholds.uom || 'pcs', pack: Number(item.pack_size) || 1,
-        current_stock: item.current_stock ?? 0, avgWeekly: '', suggested: '',
-        ordered: 1,
-      }]
-    })
-    setManualSearch('')
-  }
-  const setManualQtyRow = (id, val) => { const n = parseFloat(val); setManualRows(prev => prev.map(r => r.id === id ? { ...r, ordered: isNaN(n) ? 0 : Math.max(0, n) } : r)) }
-  const removeManual = (id) => setManualRows(prev => prev.filter(r => r.id !== id))
-
-  const exportManual = async (kind) => {
-    const list = manualRows.filter(r => Number(r.ordered) > 0)
-    if (!list.length) { toast.error('Add at least one item with a quantity'); return }
-    setManualExporting(true)
-    try {
-      const grouped = buildGroups(list)
-      const dl = nextDelivery()
-      const delivDay = dl.date.toLocaleDateString('en-US', { weekday: 'long' })
-      const delivDate = dl.date.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
-      if (kind === 'pdf') {
-        const { default: jsPDF }     = await import('jspdf')
-        const { default: autoTable } = await import('jspdf-autotable')
-        const doc = new jsPDF({ unit: 'mm', format: 'a4' })
-        const cyan = [0, 174, 239]
-        doc.setFillColor(...cyan); doc.rect(0, 0, 210, 28, 'F')
-        doc.setTextColor(255,255,255); doc.setFontSize(18); doc.setFont('helvetica','bold')
-        doc.text(resortName, 14, 12)
-        doc.setFontSize(13); doc.setFont('helvetica','normal')
-        doc.text('Manual Order', 14, 21)
-        let y = 36
-        for (const [grp, gItems] of Object.entries(grouped)) {
-          doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold')
-          doc.text(grp || 'Unassigned', 14, y)
-          autoTable(doc, {
-            startY: y + 3,
-            head: [['Part #','Item','Sub-Category','Unit','Order Qty']],
-            body: gItems.map(i => [i.part_number, i.name, i.store, i.unit, i.ordered]),
-            headStyles: { fillColor: cyan, fontSize: 8 }, styles: { fontSize: 8 },
-            alternateRowStyles: { fillColor: [248,250,252] },
-          })
-          y = doc.lastAutoTable.finalY + 8
-        }
-        doc.save(`Manual_Order_${dl.date.toISOString().split('T')[0]}.pdf`)
-      } else {
-        await exportOrderExcel(grouped, {
-          resortName, deliveryLabel: `Manual · ${delivDay} · ${delivDate}`,
-          filename: `Manual_Order_${dl.date.toISOString().split('T')[0]}.xlsx`,
-        })
-      }
-      toast.success('Manual order exported')
-    } catch (err) { toast.error('Export failed: ' + err.message) }
-    setManualExporting(false)
-  }
-
   // ── JSX ────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
@@ -690,8 +570,8 @@ export default function Orders() {
 
       {/* Tabs */}
       <div className="flex border-b border-slate-700">
-        {[{ key:'generate', label:'Generate Order' }, { key:'manual', label:'Manual Order' }, { key:'history', label:'Order History' }].map(({ key, label }) => (
-          <button key={key} onClick={() => key === 'history' ? switchToHistory() : key === 'manual' ? openManual() : setTab(key)}
+        {[{ key:'generate', label:'Generate Order' }, { key:'history', label:'Order History' }].map(({ key, label }) => (
+          <button key={key} onClick={() => key === 'history' ? switchToHistory() : setTab(key)}
             className={`px-5 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${tab === key ? 'border-[#00AEEF] text-[#00AEEF]' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
             {label}
           </button>
@@ -736,41 +616,27 @@ export default function Orders() {
               </div>
             </div>
 
-            {/* Category filter + export layout */}
-            <div className="flex items-center justify-between gap-3 flex-wrap border-t border-slate-700/50 pt-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Category</span>
-                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
-                  {[{k:'',l:'All'}, {k:'Beverage',l:'Beverage'}, {k:'Food',l:'Food'}, {k:'General',l:'General'}].map(c => (
-                    <button key={c.k} onClick={() => setCatFilter(c.k)}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${catFilter === c.k ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-                      {c.l}
-                    </button>
-                  ))}
-                </div>
-                {subOptions.length > 0 && (
-                  <select value={subFilter} onChange={e => setSubFilter(e.target.value)} className="input text-sm w-auto py-1.5">
-                    <option value="">All sub-categories</option>
-                    {subOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                  </select>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Export layout</span>
-                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
-                  {[{k:'normal',l:'Normal'}, {k:'category',l:'By Category'}].map(m => (
-                    <button key={m.k} onClick={() => setExportMode(m.k)}
-                      title={m.k === 'category' ? 'Beverage → Food → General' : 'Regular sorting by sub-category'}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${exportMode === m.k ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-                      {m.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* Categories to include when generating */}
+            <div className="flex items-center gap-3 flex-wrap border-t border-slate-700/50 pt-3">
+              <span className="text-xs text-slate-400 uppercase tracking-wide">Categories</span>
+              {MAIN_CATEGORIES.map(c => (
+                <label key={c} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={!!genCats[c]} onChange={() => toggleGenCat(c)} className="accent-teal-500 w-4 h-4" />
+                  {c}
+                </label>
+              ))}
+              <span className="text-[11px] text-slate-500">Only ticked categories are included when you Generate.</span>
             </div>
 
-            {/* Order quantity controls: backup weeks · subtract stock */}
+            {/* Order quantity controls: multiplier · backup weeks · subtract stock */}
             <div className="flex items-center gap-4 flex-wrap border-t border-slate-700/50 pt-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Multiply order</span>
+                <select value={multiplier} onChange={e => setMultiplier(Number(e.target.value))} className="input text-sm w-auto py-1.5">
+                  {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>×{n}</option>)}
+                </select>
+                <span className="text-xs text-slate-500 hidden sm:inline">× weekly average (e.g. ×5 ≈ a week from daily usage)</span>
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-400 uppercase tracking-wide">Backup weeks</span>
                 <select value={backupWeeks} onChange={e => setBackupWeeks(Number(e.target.value))} className="input text-sm w-auto py-1.5">
@@ -852,7 +718,7 @@ export default function Orders() {
               <div className="card">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                   <p className="text-xs text-slate-400">
-                    Order = Avg/Wk × {1 + backupWeeks}wk{subtractStock ? ' − Stock' : ''}, capped by category max, rounded to packs.
+                    Order = Avg/Wk × {multiplier} × {1 + backupWeeks}wk{subtractStock ? ' − Stock' : ''}, rounded to packs.
                     {' '}<span className="text-slate-200">Highlighted = needed (in order)</span>, <span className="opacity-50">faded = not needed</span>.
                   </p>
                   <Button onClick={openAddItem} variant="secondary"><PlusCircle className="w-4 h-4" /> Add Item Manually</Button>
@@ -947,75 +813,6 @@ export default function Orders() {
       )}
 
       {/* ── History tab ─────────────────────────────────────── */}
-      {/* ── Manual Order tab ─────────────────────────────────── */}
-      {tab === 'manual' && (
-        <div className="space-y-4">
-          <div className="card-sm">
-            <p className="text-sm text-slate-300 font-medium mb-1">Build an order by hand</p>
-            <p className="text-xs text-slate-500">Search the inventory, add the items you need, set quantities, then export the list to Excel or PDF. Uses the same Normal / By-Category export layout selected above.</p>
-          </div>
-
-          {/* Search to add */}
-          <div className="card">
-            <label className="block text-sm font-medium text-slate-300 mb-1">Add item</label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input className="input pl-9 text-sm" placeholder="Search by name or part #…" value={manualSearch}
-                onChange={e => setManualSearch(e.target.value)} />
-              {manualSearch && manualFiltered.length > 0 && (
-                <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-lg max-h-60 overflow-y-auto">
-                  {manualFiltered.map(item => (
-                    <button key={item.id} onClick={() => addManual(item)}
-                      className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-700 text-left text-sm">
-                      <span className="font-mono text-xs text-[#00AEEF] w-20 shrink-0">{item.part_number}</span>
-                      <span className="flex-1 text-slate-200 truncate">{item.name}</span>
-                      <span className="text-slate-500 text-xs shrink-0">{item.stores?.name}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {manualRows.length === 0 ? (
-            <div className="card text-center py-16 text-slate-500">
-              <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-20" />
-              <p className="font-medium">No items added yet</p>
-              <p className="text-sm mt-1">Search above to add items to your manual order.</p>
-            </div>
-          ) : (
-            <div className="card">
-              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                <p className="text-xs text-slate-400"><strong className="text-teal-300">{manualRows.filter(r => Number(r.ordered) > 0).length}</strong> items · {manualRows.reduce((sum, r) => sum + Number(r.ordered || 0), 0)} units</p>
-                <div className="flex gap-2 flex-wrap">
-                  <Button variant="secondary" onClick={() => exportManual('xlsx')} loading={manualExporting}><Download className="w-4 h-4" /> Export Excel</Button>
-                  <Button variant="secondary" onClick={() => exportManual('pdf')} loading={manualExporting}><Download className="w-4 h-4" /> Export PDF</Button>
-                  <Button variant="ghost" onClick={() => setManualRows([])}>Clear</Button>
-                </div>
-              </div>
-              <Table>
-                <Thead><tr><Th>Part #</Th><Th>Item Name</Th><Th>Sub-Category</Th><Th>Unit</Th><Th>Order Qty</Th><Th></Th></tr></Thead>
-                <Tbody>
-                  {manualRows.map(row => (
-                    <Tr key={row.id}>
-                      <Td className="font-mono text-xs text-slate-300">{row.part_number}</Td>
-                      <Td className="text-sm font-medium text-slate-100">{row.name}</Td>
-                      <Td className="text-xs text-slate-400">{row.store}{row.category ? ` · ${row.category}` : ''}</Td>
-                      <Td className="text-xs text-slate-400">{row.unit}</Td>
-                      <Td>
-                        <input type="number" min="0" value={row.ordered} onChange={e => setManualQtyRow(row.id, e.target.value)}
-                          className="w-20 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
-                      </Td>
-                      <Td><button onClick={() => removeManual(row.id)} className="p-1 text-slate-600 hover:text-red-400" title="Remove"><X className="w-4 h-4" /></button></Td>
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </div>
-          )}
-        </div>
-      )}
-
       {tab === 'history' && (
         <div className="space-y-3">
           {histLoad ? (

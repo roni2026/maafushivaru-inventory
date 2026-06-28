@@ -97,39 +97,6 @@ function VerifyFlow({ onPosted }) {
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  // ── Quick upload → persist the whole note as-is (no review / no stock change) ──
-  //    The note becomes immediately visible in History for the week and every
-  //    row can be edited (qty + expiry) or deleted there at any time.
-  const detailRef = useRef(null)
-  const quickSaveFile = async (fileList) => {
-    const file = fileList?.[0]; if (!file) return
-    setBusy(true)
-    try {
-      const { items: parsed, depts, noteDate } = await parseBoatNoteFile(file)
-      if (!parsed.length) { toast.error('No item rows found in that file'); setBusy(false); return }
-      const label = file.name.replace(/\.[^.]+$/, '')
-      const nd = noteDate || today()
-      const { data: note, error: noteErr } = await supabase.from('boat_notes').insert({
-        note_date: nd, label,
-        delivery_day: new Date(nd).toLocaleDateString('en-US', { weekday: 'long' }),
-        status: 'posted', source_file: file.name, departments: depts,
-        total_items: parsed.length, posted_items: parsed.length, created_by: meta.received_by,
-      }).select().single()
-      if (noteErr) throw noteErr
-      const { success, failed } = await chunkedWrite('boat_note_items', parsed.map(pr => ({
-        boat_note_id: note.id, line_no: pr.line_no, supplier: pr.supplier, po_number: pr.po_number,
-        part_number: pr.part_number, product_name: pr.product_name, unit: pr.unit,
-        ordered_qty: Number(pr.ordered_qty) || 0, received_qty: Number(pr.ordered_qty) || 0,
-        expiry_date: pr.expiry_date || null, department: pr.department,
-        is_sample: isSampleRow(pr), status: 'received',
-      })), { mode: 'insert' })
-      toast.success(`Boat note saved — ${success} item${success !== 1 ? 's' : ''}${failed ? ` · ${failed} failed` : ''}. Edit anytime in History.`)
-      if (fileRef.current) fileRef.current.value = ''
-      onPosted()
-    } catch (e) { toast.error(e.message) }
-    setBusy(false)
-  }
-
   // ── Row editing ────────────────────────────────────────────────────
   const editRow = (id, field, val) => setRows(prev => prev.map(r => {
     if (r.id !== id) return r
@@ -183,9 +150,14 @@ function VerifyFlow({ onPosted }) {
     try {
       // 1. create boat_note header
       const postedDepts = allDepts.filter(d => pickedDepts[d])
+      // Guard the date: an empty/invalid note_date would make the header insert
+      // fail (and the note would silently never appear in history).
+      const safeDate = (meta.note_date && /^\d{4}-\d{2}-\d{2}$/.test(meta.note_date)) ? meta.note_date : today()
+      let dayName = ''
+      try { dayName = new Date(safeDate).toLocaleDateString('en-US', { weekday: 'long' }) } catch { dayName = '' }
       const { data: note, error: noteErr } = await supabase.from('boat_notes').insert({
-        note_date: meta.note_date, label: meta.label,
-        delivery_day: new Date(meta.note_date).toLocaleDateString('en-US', { weekday: 'long' }),
+        note_date: safeDate, label: meta.label || `Boat note ${safeDate}`,
+        delivery_day: dayName,
         status: 'posted', source_file: meta.source_file, departments: postedDepts,
         total_items: rows.length, posted_items: selectedRows.length, created_by: meta.received_by,
       }).select().single()
@@ -193,15 +165,27 @@ function VerifyFlow({ onPosted }) {
 
       // 2. save EVERY parsed row to boat_note_items (history keeps the full note)
       const selSet = new Set(selectedRows.map(r => r.id))
-      await chunkedWrite('boat_note_items', rows.map(r => ({
-        boat_note_id: note.id, line_no: r.line_no, supplier: r.supplier, po_number: r.po_number,
-        part_number: r.part_number, product_name: r.product_name, unit: r.unit,
-        ordered_qty: Number(r.ordered_qty) || 0,
-        received_qty: selSet.has(r.id) ? (Number(r.received_qty) || 0) : null,
-        expiry_date: r.expiry_date || null, department: r.department,
-        item_id: r.item_id, matched: r.matched, is_sample: !!r.is_sample,
-        status: selSet.has(r.id) ? (r.matched ? 'received' : 'skipped') : 'pending',
-      })), { mode: 'insert' })
+      const buildItemRows = (withSample) => rows.map(r => {
+        const base = {
+          boat_note_id: note.id, line_no: r.line_no, supplier: r.supplier, po_number: r.po_number,
+          part_number: r.part_number, product_name: r.product_name, unit: r.unit,
+          ordered_qty: Number(r.ordered_qty) || 0,
+          received_qty: selSet.has(r.id) ? (Number(r.received_qty) || 0) : null,
+          expiry_date: r.expiry_date || null, department: r.department,
+          item_id: r.item_id, matched: r.matched,
+          status: selSet.has(r.id) ? (r.matched ? 'received' : 'skipped') : 'pending',
+        }
+        if (withSample) base.is_sample = !!r.is_sample
+        return base
+      })
+      let itemRes = await chunkedWrite('boat_note_items', buildItemRows(true), { mode: 'insert' })
+      // Older databases may not have the is_sample column yet — retry without it.
+      if (itemRes.failed && (itemRes.errors || []).some(e => /is_sample|column/i.test(e || ''))) {
+        itemRes = await chunkedWrite('boat_note_items', buildItemRows(false), { mode: 'insert' })
+      }
+      if (itemRes.failed) {
+        toast(`Saved note, but ${itemRes.failed} line(s) failed to record.`, { icon: '⚠️' })
+      }
 
       // 3. apply stock movements for matched, selected rows
       let posted = 0, unmatched = 0
@@ -247,27 +231,21 @@ function VerifyFlow({ onPosted }) {
           <p className="font-semibold mb-2">📋 How it works</p>
           <ol className="list-decimal ml-4 space-y-1.5">
             <li>Upload the boat note (<strong>.xlsx</strong> or <strong>.csv</strong>) — every layout is auto-detected</li>
-            <li>It is <strong>saved straight away</strong> and stays in <strong>History</strong> all week</li>
-            <li><strong>Edit any item's quantity &amp; expiry</strong>, add or remove rows — on PC or in the mobile app</li>
-            <li><strong>Delete</strong> the whole note any time from History</li>
+            <li><strong>Edit</strong> any row, fix codes, add or remove lines</li>
+            <li>Tick the <strong>departments</strong> you're receiving (Store, Main Kitchen, Engineering…) and press <strong>Update</strong></li>
+            <li>Adjust the <strong>quantity</strong>, add an <strong>expiry date</strong>, then <strong>Confirm</strong> — stock updates automatically</li>
           </ol>
         </div>
         <div onClick={() => fileRef.current?.click()}
           onDragOver={e => e.preventDefault()}
-          onDrop={e => { e.preventDefault(); quickSaveFile(e.dataTransfer.files) }}
+          onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files) }}
           className="card border-2 border-dashed border-slate-600 hover:border-teal-500 cursor-pointer transition-all text-center py-16 hover:bg-teal-900/10">
           {busy ? <Loader className="w-11 h-11 mx-auto mb-3 text-teal-400 animate-spin" />
                 : <FileSpreadsheet className="w-11 h-11 mx-auto mb-3 text-slate-500" />}
           <p className="text-base font-semibold text-slate-200">Drop a boat note here</p>
-          <p className="text-slate-500 text-xs mt-1.5">Excel (.xlsx) or CSV — saved instantly, edit later</p>
-          <button className="mt-4 btn-secondary btn-sm mx-auto"><Upload className="w-4 h-4" /> Upload &amp; Save</button>
-          <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={e => quickSaveFile(e.target.files)} />
-        </div>
-        <div className="text-center">
-          <button onClick={() => detailRef.current?.click()} className="text-xs text-slate-400 hover:text-teal-300 transition-colors">
-            Advanced: review rows &amp; post to inventory stock instead →
-          </button>
-          <input ref={detailRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={e => handleFile(e.target.files)} />
+          <p className="text-slate-500 text-xs mt-1.5">Excel (.xlsx) or CSV</p>
+          <button className="mt-4 btn-secondary btn-sm mx-auto"><Upload className="w-4 h-4" /> Browse File</button>
+          <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={e => handleFile(e.target.files)} />
         </div>
       </div>
     )
@@ -457,24 +435,8 @@ function BoatNoteHistory() {
   const [expanded, setExp]  = useState(null)
   const [itemsMap, setItemsMap] = useState({})
 
-  const [retentionDays, setRetentionDays] = useState(6)
-
-  // Auto-purge boat notes older than the retention window (default 6 days).
-  // Runs once before the first load so stale notes never linger.
-  const purgeExpired = async () => {
-    const { data: s } = await supabase.from('settings').select('value').eq('key', 'boat_note_retention_days').maybeSingle()
-    const days = Math.max(0, Number(s?.value) || 6)
-    setRetentionDays(days)
-    if (days <= 0) return
-    const cutoff = new Date(); cutoff.setHours(0,0,0,0); cutoff.setDate(cutoff.getDate() - days)
-    const cutoffStr = cutoff.toISOString().split('T')[0]
-    // boat_note_items cascade-delete via FK ON DELETE CASCADE.
-    await supabase.from('boat_notes').delete().lt('note_date', cutoffStr)
-  }
-
   const load = async () => {
     setLoad(true)
-    await purgeExpired()
     let q = supabase.from('boat_notes').select('*').order('note_date', { ascending: false }).limit(100)
     if (range.from) q = q.gte('note_date', range.from)
     if (range.to)   q = q.lte('note_date', range.to)
@@ -483,15 +445,6 @@ function BoatNoteHistory() {
   }
   useEffect(() => { load() }, [range.from, range.to])
 
-  const deleteNote = async (id, label) => {
-    if (!confirm(`Delete boat note “${label || 'Boat note'}”? This removes its received items record. This cannot be undone.`)) return
-    const { error } = await supabase.from('boat_notes').delete().eq('id', id)
-    if (error) { toast.error(error.message); return }
-    setNotes(prev => prev.filter(n => n.id !== id))
-    if (expanded === id) setExp(null)
-    toast.success('Boat note deleted')
-  }
-
   const openNote = async (id) => {
     if (expanded === id) { setExp(null); return }
     if (!itemsMap[id]) {
@@ -499,6 +452,15 @@ function BoatNoteHistory() {
       setItemsMap(m => ({ ...m, [id]: data || [] }))
     }
     setExp(id)
+  }
+
+  const del = async (n) => {
+    if (!confirm(`Delete boat note "${n.label || n.note_date}"? This removes the note and its lines from history. Stock already posted is NOT reversed.`)) return
+    const { error } = await supabase.from('boat_notes').delete().eq('id', n.id)
+    if (error) { toast.error(error.message); return }
+    setNotes(list => list.filter(x => x.id !== n.id))
+    if (expanded === n.id) setExp(null)
+    toast.success('Boat note deleted')
   }
 
   return (
@@ -510,8 +472,7 @@ function BoatNoteHistory() {
         <label className="text-xs text-slate-400">To</label>
         <input type="date" value={range.to} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} className="input text-sm py-1.5 w-auto" />
         {(range.from || range.to) && <button onClick={() => setRange({ from: '', to: '' })} className="btn-ghost btn-sm"><X className="w-4 h-4" /> Clear</button>}
-        <span className="ml-auto text-[11px] text-slate-500">Notes auto-delete after {retentionDays} day{retentionDays !== 1 ? 's' : ''}</span>
-        <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+        <button onClick={load} className="btn-ghost btn-sm ml-auto"><RefreshCw className="w-4 h-4" /></button>
       </div>
 
       {loading ? (
@@ -531,15 +492,14 @@ function BoatNoteHistory() {
             <div className="flex items-center gap-2 shrink-0">
               {(n.departments || []).slice(0, 4).map(d => <Badge key={d} variant="blue">{d}</Badge>)}
               <Badge variant="teal">{n.posted_items}/{n.total_items} posted</Badge>
-              <button onClick={() => deleteNote(n.id, n.label)} title="Delete boat note"
-                className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-colors">
+              <button onClick={() => del(n)} className="btn-ghost btn-sm text-red-400" title="Delete boat note">
                 <Trash2 className="w-4 h-4" />
               </button>
             </div>
           </div>
           {expanded === n.id && (
             <div className="border-t border-slate-700 overflow-x-auto">
-              <NoteItemsTable noteId={n.id} items={itemsMap[n.id] || []} onChanged={load} />
+              <NoteItemsTable items={itemsMap[n.id] || []} />
             </div>
           )}
         </div>
@@ -551,85 +511,37 @@ function BoatNoteHistory() {
 // ═════════════════════════════════════════════════════════════════════════════
 // Sortable per-note items table (used inside the History accordion).
 // ═════════════════════════════════════════════════════════════════════════════
-function NoteItemsTable({ noteId, items, onChanged }) {
-  const [rows, setRows] = useState(items || [])
-  useEffect(() => { setRows(items || []) }, [items])
-  const { sorted, thProps } = useSort(rows, 'line_no', 'asc')
-
-  // Persist a single field change for one item (quantity or expiry).
-  const saveField = async (id, field, value) => {
-    setRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r))
-    const payload = field === 'received_qty'
-      ? { received_qty: value === '' ? null : Number(value) }
-      : { expiry_date: value || null }
-    const { error } = await supabase.from('boat_note_items').update(payload).eq('id', id)
-    if (error) toast.error(error.message)
-  }
-
-  const delItem = async (id) => {
-    if (!confirm('Remove this item from the boat note?')) return
-    const { error } = await supabase.from('boat_note_items').delete().eq('id', id)
-    if (error) { toast.error(error.message); return }
-    setRows(prev => prev.filter(r => r.id !== id))
-    onChanged?.()
-    toast.success('Item removed')
-  }
-
-  const addItem = async () => {
-    const lineNo = (rows.reduce((m, r) => Math.max(m, Number(r.line_no) || 0), 0)) + 1
-    const { data, error } = await supabase.from('boat_note_items').insert({
-      boat_note_id: noteId, line_no: lineNo, part_number: '', product_name: 'New item',
-      unit: 'EA', ordered_qty: 0, received_qty: 0, department: 'STORE', status: 'received',
-    }).select().single()
-    if (error) { toast.error(error.message); return }
-    setRows(prev => [...prev, data])
-    onChanged?.()
-  }
-
+function NoteItemsTable({ items }) {
+  const { sorted, thProps } = useSort(items, 'line_no', 'asc')
   return (
-    <div>
-      <Table>
-        <Thead><tr>
-          <Th {...thProps('line_no')}>#</Th>
-          <Th {...thProps('part_number')}>Code</Th>
-          <Th {...thProps('product_name')}>Product</Th>
-          <Th {...thProps('department')}>Dept</Th>
-          <Th {...thProps('unit')}>Unit</Th>
-          <Th {...thProps('received_qty')}>Qty</Th>
-          <Th {...thProps('expiry_date')}>Expiry</Th>
-          <Th></Th>
-        </tr></Thead>
-        <Tbody>
-          {sorted.map(it => (
-            <Tr key={it.id} className={it.is_sample ? 'bg-purple-900/10' : ''}>
-              <Td className="text-slate-500 text-xs">{it.line_no}</Td>
-              <Td className="font-mono text-xs text-[#00AEEF]">{it.part_number}</Td>
-              <Td className="text-slate-200 text-sm">
-                <span className="inline-flex items-center gap-1.5">{it.product_name}{it.is_sample && <Badge variant="purple">sample</Badge>}</span>
-              </Td>
-              <Td className="text-slate-400 text-xs">{it.department}</Td>
-              <Td className="text-slate-400 text-xs">{it.unit}</Td>
-              <Td>
-                <input type="number" min="0" step="any" defaultValue={it.received_qty ?? ''}
-                  onBlur={e => { const v = e.target.value; if (String(v) !== String(it.received_qty ?? '')) saveField(it.id, 'received_qty', v) }}
-                  className="w-20 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
-              </Td>
-              <Td>
-                <input type="date" defaultValue={it.expiry_date || ''}
-                  onBlur={e => { const v = e.target.value; if (v !== (it.expiry_date || '')) saveField(it.id, 'expiry_date', v) }}
-                  className="bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-slate-100 text-xs focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
-              </Td>
-              <Td>
-                <button onClick={() => delItem(it.id)} className="p-1 text-slate-500 hover:text-red-400" title="Remove item"><Trash2 className="w-4 h-4" /></button>
-              </Td>
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
-      <div className="p-2">
-        <Button variant="secondary" size="sm" onClick={addItem}><Plus className="w-4 h-4" /> Add item</Button>
-      </div>
-    </div>
+    <Table>
+      <Thead><tr>
+        <Th {...thProps('line_no')}>#</Th>
+        <Th {...thProps('part_number')}>Code</Th>
+        <Th {...thProps('product_name')}>Product</Th>
+        <Th {...thProps('department')}>Dept</Th>
+        <Th {...thProps('unit')}>Unit</Th>
+        <Th {...thProps('received_qty')}>Received</Th>
+        <Th {...thProps('expiry_date')}>Expiry</Th>
+        <Th {...thProps('status')}>Status</Th>
+      </tr></Thead>
+      <Tbody>
+        {sorted.map(it => (
+          <Tr key={it.id} className={it.is_sample ? 'bg-purple-900/10' : ''}>
+            <Td className="text-slate-500 text-xs">{it.line_no}</Td>
+            <Td className="font-mono text-xs text-[#00AEEF]">{it.part_number}</Td>
+            <Td className="text-slate-200 text-sm">
+              <span className="inline-flex items-center gap-1.5">{it.product_name}{it.is_sample && <Badge variant="purple">sample</Badge>}</span>
+            </Td>
+            <Td className="text-slate-400 text-xs">{it.department}</Td>
+            <Td className="text-slate-400 text-xs">{it.unit}</Td>
+            <Td className="text-slate-200">{it.received_qty ?? '—'}</Td>
+            <Td className="text-slate-400 text-xs">{it.expiry_date || '—'}</Td>
+            <Td>{it.status === 'received' ? <Badge variant="green">received</Badge> : it.status === 'skipped' ? <Badge variant="orange">unmatched</Badge> : <Badge variant="gray">pending</Badge>}</Td>
+          </Tr>
+        ))}
+      </Tbody>
+    </Table>
   )
 }
 
