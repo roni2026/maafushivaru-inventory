@@ -1,37 +1,38 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { supabase, selectAll, chunkedWrite } from '../lib/supabase'
 import {
   Ship, Upload, Loader, Plus, Trash2, CheckCircle2, ChevronLeft, X,
   FileSpreadsheet, History as HistoryIcon, Search, RefreshCw, AlertTriangle,
-  PackageCheck, CalendarDays, ChevronDown, ChevronRight, FlaskConical,
+  PackageCheck, CalendarDays, ChevronDown, ChevronRight, FlaskConical, Save,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
-import Input, { Select } from '../components/ui/Input'
+import Modal from '../components/ui/Modal'
 import { parseBoatNoteFile, classifyOrigin, isSampleRow, DEPARTMENTS } from '../lib/boatnote'
 import { useSort } from '../hooks/useSort'
 
 const today = () => new Date().toISOString().split('T')[0]
 const cleanCode = (s) => String(s || '').replace(/^0+/, '') || ''
+const rid = () => Math.random().toString(36).slice(2)
 
-// ── Stages of the verify flow ───────────────────────────────────────
-const STAGE = { UPLOAD: 'upload', EDIT: 'edit', CONFIRM: 'confirm', DONE: 'done' }
+// ── Upload flow stages ────────────────────────────────────────────────────
+const STAGE = { UPLOAD: 'upload', PREVIEW: 'preview' }
 
 export default function BoatNote() {
-  const [tab, setTab] = useState('verify')   // 'verify' | 'history'
+  const [tab, setTab] = useState('upload')   // 'upload' | 'history' | 'samples'
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="page-title">Boat Note Receiving</h1>
-          <p className="page-sub">Upload &amp; verify incoming supplies, then post to inventory by department</p>
+          <p className="page-sub">Upload a boat note to keep it in history, then receive each item into inventory one by one</p>
         </div>
         <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-xl p-1">
-          <button onClick={() => setTab('verify')}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'verify' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-            <Ship className="w-4 h-4 inline mr-1.5" />Verify
+          <button onClick={() => setTab('upload')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'upload' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+            <Ship className="w-4 h-4 inline mr-1.5" />Upload
           </button>
           <button onClick={() => setTab('history')}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'history' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
@@ -43,197 +44,117 @@ export default function BoatNote() {
           </button>
         </div>
       </div>
-      {tab === 'verify' ? <VerifyFlow onPosted={() => setTab('history')} />
+      {tab === 'upload' ? <UploadFlow onSaved={() => setTab('history')} />
         : tab === 'samples' ? <SamplesTab />
         : <BoatNoteHistory />}
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-function VerifyFlow({ onPosted }) {
-  const [stage, setStage]   = useState(STAGE.UPLOAD)
-  const [busy, setBusy]     = useState(false)
-  const [rows, setRows]     = useState([])          // editable boat-note rows
-  const [items, setItems]   = useState([])          // inventory (for matching)
-  const [meta, setMeta]     = useState({ label: '', note_date: today(), source_file: '', received_by: 'Roni' })
-  const [pickedDepts, setPickedDepts] = useState({})
+// ════════════════════════════════════════════════════════════════════════════
+// UPLOAD — parse a file and save the WHOLE note to history instantly.
+// No department picking, no per-item confirm. Items go in as "pending" and are
+// received into inventory later, one by one, from the History tab.
+// ════════════════════════════════════════════════════════════════════════════
+function UploadFlow({ onSaved }) {
+  const [stage, setStage] = useState(STAGE.UPLOAD)
+  const [busy, setBusy]   = useState(false)
+  const [rows, setRows]   = useState([])
+  const [items, setItems] = useState([])
+  const [meta, setMeta]   = useState({ label: '', note_date: today(), source_file: '', received_by: 'Roni' })
   const fileRef = useRef(null)
 
-  // load inventory once for matching
   useEffect(() => {
-    selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,expiry_date,origin').eq('active', true))
+    selectAll(() => supabase.from('items').select('id,name,part_number').eq('active', true))
       .then(({ data }) => setItems(data || []))
   }, [])
   const byCode = useMemo(() => {
     const m = new Map(); for (const it of items) m.set(cleanCode(it.part_number), it); return m
   }, [items])
-
   const enrich = (r) => {
     const match = byCode.get(cleanCode(r.part_number))
-    return { ...r, item_id: match?.id || null, matched: !!match,
-      matched_name: match?.name || '', matched_unit: match?.unit || r.unit,
-      is_sample: isSampleRow(r),
-      receive: r.receive === undefined ? true : r.receive }
+    return { ...r, item_id: match?.id || null, matched: !!match, is_sample: isSampleRow(r) }
   }
 
-  // ── Upload + parse ──────────────────────────────────────────────────
   const handleFile = async (fileList) => {
     const file = fileList?.[0]; if (!file) return
     setBusy(true)
     try {
-      const { items: parsed, depts, noteDate } = await parseBoatNoteFile(file)
+      const { items: parsed, noteDate } = await parseBoatNoteFile(file)
       if (!parsed.length) { toast.error('No item rows found in that file'); setBusy(false); return }
-      const rid = () => Math.random().toString(36).slice(2)
-      const enrichedRows = parsed.map(p => enrich({ ...p, id: rid(), received_qty: p.ordered_qty, receive: true }))
-      setRows(enrichedRows)
+      setRows(parsed.map(p => enrich({ ...p, id: rid() })))
       setMeta(m => ({ ...m, label: file.name.replace(/\.[^.]+$/, ''), source_file: file.name, note_date: noteDate || today() }))
-      const dp = {}; depts.forEach(d => { dp[d] = d === 'STORE' }); setPickedDepts(dp)
-      setStage(STAGE.EDIT)
-      const sampleCount = enrichedRows.filter(r => r.is_sample).length
-      toast.success(`Parsed ${parsed.length} items across ${depts.length} departments${sampleCount ? ` · ${sampleCount} sample${sampleCount !== 1 ? 's' : ''} detected` : ''}`)
+      setStage(STAGE.PREVIEW)
+      const sampleCount = parsed.filter(p => isSampleRow(p)).length
+      toast.success(`Parsed ${parsed.length} items${sampleCount ? ` · ${sampleCount} sample(s)` : ''}`)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
     if (fileRef.current) fileRef.current.value = ''
   }
 
-  // ── Row editing ────────────────────────────────────────────────────
   const editRow = (id, field, val) => setRows(prev => prev.map(r => {
     if (r.id !== id) return r
     const u = { ...r, [field]: val }
     return field === 'part_number' ? enrich(u) : u
   }))
   const addRow = () => setRows(prev => [...prev, enrich({
-    id: Math.random().toString(36).slice(2), line_no: prev.length + 1, supplier: '', po_number: '',
-    part_number: '', product_name: '', unit: 'EA', ordered_qty: 0, received_qty: 0, expiry_date: '',
-    department: Object.keys(pickedDepts)[0] || 'STORE',
+    id: rid(), line_no: prev.length + 1, supplier: '', po_number: '',
+    part_number: '', product_name: '', unit: 'EA', ordered_qty: 0, expiry_date: '',
+    department: 'STORE',
   })])
   const delRow = (id) => setRows(prev => prev.filter(r => r.id !== id))
-  // Manually include/exclude an individual line (not all items on a note arrive).
-  const toggleReceive = (id) => setRows(prev => prev.map(r => r.id === id ? { ...r, receive: r.receive === false } : r))
 
   const allDepts = useMemo(() => [...new Set(rows.map(r => r.department).filter(Boolean))].sort(), [rows])
-  const toggleDept = (d) => setPickedDepts(p => ({ ...p, [d]: !p[d] }))
+  const { sorted, thProps } = useSort(rows, null, 'asc')
 
-  // rows belonging to the ticked departments AND individually ticked to receive
-  // → the ones we'll actually post. Updates live as departments / rows toggle.
-  const selectedRows = useMemo(() =>
-    rows.filter(r => pickedDepts[r.department] && r.receive !== false), [rows, pickedDepts])
-  // Live preview of what's currently selected (used before "Update — review").
-  const selectedByDept = useMemo(() => {
-    const m = {}
-    for (const r of selectedRows) m[r.department] = (m[r.department] || 0) + 1
-    return m
-  }, [selectedRows])
-
-  // Sortable result trees (edit + confirm).
-  const { sorted: sortedRows,     thProps: editTh }    = useSort(rows, null, 'asc')
-  const { sorted: sortedSelected, thProps: confirmTh } = useSort(selectedRows, null, 'asc')
-
-  // Float the currently-selected rows (ticked department + ticked to receive) to
-  // the TOP of the edit list so the user can instantly see what's selected. This
-  // recomputes live as departments / rows are toggled. Array sort is stable, so
-  // the active column-sort order is preserved within each group.
-  const displayRows = useMemo(() => {
-    const isSel = (r) => !!pickedDepts[r.department] && r.receive !== false
-    return [...sortedRows].sort((a, b) => (isSel(b) ? 1 : 0) - (isSel(a) ? 1 : 0))
-  }, [sortedRows, pickedDepts])
-
-  const goConfirm = () => {
-    if (!selectedRows.length) { toast.error('Tick at least one department with items'); return }
-    setStage(STAGE.CONFIRM)
-  }
-
-  // ── Post to inventory ─────────────────────────────────────────────
-  const postToInventory = async () => {
+  const saveToHistory = async () => {
+    if (!rows.length) { toast.error('Nothing to save'); return }
     setBusy(true)
     try {
-      // 1. create boat_note header
-      const postedDepts = allDepts.filter(d => pickedDepts[d])
-      // Guard the date: an empty/invalid note_date would make the header insert
-      // fail (and the note would silently never appear in history).
       const safeDate = (meta.note_date && /^\d{4}-\d{2}-\d{2}$/.test(meta.note_date)) ? meta.note_date : today()
       let dayName = ''
       try { dayName = new Date(safeDate).toLocaleDateString('en-US', { weekday: 'long' }) } catch { dayName = '' }
       const { data: note, error: noteErr } = await supabase.from('boat_notes').insert({
         note_date: safeDate, label: meta.label || `Boat note ${safeDate}`,
-        delivery_day: dayName,
-        status: 'posted', source_file: meta.source_file, departments: postedDepts,
-        total_items: rows.length, posted_items: selectedRows.length, created_by: meta.received_by,
+        delivery_day: dayName, status: 'posted', source_file: meta.source_file,
+        departments: allDepts, total_items: rows.length, posted_items: 0, created_by: meta.received_by,
       }).select().single()
       if (noteErr) throw noteErr
 
-      // 2. save EVERY parsed row to boat_note_items (history keeps the full note)
-      const selSet = new Set(selectedRows.map(r => r.id))
       const buildItemRows = (withSample) => rows.map(r => {
         const base = {
           boat_note_id: note.id, line_no: r.line_no, supplier: r.supplier, po_number: r.po_number,
           part_number: r.part_number, product_name: r.product_name, unit: r.unit,
-          ordered_qty: Number(r.ordered_qty) || 0,
-          received_qty: selSet.has(r.id) ? (Number(r.received_qty) || 0) : null,
-          expiry_date: r.expiry_date || null, department: r.department,
-          item_id: r.item_id, matched: r.matched,
-          status: selSet.has(r.id) ? (r.matched ? 'received' : 'skipped') : 'pending',
+          ordered_qty: Number(r.ordered_qty) || 0, received_qty: null,
+          expiry_date: r.expiry_date || null, department: r.department || null,
+          item_id: r.item_id, matched: r.matched, status: 'pending',
         }
         if (withSample) base.is_sample = !!r.is_sample
         return base
       })
-      let itemRes = await chunkedWrite('boat_note_items', buildItemRows(true), { mode: 'insert' })
-      // Older databases may not have the is_sample column yet — retry without it.
-      if (itemRes.failed && (itemRes.errors || []).some(e => /is_sample|column/i.test(e || ''))) {
-        itemRes = await chunkedWrite('boat_note_items', buildItemRows(false), { mode: 'insert' })
+      let res = await chunkedWrite('boat_note_items', buildItemRows(true), { mode: 'insert' })
+      if (res.failed && (res.errors || []).some(e => /is_sample|column/i.test(e || ''))) {
+        res = await chunkedWrite('boat_note_items', buildItemRows(false), { mode: 'insert' })
       }
-      if (itemRes.failed) {
-        toast(`Saved note, but ${itemRes.failed} line(s) failed to record.`, { icon: '⚠️' })
-      }
-
-      // 3. apply stock movements for matched, selected rows
-      let posted = 0, unmatched = 0
-      for (const r of selectedRows) {
-        const qty = Number(r.received_qty) || 0
-        if (!r.item_id || qty <= 0) { if (!r.item_id) unmatched++; continue }
-        const inv = items.find(i => i.id === r.item_id)
-        const newStock = Number(inv?.current_stock || 0) + qty
-        const upd = { current_stock: newStock }
-        if (r.expiry_date) upd.expiry_date = r.expiry_date
-        if (!inv?.origin) upd.origin = classifyOrigin(r.product_name)
-        await supabase.from('items').update(upd).eq('id', r.item_id)
-        await supabase.from('stock_updates').insert({
-          item_id: r.item_id, date: meta.note_date, quantity_change: qty, new_quantity: newStock,
-          updated_by: meta.received_by, note: `Boat note ${meta.label}`,
-        })
-        await supabase.from('receiving').insert({
-          item_id: r.item_id, item_name: inv?.name || r.product_name, date: meta.note_date,
-          quantity_received: qty, unit: r.unit, supplier_name: r.supplier,
-          received_by: meta.received_by, invoice_number: r.po_number, note: `Boat note: ${meta.label}`,
-        }).catch(() => {})
-        if (r.expiry_date) {
-          await supabase.from('item_batches').insert({
-            item_id: r.item_id, expiry_date: r.expiry_date, quantity: qty,
-            note: `Boat note ${meta.label}`,
-          }).catch(() => {})
-        }
-        posted++
-      }
-      toast.success(`Posted ${posted} items to inventory${unmatched ? ` · ${unmatched} unmatched recorded` : ''}`)
-      setStage(STAGE.DONE)
+      if (res.failed) toast(`Saved note, but ${res.failed} line(s) failed to record.`, { icon: '⚠️' })
+      else toast.success('Boat note saved to history')
+      onSaved?.()
     } catch (e) { toast.error(e.message) }
     setBusy(false)
   }
 
-  const reset = () => { setRows([]); setStage(STAGE.UPLOAD); setPickedDepts({}); setMeta({ label: '', note_date: today(), source_file: '', received_by: 'Roni' }) }
+  const reset = () => { setRows([]); setStage(STAGE.UPLOAD); setMeta({ label: '', note_date: today(), source_file: '', received_by: 'Roni' }) }
 
-  // ── RENDER ─────────────────────────────────────────────────────
   if (stage === STAGE.UPLOAD) {
     return (
       <div className="space-y-4">
         <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-4 text-sm text-blue-300">
           <p className="font-semibold mb-2">📋 How it works</p>
           <ol className="list-decimal ml-4 space-y-1.5">
-            <li>Upload the boat note (<strong>.xlsx</strong> or <strong>.csv</strong>) — every layout is auto-detected</li>
-            <li><strong>Edit</strong> any row, fix codes, add or remove lines</li>
-            <li>Tick the <strong>departments</strong> you're receiving (Store, Main Kitchen, Engineering…) and press <strong>Update</strong></li>
-            <li>Adjust the <strong>quantity</strong>, add an <strong>expiry date</strong>, then <strong>Confirm</strong> — stock updates automatically</li>
+            <li>Upload the boat note (<strong>.xlsx</strong> or <strong>.csv</strong>) — it is saved to <strong>History</strong> straight away</li>
+            <li>It stays in History so you can <strong>sort &amp; review</strong> it any time</li>
+            <li>From History, <strong>receive each item</strong> into inventory one by one — set the quantity and add <strong>one or more expiry dates</strong></li>
+            <li>Delete the whole boat note whenever you want</li>
           </ol>
         </div>
         <div onClick={() => fileRef.current?.click()}
@@ -251,29 +172,14 @@ function VerifyFlow({ onPosted }) {
     )
   }
 
-  if (stage === STAGE.DONE) {
-    return (
-      <div className="card text-center py-16">
-        <PackageCheck className="w-14 h-14 mx-auto mb-4 text-green-400" />
-        <p className="text-lg font-semibold text-slate-100">Boat note posted to inventory</p>
-        <p className="text-slate-400 text-sm mt-1">{meta.label}</p>
-        <div className="flex justify-center gap-3 mt-6">
-          <Button variant="secondary" onClick={reset}><Upload className="w-4 h-4" /> Verify another</Button>
-          <Button onClick={onPosted}><HistoryIcon className="w-4 h-4" /> View history</Button>
-        </div>
-      </div>
-    )
-  }
-
-  // EDIT + CONFIRM share the meta bar
+  // PREVIEW — review parsed rows, then save the whole note to history.
   return (
     <div className="space-y-4">
       <div className="card-sm flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="ghost" size="sm" onClick={stage === STAGE.CONFIRM ? () => setStage(STAGE.EDIT) : reset}>
-            <ChevronLeft className="w-4 h-4" /> {stage === STAGE.CONFIRM ? 'Back to edit' : 'Start over'}
-          </Button>
-          <span className="text-slate-300 text-sm font-medium">{meta.label}</span>
+          <Button variant="ghost" size="sm" onClick={reset}><ChevronLeft className="w-4 h-4" /> Start over</Button>
+          <input className="input text-sm py-1.5 w-56" value={meta.label}
+            onChange={e => setMeta(m => ({ ...m, label: e.target.value }))} placeholder="Boat note label" />
           <Badge variant="teal">{rows.length} rows</Badge>
         </div>
         <div className="flex items-center gap-2">
@@ -282,185 +188,111 @@ function VerifyFlow({ onPosted }) {
         </div>
       </div>
 
-      {stage === STAGE.EDIT ? (
-        <>
-          {/* department picker */}
-          <div className="card-sm">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Select departments to receive</p>
-            <div className="flex flex-wrap gap-2">
-              {allDepts.map(d => {
-                const count = rows.filter(r => r.department === d).length
-                const on = !!pickedDepts[d]
-                return (
-                  <button key={d} onClick={() => toggleDept(d)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${on ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
-                    {on ? '✓ ' : ''}{d} <span className="opacity-60">({count})</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <Button variant="secondary" size="sm" onClick={addRow}><Plus className="w-4 h-4" /> Add row</Button>
+        <Button onClick={saveToHistory} loading={busy} variant="success">
+          <Save className="w-4 h-4" /> Save to history
+        </Button>
+      </div>
 
-          {/* Live selection preview — updates instantly as departments / rows toggle */}
-          <div className="card-sm flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap text-sm">
-              <PackageCheck className="w-4 h-4 text-teal-400" />
-              <span className="text-slate-200 font-semibold">{selectedRows.length}</span>
-              <span className="text-slate-400">items selected</span>
-              {Object.entries(selectedByDept).map(([d, n]) => (
-                <Badge key={d} variant="blue">{d} ({n})</Badge>
-              ))}
-              {selectedRows.filter(r => r.is_sample).length > 0 && (
-                <Badge variant="purple">{selectedRows.filter(r => r.is_sample).length} sample(s)</Badge>
-              )}
-            </div>
-            <span className="text-xs text-slate-500">Tick departments and individual rows below — the count above updates live.</span>
-          </div>
-
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={addRow}><Plus className="w-4 h-4" /> Add row</Button>
-            <Button onClick={goConfirm}>Update — review {selectedRows.length} items <ChevronRight className="w-4 h-4" /></Button>
-          </div>
-
-          <div className="card overflow-x-auto p-0">
-            <Table>
-              <Thead><tr>
-                <Th title="Receive this item?">Recv</Th>
-                <Th {...editTh('line_no')}>#</Th>
-                <Th {...editTh('supplier')}>Supplier</Th>
-                <Th {...editTh('po_number')}>PO</Th>
-                <Th {...editTh('part_number')}>Code</Th>
-                <Th {...editTh('product_name')}>Product</Th>
-                <Th {...editTh('unit')}>Unit</Th>
-                <Th {...editTh('ordered_qty')}>Qty</Th>
-                <Th {...editTh('department')}>Dept</Th>
-                <Th {...editTh('matched')}>Match</Th>
-                <Th></Th>
-              </tr></Thead>
-              <Tbody>
-                {displayRows.map(r => {
-                  const inDept   = !!pickedDepts[r.department]
-                  const selected = inDept && r.receive !== false
-                  return (
-                  <Tr key={r.id} className={[
-                    selected ? 'bg-teal-900/5' : '',
-                    r.is_sample ? 'bg-purple-900/10' : '',
-                    inDept && r.receive === false ? 'opacity-50' : '',
-                  ].join(' ')}>
-                    <Td>
-                      <input type="checkbox" checked={r.receive !== false} disabled={!inDept}
-                        onChange={() => toggleReceive(r.id)}
-                        title={inDept ? 'Untick if this item did not arrive' : 'Tick its department first'}
-                        className="accent-teal-500 w-4 h-4 disabled:opacity-30" />
-                    </Td>
-                    <Td className="text-slate-500 text-xs">{r.line_no}</Td>
-                    <Td><input className="input text-xs py-1 min-w-[120px]" value={r.supplier} onChange={e => editRow(r.id, 'supplier', e.target.value)} /></Td>
-                    <Td><input className="input text-xs py-1 w-28 font-mono" value={r.po_number} onChange={e => editRow(r.id, 'po_number', e.target.value)} /></Td>
-                    <Td><input className="input text-xs py-1 w-20 font-mono text-[#00AEEF]" value={r.part_number} onChange={e => editRow(r.id, 'part_number', e.target.value)} /></Td>
-                    <Td>
-                      <div className="flex items-center gap-1.5">
-                        <input className="input text-xs py-1 min-w-[200px]" value={r.product_name} onChange={e => editRow(r.id, 'product_name', e.target.value)} />
-                        {r.is_sample && <Badge variant="purple">sample</Badge>}
-                      </div>
-                    </Td>
-                    <Td><input className="input text-xs py-1 w-16" value={r.unit} onChange={e => editRow(r.id, 'unit', e.target.value)} /></Td>
-                    <Td><input type="number" className="input text-xs py-1 w-20" value={r.ordered_qty} onChange={e => editRow(r.id, 'ordered_qty', e.target.value)} /></Td>
-                    <Td>
-                      <select className="input text-xs py-1 w-32" value={r.department} onChange={e => editRow(r.id, 'department', e.target.value)}>
-                        {[...new Set([...allDepts, ...DEPARTMENTS, r.department])].filter(Boolean).map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </Td>
-                    <Td>{r.matched ? <Badge variant="green">matched</Badge> : <Badge variant="gray">new</Badge>}</Td>
-                    <Td><button onClick={() => delRow(r.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button></Td>
-                  </Tr>
-                )})}
-              </Tbody>
-            </Table>
-          </div>
-        </>
-      ) : (
-        // CONFIRM
-        <>
-          <div className="bg-amber-900/15 border border-amber-700/30 rounded-lg p-3 text-sm text-amber-300 flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            Set the received quantity &amp; expiry, then confirm. Matched items update stock; unmatched are recorded only.
-          </div>
-          <div className="card overflow-x-auto p-0">
-            <Table>
-              <Thead><tr>
-                <Th {...confirmTh('part_number')}>Code</Th>
-                <Th {...confirmTh('product_name')}>Product</Th>
-                <Th {...confirmTh('department')}>Dept</Th>
-                <Th {...confirmTh('unit')}>Unit</Th>
-                <Th {...confirmTh('received_qty')}>Received Qty</Th>
-                <Th {...confirmTh('expiry_date')}>Expiry Date</Th>
-                <Th {...confirmTh('matched')}>Status</Th>
-              </tr></Thead>
-              <Tbody>
-                {sortedSelected.map(r => (
-                  <Tr key={r.id} className={r.is_sample ? 'bg-purple-900/10' : ''}>
-                    <Td className="font-mono text-xs text-[#00AEEF]">{r.part_number}</Td>
-                    <Td className="text-slate-100 text-sm">
-                      <span className="inline-flex items-center gap-1.5">
-                        {r.matched ? r.matched_name : r.product_name}
-                        {r.is_sample && <Badge variant="purple">sample</Badge>}
-                      </span>
-                    </Td>
-                    <Td><Badge variant="blue">{r.department}</Badge></Td>
-                    <Td className="text-slate-400 text-xs">{r.unit}</Td>
-                    <Td><input type="number" min="0" step="0.01" className="input text-sm py-1 w-24" value={r.received_qty} onChange={e => editRow(r.id, 'received_qty', e.target.value)} /></Td>
-                    <Td><input type="date" className="input text-sm py-1 w-40" value={r.expiry_date || ''} onChange={e => editRow(r.id, 'expiry_date', e.target.value)} /></Td>
-                    <Td>{r.matched ? <Badge variant="green">will update</Badge> : <Badge variant="orange">unmatched</Badge>}</Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </div>
-          <div className="flex justify-end">
-            <Button onClick={postToInventory} loading={busy} variant="success">
-              <CheckCircle2 className="w-4 h-4" /> Confirm &amp; Update Inventory
-            </Button>
-          </div>
-        </>
-      )}
+      <div className="card overflow-x-auto p-0">
+        <Table>
+          <Thead><tr>
+            <Th {...thProps('line_no')}>#</Th>
+            <Th {...thProps('supplier')}>Supplier</Th>
+            <Th {...thProps('po_number')}>PO</Th>
+            <Th {...thProps('part_number')}>Code</Th>
+            <Th {...thProps('product_name')}>Product</Th>
+            <Th {...thProps('unit')}>Unit</Th>
+            <Th {...thProps('ordered_qty')}>Qty</Th>
+            <Th {...thProps('department')}>Dept</Th>
+            <Th {...thProps('matched')}>Match</Th>
+            <Th></Th>
+          </tr></Thead>
+          <Tbody>
+            {sorted.map(r => (
+              <Tr key={r.id} className={r.is_sample ? 'bg-purple-900/10' : ''}>
+                <Td className="text-slate-500 text-xs">{r.line_no}</Td>
+                <Td><input className="input text-xs py-1 min-w-[120px]" value={r.supplier} onChange={e => editRow(r.id, 'supplier', e.target.value)} /></Td>
+                <Td><input className="input text-xs py-1 w-28 font-mono" value={r.po_number} onChange={e => editRow(r.id, 'po_number', e.target.value)} /></Td>
+                <Td><input className="input text-xs py-1 w-20 font-mono text-[#00AEEF]" value={r.part_number} onChange={e => editRow(r.id, 'part_number', e.target.value)} /></Td>
+                <Td>
+                  <div className="flex items-center gap-1.5">
+                    <input className="input text-xs py-1 min-w-[200px]" value={r.product_name} onChange={e => editRow(r.id, 'product_name', e.target.value)} />
+                    {r.is_sample && <Badge variant="purple">sample</Badge>}
+                  </div>
+                </Td>
+                <Td><input className="input text-xs py-1 w-16" value={r.unit} onChange={e => editRow(r.id, 'unit', e.target.value)} /></Td>
+                <Td><input type="number" className="input text-xs py-1 w-20" value={r.ordered_qty} onChange={e => editRow(r.id, 'ordered_qty', e.target.value)} /></Td>
+                <Td>
+                  <select className="input text-xs py-1 w-32" value={r.department || ''} onChange={e => editRow(r.id, 'department', e.target.value)}>
+                    {[...new Set([...allDepts, ...DEPARTMENTS, r.department])].filter(Boolean).map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </Td>
+                <Td>{r.matched ? <Badge variant="green">matched</Badge> : <Badge variant="gray">new</Badge>}</Td>
+                <Td><button onClick={() => delRow(r.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-4 h-4" /></button></Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </div>
     </div>
   )
 }
 
-// ═══════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+// HISTORY — every saved boat note, sortable. Expand a note to receive its items
+// into inventory one by one (each with multiple expiry batches), or delete it.
+// ════════════════════════════════════════════════════════════════════════════
 function BoatNoteHistory() {
   const [notes, setNotes]   = useState([])
   const [loading, setLoad]  = useState(true)
   const [range, setRange]   = useState({ from: '', to: '' })
   const [expanded, setExp]  = useState(null)
   const [itemsMap, setItemsMap] = useState({})
+  const [inventory, setInventory] = useState([])
+  const [receiving, setReceiving] = useState(null)   // boat_note_item being received
 
-  const load = async () => {
+  useEffect(() => {
+    selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,expiry_date,origin').eq('active', true))
+      .then(({ data }) => setInventory(data || []))
+  }, [])
+
+  const load = useCallback(async () => {
     setLoad(true)
     let q = supabase.from('boat_notes').select('*').order('note_date', { ascending: false }).limit(100)
     if (range.from) q = q.gte('note_date', range.from)
     if (range.to)   q = q.lte('note_date', range.to)
     const { data } = await q
     setNotes(data || []); setLoad(false)
-  }
-  useEffect(() => { load() }, [range.from, range.to])
+  }, [range.from, range.to])
+  useEffect(() => { load() }, [load])
 
+  const loadItems = async (id) => {
+    const { data } = await supabase.from('boat_note_items').select('*').eq('boat_note_id', id).order('line_no')
+    setItemsMap(m => ({ ...m, [id]: data || [] }))
+  }
   const openNote = async (id) => {
     if (expanded === id) { setExp(null); return }
-    if (!itemsMap[id]) {
-      const { data } = await supabase.from('boat_note_items').select('*').eq('boat_note_id', id).order('line_no')
-      setItemsMap(m => ({ ...m, [id]: data || [] }))
-    }
+    if (!itemsMap[id]) await loadItems(id)
     setExp(id)
   }
 
   const del = async (n) => {
-    if (!confirm(`Delete boat note "${n.label || n.note_date}"? This removes the note and its lines from history. Stock already posted is NOT reversed.`)) return
+    if (!confirm(`Delete boat note "${n.label || n.note_date}"? This removes the note and its lines from history. Stock already received is NOT reversed.`)) return
     const { error } = await supabase.from('boat_notes').delete().eq('id', n.id)
     if (error) { toast.error(error.message); return }
     setNotes(list => list.filter(x => x.id !== n.id))
     if (expanded === n.id) setExp(null)
     toast.success('Boat note deleted')
+  }
+
+  // Called after an item is successfully received into inventory.
+  const onReceived = (noteId, lineId, patch, postedDelta) => {
+    setItemsMap(m => ({ ...m, [noteId]: (m[noteId] || []).map(it => it.id === lineId ? { ...it, ...patch } : it) }))
+    if (postedDelta) {
+      setNotes(list => list.map(n => n.id === noteId ? { ...n, posted_items: (n.posted_items || 0) + postedDelta } : n))
+    }
   }
 
   return (
@@ -478,7 +310,7 @@ function BoatNoteHistory() {
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
       ) : notes.length === 0 ? (
-        <div className="card text-center text-slate-500 py-12">No boat notes posted yet</div>
+        <div className="card text-center text-slate-500 py-12">No boat notes yet — upload one to get started</div>
       ) : notes.map(n => (
         <div key={n.id} className="card p-0 overflow-hidden">
           <div className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-700/30">
@@ -490,8 +322,7 @@ function BoatNoteHistory() {
               </div>
             </button>
             <div className="flex items-center gap-2 shrink-0">
-              {(n.departments || []).slice(0, 4).map(d => <Badge key={d} variant="blue">{d}</Badge>)}
-              <Badge variant="teal">{n.posted_items}/{n.total_items} posted</Badge>
+              <Badge variant="teal">{n.posted_items || 0}/{n.total_items} received</Badge>
               <button onClick={() => del(n)} className="btn-ghost btn-sm text-red-400" title="Delete boat note">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -499,19 +330,27 @@ function BoatNoteHistory() {
           </div>
           {expanded === n.id && (
             <div className="border-t border-slate-700 overflow-x-auto">
-              <NoteItemsTable items={itemsMap[n.id] || []} />
+              <NoteItemsTable items={itemsMap[n.id] || []} onReceive={(line) => setReceiving({ note: n, line })} />
             </div>
           )}
         </div>
       ))}
+
+      {receiving && (
+        <ReceiveItemModal
+          note={receiving.note}
+          line={receiving.line}
+          inventory={inventory}
+          onClose={() => setReceiving(null)}
+          onDone={(patch, postedDelta) => { onReceived(receiving.note.id, receiving.line.id, patch, postedDelta); setReceiving(null) }}
+        />
+      )}
     </div>
   )
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// Sortable per-note items table (used inside the History accordion).
-// ═════════════════════════════════════════════════════════════════════════════
-function NoteItemsTable({ items }) {
+// Sortable per-note items table with a "Receive" action per line.
+function NoteItemsTable({ items, onReceive }) {
   const { sorted, thProps } = useSort(items, 'line_no', 'asc')
   return (
     <Table>
@@ -521,9 +360,11 @@ function NoteItemsTable({ items }) {
         <Th {...thProps('product_name')}>Product</Th>
         <Th {...thProps('department')}>Dept</Th>
         <Th {...thProps('unit')}>Unit</Th>
+        <Th {...thProps('ordered_qty')}>Ordered</Th>
         <Th {...thProps('received_qty')}>Received</Th>
         <Th {...thProps('expiry_date')}>Expiry</Th>
         <Th {...thProps('status')}>Status</Th>
+        <Th></Th>
       </tr></Thead>
       <Tbody>
         {sorted.map(it => (
@@ -535,9 +376,15 @@ function NoteItemsTable({ items }) {
             </Td>
             <Td className="text-slate-400 text-xs">{it.department}</Td>
             <Td className="text-slate-400 text-xs">{it.unit}</Td>
+            <Td className="text-slate-400 text-xs">{it.ordered_qty}</Td>
             <Td className="text-slate-200">{it.received_qty ?? '—'}</Td>
             <Td className="text-slate-400 text-xs">{it.expiry_date || '—'}</Td>
             <Td>{it.status === 'received' ? <Badge variant="green">received</Badge> : it.status === 'skipped' ? <Badge variant="orange">unmatched</Badge> : <Badge variant="gray">pending</Badge>}</Td>
+            <Td>
+              {it.status === 'received'
+                ? <span className="text-xs text-green-400 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> done</span>
+                : <Button size="sm" variant="secondary" onClick={() => onReceive(it)}><PackageCheck className="w-4 h-4" /> Receive</Button>}
+            </Td>
           </Tr>
         ))}
       </Tbody>
@@ -545,9 +392,162 @@ function NoteItemsTable({ items }) {
   )
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
+// ── Receive ONE item into inventory, with one or more expiry batches ─────────
+function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
+  const [itemId, setItemId] = useState(line.item_id || '')
+  const [search, setSearch] = useState('')
+  const [batches, setBatches] = useState([
+    { id: rid(), expiry_date: line.expiry_date || '', quantity: line.received_qty ?? line.ordered_qty ?? '' },
+  ])
+  const [busy, setBusy] = useState(false)
+
+  const invItem = useMemo(() => inventory.find(i => i.id === itemId) || null, [inventory, itemId])
+  const matches = useMemo(() => {
+    if (itemId) return []
+    const q = search.trim().toLowerCase()
+    const base = q
+      ? inventory.filter(i => `${i.name} ${i.part_number}`.toLowerCase().includes(q))
+      : inventory.filter(i => cleanCode(i.part_number) === cleanCode(line.part_number))
+    return base.slice(0, 12)
+  }, [inventory, itemId, search, line.part_number])
+
+  const totalQty = useMemo(() => batches.reduce((s, b) => s + (Number(b.quantity) || 0), 0), [batches])
+
+  const setBatch = (id, field, val) => setBatches(prev => prev.map(b => b.id === id ? { ...b, [field]: val } : b))
+  const addBatch = () => setBatches(prev => [...prev, { id: rid(), expiry_date: '', quantity: '' }])
+  const delBatch = (id) => setBatches(prev => prev.length > 1 ? prev.filter(b => b.id !== id) : prev)
+
+  const post = async () => {
+    if (!itemId) { toast.error('Pick the inventory item to receive into'); return }
+    if (totalQty <= 0) { toast.error('Enter a received quantity'); return }
+    setBusy(true)
+    try {
+      const dated = batches.filter(b => b.expiry_date && Number(b.quantity) > 0)
+      const earliest = dated.map(b => b.expiry_date).sort()[0] || null
+      const newStock = Number(invItem?.current_stock || 0) + totalQty
+
+      const upd = { current_stock: newStock }
+      if (earliest) upd.expiry_date = earliest
+      if (!invItem?.origin) upd.origin = classifyOrigin(line.product_name)
+      const { error: uErr } = await supabase.from('items').update(upd).eq('id', itemId)
+      if (uErr) throw uErr
+
+      await supabase.from('stock_updates').insert({
+        item_id: itemId, date: note.note_date, quantity_change: totalQty, new_quantity: newStock,
+        updated_by: note.created_by || 'Roni', note: `Boat note ${note.label || note.note_date}`,
+      })
+      await supabase.from('receiving').insert({
+        item_id: itemId, item_name: invItem?.name || line.product_name, date: note.note_date,
+        quantity_received: totalQty, unit: line.unit, supplier_name: line.supplier,
+        received_by: note.created_by || 'Roni', invoice_number: line.po_number, note: `Boat note: ${note.label || note.note_date}`,
+      }).catch(() => {})
+
+      // One inventory batch per expiry (multiple expiry supported).
+      for (const b of dated) {
+        await supabase.from('item_batches').insert({
+          item_id: itemId, expiry_date: b.expiry_date, quantity: Number(b.quantity) || 0,
+          note: `Boat note ${note.label || note.note_date}`,
+        }).catch(() => {})
+      }
+      // If no dated batches but qty given, still record a no-expiry batch.
+      if (!dated.length) {
+        await supabase.from('item_batches').insert({
+          item_id: itemId, expiry_date: null, quantity: totalQty,
+          note: `Boat note ${note.label || note.note_date}`,
+        }).catch(() => {})
+      }
+
+      const patch = { received_qty: totalQty, expiry_date: earliest, status: 'received', matched: true, item_id: itemId }
+      const { error: lErr } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
+      if (lErr) throw lErr
+
+      // Bump the note's received counter.
+      await supabase.from('boat_notes').update({ posted_items: (note.posted_items || 0) + 1 }).eq('id', note.id).catch(() => {})
+
+      toast.success(`Received ${totalQty} ${line.unit || ''} into ${invItem?.name || 'inventory'}`)
+      onDone(patch, 1)
+    } catch (e) { toast.error(e.message) }
+    setBusy(false)
+  }
+
+  return (
+    <Modal isOpen onClose={onClose} title="Receive item into inventory" size="md"
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancel</Button>
+        <Button variant="success" loading={busy} onClick={post}><CheckCircle2 className="w-4 h-4" /> Receive {totalQty || ''}</Button>
+      </>}>
+      <div className="space-y-4">
+        <div className="bg-slate-700/30 rounded-lg p-3">
+          <p className="text-sm text-slate-100 font-medium">{line.product_name}</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Code <span className="font-mono text-[#00AEEF]">{line.part_number || '—'}</span> · ordered {line.ordered_qty} {line.unit} · {line.supplier || 'no supplier'}
+          </p>
+        </div>
+
+        {/* Inventory item link */}
+        {invItem ? (
+          <div className="flex items-center justify-between gap-2 bg-green-900/15 border border-green-700/30 rounded-lg px-3 py-2">
+            <div className="text-sm">
+              <span className="text-green-300 font-medium">{invItem.name}</span>
+              <span className="text-slate-500 ml-2 font-mono text-xs">{invItem.part_number}</span>
+              <span className="text-slate-400 ml-2 text-xs">stock {Number(invItem.current_stock || 0)}</span>
+            </div>
+            <button onClick={() => { setItemId(''); setSearch('') }} className="text-xs text-slate-400 hover:text-slate-200">Change</button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 bg-amber-900/15 border border-amber-700/30 rounded-lg px-3 py-2 text-xs text-amber-300">
+              <AlertTriangle className="w-4 h-4 shrink-0" /> No matched item — pick the inventory item to receive into.
+            </div>
+            <div className="flex items-center gap-2">
+              <Search className="w-4 h-4 text-slate-400" />
+              <input className="input text-sm py-1.5 flex-1" placeholder="Search inventory by name or code…" value={search} onChange={e => setSearch(e.target.value)} />
+            </div>
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-700 divide-y divide-slate-700">
+              {matches.length === 0 ? (
+                <p className="text-xs text-slate-500 p-3">No matching items.</p>
+              ) : matches.map(i => (
+                <button key={i.id} onClick={() => setItemId(i.id)} className="w-full text-left px-3 py-2 hover:bg-slate-700/40 flex items-center justify-between gap-2">
+                  <span className="text-sm text-slate-200 truncate">{i.name}</span>
+                  <span className="font-mono text-xs text-[#00AEEF] shrink-0">{i.part_number}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Multiple expiry batches */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Quantity &amp; expiry</p>
+            <Button size="sm" variant="secondary" onClick={addBatch}><Plus className="w-4 h-4" /> Add expiry</Button>
+          </div>
+          <div className="space-y-2">
+            {batches.map((b, idx) => (
+              <div key={b.id} className="flex items-center gap-2">
+                <input type="number" min="0" step="0.01" className="input text-sm py-1.5 w-28" placeholder="Qty"
+                  value={b.quantity} onChange={e => setBatch(b.id, 'quantity', e.target.value)} />
+                <input type="date" className="input text-sm py-1.5 flex-1"
+                  value={b.expiry_date} onChange={e => setBatch(b.id, 'expiry_date', e.target.value)} />
+                <button onClick={() => delBatch(b.id)} disabled={batches.length === 1}
+                  className="p-1.5 text-slate-500 hover:text-red-400 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            ))}
+          </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Total to receive: <span className="text-slate-200 font-semibold">{totalQty || 0}</span> {line.unit}
+            {batches.length > 1 ? ` across ${batches.filter(b => Number(b.quantity) > 0).length} batches` : ''}.
+            Leave the date blank for items with no expiry.
+          </p>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // SAMPLES — every sample that has arrived over time (item code contains "sample")
-// ═════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
 function SamplesTab() {
   const [samples, setSamples] = useState([])
   const [loading, setLoad]    = useState(true)
