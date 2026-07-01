@@ -156,6 +156,10 @@ export default function Orders() {
       const { data: settings } = (await supabase.from('settings').select('key,value')) || {}
       const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       if (smap.resort_name) setResortName(smap.resort_name)
+      // Supplier → origin (local/foreign) map so the order sheet shows where each
+      // item comes from, driven by the Suppliers tab designation.
+      const { data: sups } = (await supabase.from('suppliers').select('name,origin')) || {}
+      const supOrigin = new Map((sups || []).filter(s => s.origin).map(s => [String(s.name || '').toUpperCase(), s.origin]))
       // Fetch items. Try WITH the store join first; if that yields nothing
       // (e.g. the items→stores relationship can't be embedded on this DB),
       // retry a plain select so the order can still be generated.
@@ -233,17 +237,19 @@ export default function Orders() {
         const target = avgWeekly * multiplier * (1 + backupWeeks)
         const net = subtractStock ? target - Number(item.current_stock || 0) : target
         const suggested = roundToPack(Math.max(0, net), pack)
-        const origin = item.origin || classifyOrigin(item.name)
+        // Origin: supplier designation (Suppliers tab) wins, then item origin,
+        // then a keyword classification of the product name.
+        const origin = supOrigin.get(String(item.supplier || '').toUpperCase()) || item.origin || classifyOrigin(item.name)
         return {
           id: item.id, part_number: item.part_number, name: item.name,
           store: item.stores?.name || '', category: item.stores?.category || '',
           unit: item.unit, current_stock: item.current_stock, min_stock: item.min_stock,
-          pack,
+          pack, supplier: item.supplier || '',
           thisWeek: Math.round(issAvg * 10) / 10, lastWeek: 0,
           avgWeekly: Math.round(avgWeekly * 10) / 10, suggested, ordered: suggested,
           selected: suggested > 0, _edited: false,
           origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: !!bn || !!patt, _fromBoatNote: bnAvg > 0,
-          _fromPending: false, _pendingNote: '', _manuallyAdded: false,
+          _fromPending: false, _pendingNote: '', _manuallyAdded: false, _notArrived: false,
         }
       })
       // PATTERN mode shows the full general list; USAGE mode shows only what
@@ -262,6 +268,46 @@ export default function Orders() {
       }
       finalRows = [...finalRows].sort((a, b) =>
         (a.origin || '').localeCompare(b.origin || '') || (a.name || '').localeCompare(b.name || ''))
+
+      // ── Not-arrived / short items ALWAYS come first in next week's order ──────
+      // Every boat-note line flagged not_arrived or short is carried to the top
+      // of the sheet so it is re-ordered first. They remain removable like any
+      // other row.
+      const { data: naItems } = (await selectAll(() =>
+        supabase.from('boat_note_items')
+          .select('*, boat_notes(note_date,label)')
+          .in('status', ['not_arrived', 'short']))) || {}
+      const naByCode = new Map()
+      for (const b of (naItems || [])) {
+        const c = code(b.part_number) || `x-${b.id}`
+        const qty = b.status === 'short'
+          ? (Number(b.short_qty) || Math.max(0, (Number(b.ordered_qty) || 0) - (Number(b.received_qty) || 0)))
+          : (Number(b.ordered_qty) || 0)
+        const d = b.boat_notes?.note_date || ''
+        const prev = naByCode.get(c)
+        if (!prev || d > prev._date) naByCode.set(c, { ...b, _qty: qty, _date: d })
+      }
+      const naRows = [...naByCode.values()].filter(b => b._qty > 0).map(b => {
+        const item = (items || []).find(it => code(it.part_number) === code(b.part_number))
+        const origin = supOrigin.get(String(b.supplier || item?.supplier || '').toUpperCase())
+          || item?.origin || classifyOrigin(b.product_name || item?.name || '')
+        return {
+          id: item?.id || `na-${b.id}`, part_number: b.part_number,
+          name: b.product_name || item?.name || b.part_number,
+          store: item?.stores?.name || b.department || '', category: item?.stores?.category || '',
+          unit: b.unit || item?.unit || 'EA', current_stock: item?.current_stock || 0, min_stock: item?.min_stock || 0,
+          pack: Number(item?.pack_size) || 1, supplier: b.supplier || item?.supplier || '',
+          thisWeek: 0, lastWeek: 0, avgWeekly: 0,
+          suggested: b._qty, ordered: b._qty, selected: true, _edited: false,
+          origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: true, _fromBoatNote: false,
+          _fromPending: false, _manuallyAdded: false, _notArrived: true, _naStatus: b.status,
+          _pendingNote: `${b.status === 'short' ? 'Came short' : 'Did not arrive'}${b._date ? ` on ${b._date}` : ''}`,
+        }
+      })
+      if (naRows.length) {
+        const naCodes = new Set(naRows.map(r => code(r.part_number)))
+        finalRows = [...naRows, ...finalRows.filter(r => !naCodes.has(code(r.part_number)))]
+      }
 
       setRows(finalRows); setDelivery(nextDeliveryFor(deliveryDay))
       await checkUndeliveredItems()
@@ -761,8 +807,9 @@ export default function Orders() {
                       <Tr key={row.id}
                         className={[
                           !row.selected ? 'opacity-40' : '',
-                          row._fromPending ? 'bg-orange-900/10' : '',
-                          row._manuallyAdded && !row._fromPending ? 'bg-blue-900/10' : '',
+                          row._notArrived ? 'bg-red-900/15' : '',
+                          !row._notArrived && row._fromPending ? 'bg-orange-900/10' : '',
+                          !row._notArrived && row._manuallyAdded && !row._fromPending ? 'bg-blue-900/10' : '',
                         ].join(' ')}>
                         <Td>
                           <input type="checkbox" checked={!!row.selected} onChange={() => toggleSelect(row.id)}
@@ -771,7 +818,11 @@ export default function Orders() {
                         </Td>
                         <Td className="font-mono text-xs text-slate-300">{row.part_number}</Td>
                         <Td className="max-w-xs">
-                          <p className={`text-sm font-medium truncate ${row._fromPending ? 'text-orange-200' : row._manuallyAdded ? 'text-blue-200' : 'text-slate-100'}`}>{row.name}</p>
+                          <div className="flex items-center gap-1.5">
+                            {row._notArrived && <Badge variant={row._naStatus === 'short' ? 'yellow' : 'red'}>{row._naStatus === 'short' ? 'short' : 'not arrived'}</Badge>}
+                            <p className={`text-sm font-medium truncate ${row._notArrived ? 'text-red-200' : row._fromPending ? 'text-orange-200' : row._manuallyAdded ? 'text-blue-200' : 'text-slate-100'}`}>{row.name}</p>
+                          </div>
+                          {row.supplier && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{row.supplier}</p>}
                           {row._pendingNote && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{row._pendingNote}</p>}
                         </Td>
                         <Td className="text-xs text-slate-400">{row.store}</Td>
@@ -788,7 +839,7 @@ export default function Orders() {
                         </Td>
                         <Td className={Number(row.current_stock) <= Number(row.min_stock) ? 'text-red-400 font-semibold' : 'text-slate-300'}>{row.current_stock}</Td>
                         <Td className="text-slate-300">{row.avgWeekly || '—'}</Td>
-                        <Td><Badge variant={row._fromPending ? 'orange' : row._manuallyAdded ? 'blue' : 'teal'}>{row.suggested}</Badge></Td>
+                        <Td><Badge variant={row._notArrived ? 'red' : row._fromPending ? 'orange' : row._manuallyAdded ? 'blue' : 'teal'}>{row.suggested}</Badge></Td>
                         <Td>
                           <div className="flex items-center gap-1">
                             <button onClick={() => adjustQty(row.id, -1)} className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300"><Minus className="w-3 h-3" /></button>

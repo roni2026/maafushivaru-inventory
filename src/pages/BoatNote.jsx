@@ -4,7 +4,7 @@ import {
   Ship, Upload, Loader, Plus, Trash2, CheckCircle2, ChevronLeft, X,
   FileSpreadsheet, History as HistoryIcon, Search, RefreshCw, AlertTriangle,
   PackageCheck, CalendarDays, ChevronDown, ChevronRight, FlaskConical, Save,
-  Printer, Mail, FileDown,
+  Printer, Mail, FileDown, Undo2, CalendarRange, PackageX,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -97,7 +97,7 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
     try {
       const lines = await getLines()
       const counts = { total: lines.length }
-      const known = ['received', 'damaged', 'wrong_item', 'not_arrived']
+      const known = ['received', 'damaged', 'wrong_item', 'not_arrived', 'short']
       CATEGORIES.forEach(c => {
         counts[c.key] = lines.filter(l =>
           c.key === 'pending' ? !known.includes(l.status) : l.status === c.key
@@ -193,6 +193,14 @@ export default function BoatNote() {
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'notarrived' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
             <AlertTriangle className="w-4 h-4 inline mr-1.5" />Not Arrived
           </button>
+          <button onClick={() => setTab('weekly')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'weekly' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+            <CalendarRange className="w-4 h-4 inline mr-1.5" />Weekly Log
+          </button>
+          <button onClick={() => setTab('returns')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'returns' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+            <Undo2 className="w-4 h-4 inline mr-1.5" />Returns
+          </button>
           <button onClick={() => setTab('samples')}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'samples' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
             <FlaskConical className="w-4 h-4 inline mr-1.5" />Samples
@@ -202,6 +210,8 @@ export default function BoatNote() {
       {tab === 'upload' ? <UploadFlow onSaved={() => setTab('history')} />
         : tab === 'samples' ? <SamplesTab />
         : tab === 'notarrived' ? <NotArrivedTab />
+        : tab === 'weekly' ? <WeeklyIssuesTab />
+        : tab === 'returns' ? <ReturnsTab />
         : tab === 'received' ? <ReceivedTab />
         : <BoatNoteHistory />}
     </div>
@@ -744,19 +754,54 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
 
 // ── Flag a line as NOT ARRIVED or WRONG ITEM, with a note ────────────────────
 function IssueItemModal({ line, onClose, onDone }) {
-  const [kind, setKind] = useState(['wrong_item', 'damaged', 'not_arrived'].includes(line.status) ? line.status : 'not_arrived')
+  const initKind = ['wrong_item', 'damaged', 'not_arrived', 'short'].includes(line.status) ? line.status : 'not_arrived'
+  const [kind, setKind] = useState(initKind)
   const [note, setNote] = useState(line.note || '')
+  const [qty,  setQty]  = useState(String(line.damaged_qty ?? line.short_qty ?? line.wrong_qty ?? ''))
+  const [logReturn, setLogReturn] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const LABELS = { not_arrived: 'not arrived', wrong_item: 'wrong item', damaged: 'damaged' }
+  const LABELS = { not_arrived: 'not arrived', wrong_item: 'wrong item', damaged: 'damaged', short: 'short' }
+  // Damaged / wrong / short all need an affected-unit count; not-arrived is the whole line.
+  const needsQty = kind !== 'not_arrived'
+  const qtyLabel = kind === 'damaged' ? 'How many damaged?'
+                 : kind === 'wrong_item' ? 'How many wrong?'
+                 : kind === 'short' ? 'Short by how many?' : 'Quantity'
+  const canReturn = kind === 'wrong_item' || kind === 'damaged'
+
+  const btn = (k, label, active) =>
+    <button key={k} onClick={() => setKind(k)}
+      className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === k ? active : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+      {label}
+    </button>
 
   const save = async () => {
+    const n = Number(qty)
+    if (needsQty && (!n || n <= 0)) { toast.error('Enter the affected quantity'); return }
     setBusy(true)
     try {
-      const patch = { status: kind, note: note.trim() || null }
+      const patch = {
+        status: kind,
+        note: note.trim() || null,
+        damaged_qty: kind === 'damaged' ? n : null,
+        wrong_qty:   kind === 'wrong_item' ? n : null,
+        short_qty:   kind === 'short' ? n : null,
+      }
       const { error } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
       if (error) throw error
-      toast.success(`Marked as ${LABELS[kind]}`)
+      if (logReturn && canReturn) {
+        await supabase.from('item_returns').insert({
+          boat_note_item_id: line.id, item_id: line.item_id || null,
+          part_number: line.part_number || null, product_name: line.product_name || null,
+          supplier: line.supplier || null, po_number: line.po_number || null,
+          unit: line.unit || 'EA', qty: n || line.ordered_qty || 0,
+          reason: kind, status: 'awaiting_return', created_by: currentActor(),
+          replacement_part_number: line.part_number || null,
+          replacement_product_name: line.product_name || null,
+          replacement_qty: n || line.ordered_qty || 0,
+        }).catch(() => {})
+      }
+      toast.success(`Marked as ${LABELS[kind]}${logReturn && canReturn ? ' + return logged' : ''}`)
       onDone(patch)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
@@ -773,24 +818,31 @@ function IssueItemModal({ line, onClose, onDone }) {
           <p className="text-sm text-slate-100 font-medium">{line.product_name}</p>
           <p className="text-xs text-slate-400 mt-0.5">Code <span className="font-mono text-[#00AEEF]">{line.part_number || '—'}</span> · {line.department || '—'} · ordered {line.ordered_qty} {line.unit}</p>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <button onClick={() => setKind('not_arrived')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'not_arrived' ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
-            Not arrived
-          </button>
-          <button onClick={() => setKind('wrong_item')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'wrong_item' ? 'bg-orange-600/20 border-orange-500 text-orange-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
-            Wrong item
-          </button>
-          <button onClick={() => setKind('damaged')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'damaged' ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
-            Damaged
-          </button>
+        <div className="grid grid-cols-2 gap-2">
+          {btn('not_arrived', 'Not arrived', 'bg-red-600/20 border-red-500 text-red-300')}
+          {btn('short',       'Short',       'bg-amber-600/20 border-amber-500 text-amber-300')}
+          {btn('wrong_item',  'Wrong item',  'bg-orange-600/20 border-orange-500 text-orange-300')}
+          {btn('damaged',     'Damaged',     'bg-red-600/20 border-red-500 text-red-300')}
         </div>
+        {needsQty && (
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{qtyLabel}</label>
+            <input type="number" min="0.01" step="0.01" value={qty} onChange={e => setQty(e.target.value)}
+              placeholder={`e.g. 3  (of ${line.ordered_qty} ${line.unit})`}
+              className="input w-full mt-1.5 text-sm" />
+          </div>
+        )}
+        {canReturn && (
+          <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+            <input type="checkbox" checked={logReturn} onChange={e => setLogReturn(e.target.checked)}
+              className="rounded border-slate-600 bg-slate-800 text-teal-500 focus:ring-teal-500" />
+            Log a return to the supplier for these units
+          </label>
+        )}
         <div>
           <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Note</label>
           <textarea rows={3} value={note} onChange={e => setNote(e.target.value)}
-            placeholder={kind === 'not_arrived' ? 'e.g. 2 cases short — supplier to redeliver Thursday' : 'e.g. sent 1.5L bottles instead of 500mL'}
+            placeholder={kind === 'not_arrived' ? 'e.g. supplier to redeliver Thursday' : kind === 'short' ? 'e.g. ordered 10, only 7 arrived' : 'e.g. sent 1.5L bottles instead of 500mL'}
             className="input w-full mt-1.5 text-sm" />
         </div>
       </div>
@@ -1143,5 +1195,325 @@ function ReceivedTab() {
         </div>
       )}
     </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WEEKLY LOG — every delivery problem (damaged / not arrived / wrong / short),
+// grouped by ISO week so you can review any past week at any time.
+// ═══════════════════════════════════════════════════════════════════════════
+const ISSUE_CATS = [
+  { key: 'not_arrived', label: 'Not Arrived', badge: 'red',    qtyField: null },
+  { key: 'short',       label: 'Short',       badge: 'yellow', qtyField: 'short_qty' },
+  { key: 'damaged',     label: 'Damaged',     badge: 'red',    qtyField: 'damaged_qty' },
+  { key: 'wrong_item',  label: 'Wrong Item',  badge: 'orange', qtyField: 'wrong_qty' },
+]
+const ISSUE_LABEL = Object.fromEntries(ISSUE_CATS.map(c => [c.key, c.label]))
+
+function isoWeek(dateStr) {
+  if (!dateStr) return { key: '0000-Unknown', label: 'Unknown week' }
+  const d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00')
+  if (isNaN(d)) return { key: '0000-Unknown', label: 'Unknown week' }
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+  const day = t.getUTCDay() || 7
+  t.setUTCDate(t.getUTCDate() + 4 - day)
+  const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1))
+  const week = Math.ceil((((t - yearStart) / 86400000) + 1) / 7)
+  return { key: `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`, label: `Week ${week} · ${t.getUTCFullYear()}` }
+}
+const issueQtyOf = (r) => r.damaged_qty ?? r.short_qty ?? r.wrong_qty ?? null
+
+function WeeklyIssuesTab() {
+  const [rows, setRows]   = useState([])
+  const [loading, setLoad]= useState(true)
+  const [catF, setCatF]   = useState('')
+  const [search, setSearch] = useState('')
+  const [open, setOpen]   = useState({})
+
+  const load = async () => {
+    setLoad(true)
+    const { data } = await selectAll(() =>
+      supabase.from('boat_note_items')
+        .select('*, boat_notes(note_date,label,delivery_day)')
+        .in('status', ['not_arrived', 'wrong_item', 'damaged', 'short']))
+    const list = (data || []).map(r => ({
+      ...r,
+      note_date: r.boat_notes?.note_date || (r.received_at ? String(r.received_at).slice(0, 10) : null),
+      note_label: r.boat_notes?.label || '',
+    }))
+    setRows(list); setLoad(false)
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = useMemo(() => rows.filter(r =>
+    (!catF || r.status === catF) &&
+    (!search || `${r.product_name} ${r.part_number} ${r.supplier} ${r.po_number}`.toLowerCase().includes(search.toLowerCase()))
+  ), [rows, catF, search])
+
+  const weeks = useMemo(() => {
+    const map = new Map()
+    for (const r of filtered) {
+      const w = isoWeek(r.note_date)
+      if (!map.has(w.key)) map.set(w.key, { ...w, items: [] })
+      map.get(w.key).items.push(r)
+    }
+    return [...map.values()].sort((a, b) => b.key.localeCompare(a.key))
+  }, [filtered])
+
+  const countBy = (items, k) => items.filter(i => i.status === k).length
+  const toggle = (k) => setOpen(o => ({ ...o, [k]: !o[k] }))
+
+  const exportCsv = () => {
+    const h = ['Week', 'Date', 'Boat Note', 'Status', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Issue Qty', 'Supplier', 'PO', 'Note']
+    const lines = weeks.flatMap(w => w.items.map(r => [
+      w.label, r.note_date || '', r.note_label || '', ISSUE_LABEL[r.status] || r.status,
+      r.part_number || '', r.product_name || '', r.department || '', r.unit || '',
+      r.ordered_qty ?? '', issueQtyOf(r) ?? '', r.supplier || '', r.po_number || '', (r.note || '').replace(/\n/g, ' '),
+    ]))
+    const csv = [h, ...lines].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    a.download = `weekly_delivery_issues.csv`; a.click()
+    toast.success('Weekly log exported')
+  }
+
+  const totals = ISSUE_CATS.map(c => ({ ...c, n: filtered.filter(r => r.status === c.key).length }))
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select value={catF} onChange={e => setCatF(e.target.value)} className="input text-sm w-auto">
+          <option value="">All problems</option>
+          {ISSUE_CATS.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+        </select>
+        <div className="relative flex-1 min-w-40">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input className="input pl-9 text-sm" placeholder="Search item, supplier, PO…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <button onClick={exportCsv} className="btn-secondary btn-sm"><FileDown className="w-4 h-4" /> Export</button>
+        <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {totals.map(t => (
+          <button key={t.key} onClick={() => setCatF(catF === t.key ? '' : t.key)}
+            className={`card-sm text-center ${catF === t.key ? 'ring-2 ring-teal-500' : ''}`}>
+            <p className="text-2xl font-bold text-slate-100">{t.n}</p>
+            <p className="text-slate-500 text-xs mt-1">{t.label}</p>
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : weeks.length === 0 ? (
+        <div className="card text-center py-16 text-slate-500"><CalendarRange className="w-12 h-12 mx-auto mb-3 opacity-20" /><p className="font-medium">No delivery problems logged</p></div>
+      ) : weeks.map(w => (
+        <div key={w.key} className="card p-0 overflow-hidden">
+          <button onClick={() => toggle(w.key)} className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-700/30 transition-colors">
+            <div className="flex items-center gap-2">
+              {open[w.key] ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+              <span className="font-semibold text-slate-100">{w.label}</span>
+              <span className="text-xs text-slate-500">({w.items.length} item{w.items.length !== 1 ? 's' : ''})</span>
+            </div>
+            <div className="flex gap-1.5 flex-wrap">
+              {ISSUE_CATS.map(c => countBy(w.items, c.key) > 0 && (
+                <Badge key={c.key} variant={c.badge}>{c.label}: {countBy(w.items, c.key)}</Badge>
+              ))}
+            </div>
+          </button>
+          {open[w.key] && (
+            <div className="border-t border-slate-700/50 overflow-x-auto">
+              <Table>
+                <Thead><tr>
+                  <Th>Date</Th><Th>Status</Th><Th>Code</Th><Th>Product</Th><Th>Dept</Th>
+                  <Th>Ordered</Th><Th>Issue Qty</Th><Th>Supplier</Th><Th>PO</Th><Th>Note</Th>
+                </tr></Thead>
+                <Tbody>
+                  {w.items.map(r => (
+                    <Tr key={r.id}>
+                      <Td className="text-slate-400 text-xs whitespace-nowrap">{r.note_date || '—'}</Td>
+                      <Td><StatusBadge status={r.status} /></Td>
+                      <Td className="font-mono text-xs text-slate-300">{r.part_number || '—'}</Td>
+                      <Td className="font-medium text-slate-100 max-w-xs truncate">{r.product_name}</Td>
+                      <Td className="text-slate-400 text-xs">{r.department || '—'}</Td>
+                      <Td className="text-slate-300">{r.ordered_qty} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
+                      <Td className="text-amber-400 font-semibold">{issueQtyOf(r) ?? '—'}</Td>
+                      <Td className="text-slate-400 text-xs max-w-[10rem] truncate">{r.supplier || '—'}</Td>
+                      <Td className="font-mono text-xs text-slate-400">{r.po_number || '—'}</Td>
+                      <Td className="text-slate-500 text-xs max-w-xs truncate">{r.note || '—'}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RETURNS — wrong / damaged items sent back to the supplier, and the (sometimes
+// changed) replacement that comes back. Update replacements intelligently.
+// ═══════════════════════════════════════════════════════════════════════════
+const RETURN_STATUS = {
+  awaiting_return: { label: 'Awaiting return', badge: 'yellow' },
+  returned:        { label: 'Returned',        badge: 'orange' },
+  replaced:        { label: 'Replaced',         badge: 'green' },
+  changed:         { label: 'Replaced (changed)', badge: 'purple' },
+  closed:          { label: 'Closed',           badge: 'gray' },
+}
+
+function ReturnsTab() {
+  const [rows, setRows]     = useState([])
+  const [loading, setLoad]  = useState(true)
+  const [statusF, setStatusF] = useState('')
+  const [search, setSearch] = useState('')
+  const [replacing, setReplacing] = useState(null)  // return row being resolved
+
+  const load = async () => {
+    setLoad(true)
+    const { data } = await selectAll(() =>
+      supabase.from('item_returns').select('*').order('created_at', { ascending: false }))
+    setRows(data || []); setLoad(false)
+  }
+  useEffect(() => { load() }, [])
+
+  const filtered = useMemo(() => rows.filter(r =>
+    (!statusF || r.status === statusF) &&
+    (!search || `${r.product_name} ${r.part_number} ${r.supplier} ${r.po_number}`.toLowerCase().includes(search.toLowerCase()))
+  ), [rows, statusF, search])
+
+  const markReturned = async (r) => {
+    const { error } = await supabase.from('item_returns').update({ status: 'returned' }).eq('id', r.id)
+    if (error) return toast.error(error.message)
+    toast.success('Marked as returned'); load()
+  }
+  const closeReturn = async (r) => {
+    if (!confirm('Close this return (no replacement expected)?')) return
+    await supabase.from('item_returns').update({ status: 'closed', resolved_at: new Date().toISOString() }).eq('id', r.id)
+    toast.success('Return closed'); load()
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 flex-wrap">
+        <select value={statusF} onChange={e => setStatusF(e.target.value)} className="input text-sm w-auto">
+          <option value="">All statuses</option>
+          {Object.entries(RETURN_STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <div className="relative flex-1 min-w-40">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input className="input pl-9 text-sm" placeholder="Search item, supplier, PO…" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="card text-center py-16 text-slate-500"><Undo2 className="w-12 h-12 mx-auto mb-3 opacity-20" /><p className="font-medium">No returns logged</p><p className="text-sm mt-1">Flag a wrong/damaged item on the History tab and tick "Log a return".</p></div>
+      ) : (
+        <div className="overflow-x-auto">
+          <Table>
+            <Thead><tr>
+              <Th>Logged</Th><Th>Reason</Th><Th>Code</Th><Th>Product</Th><Th>Qty</Th>
+              <Th>Supplier</Th><Th>PO</Th><Th>Status</Th><Th>Replacement</Th><Th></Th>
+            </tr></Thead>
+            <Tbody>
+              {filtered.map(r => {
+                const st = RETURN_STATUS[r.status] || { label: r.status, badge: 'gray' }
+                return (
+                  <Tr key={r.id}>
+                    <Td className="text-slate-400 text-xs whitespace-nowrap">{String(r.created_at || '').slice(0, 10)}</Td>
+                    <Td><Badge variant={r.reason === 'damaged' ? 'red' : 'orange'}>{r.reason === 'wrong_item' ? 'wrong item' : r.reason}</Badge></Td>
+                    <Td className="font-mono text-xs text-slate-300">{r.part_number || '—'}</Td>
+                    <Td className="font-medium text-slate-100 max-w-xs truncate">{r.product_name}</Td>
+                    <Td className="text-slate-300">{r.qty} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
+                    <Td className="text-slate-400 text-xs max-w-[10rem] truncate">{r.supplier || '—'}</Td>
+                    <Td className="font-mono text-xs text-slate-400">{r.po_number || '—'}</Td>
+                    <Td><Badge variant={st.badge}>{st.label}</Badge></Td>
+                    <Td className="text-xs text-slate-400 max-w-[12rem] truncate">
+                      {r.replacement_product_name && (r.status === 'replaced' || r.status === 'changed')
+                        ? <span>{r.changed && <span className="text-purple-400 font-semibold">CHANGED → </span>}{r.replacement_part_number} · {r.replacement_product_name} × {r.replacement_qty}</span>
+                        : '—'}
+                    </Td>
+                    <Td>
+                      <div className="flex gap-1 justify-end">
+                        {r.status === 'awaiting_return' && (
+                          <button onClick={() => markReturned(r)} className="btn-ghost btn-sm text-xs" title="Mark as sent back"><Undo2 className="w-3.5 h-3.5" /></button>
+                        )}
+                        {(r.status === 'awaiting_return' || r.status === 'returned') && (
+                          <button onClick={() => setReplacing(r)} className="btn-secondary btn-sm text-xs"><PackageCheck className="w-3.5 h-3.5" /> Replacement</button>
+                        )}
+                        {r.status !== 'closed' && (
+                          <button onClick={() => closeReturn(r)} className="btn-ghost btn-sm text-xs" title="Close"><X className="w-3.5 h-3.5" /></button>
+                        )}
+                      </div>
+                    </Td>
+                  </Tr>
+                )
+              })}
+            </Tbody>
+          </Table>
+        </div>
+      )}
+
+      {replacing && <ReplacementModal ret={replacing} onClose={() => setReplacing(null)} onDone={() => { setReplacing(null); load() }} />}
+    </div>
+  )
+}
+
+// Records the replacement that came back. Pre-fills with the original item and
+// auto-detects when a DIFFERENT (changed) item was sent instead.
+function ReplacementModal({ ret, onClose, onDone }) {
+  const [part, setPart] = useState(ret.replacement_part_number || ret.part_number || '')
+  const [name, setName] = useState(ret.replacement_product_name || ret.product_name || '')
+  const [qty,  setQty]  = useState(String(ret.replacement_qty ?? ret.qty ?? ''))
+  const [busy, setBusy] = useState(false)
+
+  const changed = (part.trim() !== (ret.part_number || '').trim()) ||
+                  (name.trim().toLowerCase() !== (ret.product_name || '').trim().toLowerCase())
+
+  const save = async () => {
+    const n = Number(qty)
+    if (!n || n <= 0) { toast.error('Enter the replacement quantity'); return }
+    setBusy(true)
+    try {
+      const patch = {
+        status: changed ? 'changed' : 'replaced',
+        changed,
+        replacement_part_number: part.trim() || null,
+        replacement_product_name: name.trim() || null,
+        replacement_qty: n,
+        resolved_at: new Date().toISOString(),
+      }
+      const { error } = await supabase.from('item_returns').update(patch).eq('id', ret.id)
+      if (error) throw error
+      toast.success(changed ? 'Replacement recorded (item changed)' : 'Replacement recorded')
+      onDone()
+    } catch (e) { toast.error(e.message) }
+    setBusy(false)
+  }
+
+  return (
+    <Modal isOpen onClose={onClose} title="Record replacement" size="sm"
+      footer={<><Button variant="ghost" onClick={onClose}>Cancel</Button><Button loading={busy} onClick={save}><PackageCheck className="w-4 h-4" /> Save</Button></>}>
+      <div className="space-y-4">
+        <div className="bg-slate-700/30 rounded-lg p-3 text-xs text-slate-400">
+          Original: <span className="font-mono text-[#00AEEF]">{ret.part_number || '—'}</span> · {ret.product_name} × {ret.qty} {ret.unit}
+        </div>
+        <Input label="Replacement code" value={part} onChange={e => setPart(e.target.value)} placeholder="Item code that came back" />
+        <Input label="Replacement product" value={name} onChange={e => setName(e.target.value)} placeholder="Product name" />
+        <Input label="Replacement quantity" type="number" min="0.01" step="0.01" value={qty} onChange={e => setQty(e.target.value)} />
+        {changed && (
+          <div className="bg-purple-900/30 border border-purple-700/40 rounded-lg p-3 text-sm text-purple-300">
+            This differs from the original — it will be recorded as a <strong>changed</strong> replacement.
+          </div>
+        )}
+      </div>
+    </Modal>
   )
 }

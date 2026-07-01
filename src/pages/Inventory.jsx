@@ -42,7 +42,7 @@ function expiryBadge(days){
 const EMPTY_FORM = {
   part_number:'',name:'',store_id:'',unit:'pcs',
   current_stock:'',min_stock:'',expiry_date:'',
-  supplier:'',notes:'',unit_cost:'',location:'',image_url:'',
+  supplier:'',origin:'',notes:'',unit_cost:'',location:'',image_url:'',
 }
 const UNITS = ['pcs','kg','g','L','mL','bottle','box','case','can','bag','jar','pack','roll','set']
 const SEARCH_FIELDS = [
@@ -257,7 +257,7 @@ export default function Inventory() {
     setForm({
       part_number:item.part_number, name:item.name, store_id:item.store_id,
       unit:item.unit, current_stock:item.current_stock, min_stock:item.min_stock,
-      expiry_date:item.expiry_date||'', supplier:item.supplier||'',
+      expiry_date:item.expiry_date||'', supplier:item.supplier||'', origin:item.origin||'',
       notes:item.notes||'', unit_cost:item.unit_cost||'',
       location:item.location||'', image_url:item.image_url||'',
     })
@@ -542,6 +542,7 @@ export default function Inventory() {
               <Th sortable onClick={()=>toggleSort('part_number')} sorted={sortField==='part_number'?sortDir:undefined}>Part #</Th>
               <Th sortable onClick={()=>toggleSort('name')} sorted={sortField==='name'?sortDir:undefined}>Item Name</Th>
               <Th sortable onClick={()=>toggleSort('store_name')} sorted={sortField==='store_name'?sortDir:undefined}>Store</Th>
+              <Th sortable onClick={()=>toggleSort('supplier')} sorted={sortField==='supplier'?sortDir:undefined}>Supplier</Th>
               <Th sortable onClick={()=>toggleSort('unit')} sorted={sortField==='unit'?sortDir:undefined}>Unit</Th>
               <Th sortable onClick={()=>toggleSort('current_stock')} sorted={sortField==='current_stock'?sortDir:undefined}>Stock</Th>
               <Th sortable onClick={()=>toggleSort('min_stock')} sorted={sortField==='min_stock'?sortDir:undefined}>Min</Th>
@@ -581,7 +582,16 @@ export default function Inventory() {
                       </p>
                     )}
                   </Td>
-                  <Td className="text-xs text-slate-400">{item.stores?.name}</Td>
+                  <Td className="text-xs text-slate-400 max-w-[10rem]">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate">{item.supplier || '—'}</span>
+                      {item.origin && (
+                        <span className={`shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full border ${item.origin === 'local' ? 'bg-emerald-900/30 border-emerald-700/40 text-emerald-300' : 'bg-sky-900/30 border-sky-700/40 text-sky-300'}`}>
+                          {item.origin === 'local' ? 'Local' : 'Foreign'}
+                        </span>
+                      )}
+                    </div>
+                  </Td>
                   <Td className="text-xs text-slate-400">{item.unit}</Td>
                   <Td>
                     <span className={`font-semibold ${lowStock?'text-red-400':'text-slate-100'}`}>{item.current_stock}</span>
@@ -678,6 +688,11 @@ export default function Inventory() {
           <Input label="Unit Cost ($)" type="number" min="0" step="0.01" value={form.unit_cost} onChange={f('unit_cost')} placeholder="0.00" />
           <Input label="Expiry Date" type="date" value={form.expiry_date} onChange={f('expiry_date')} />
           <Input label="Supplier" value={form.supplier} onChange={f('supplier')} placeholder="Supplier name" />
+          <Select label="Origin (local / foreign)" value={form.origin} onChange={f('origin')}>
+            <option value="">— Not set —</option>
+            <option value="local">Local (arrives Thursday)</option>
+            <option value="foreign">Foreign (arrives Monday)</option>
+          </Select>
           <Input label="Location in Store" value={form.location} onChange={f('location')} placeholder="e.g. Shelf B3, Row 2" />
           <div className="sm:col-span-2">
             <Textarea label="Description / Notes" value={form.notes} onChange={f('notes')} placeholder="Any notes or description…" rows={2} />

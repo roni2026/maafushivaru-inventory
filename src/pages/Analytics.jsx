@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { supabase, selectAll } from '../lib/supabase'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -125,6 +125,23 @@ export default function Analytics() {
     if (sortField===f) setSortDir(d=>d==='asc'?'desc':'asc')
     else { setSortField(f); setSortDir('desc') }
   }
+
+  // ── Pagination (100 rows / page) ──────────────────────────────────────────
+  const PER_PAGE = 100
+  const [page, setPage] = useState(1)
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PER_PAGE))
+  // Reset to page 1 whenever the filtered result set changes.
+  useEffect(() => { setPage(1) }, [search, filterStore, filterCat, filterCls, sortField, sortDir, period])
+  const safePage = Math.min(page, pageCount)
+  const paged = useMemo(() => filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE), [filtered, safePage])
+  const pageNumbers = useMemo(() => {
+    const out = []
+    const add = (p) => { if (p >= 1 && p <= pageCount && !out.includes(p)) out.push(p) }
+    add(1); add(2)
+    for (let p = safePage - 2; p <= safePage + 2; p++) add(p)
+    add(pageCount - 1); add(pageCount)
+    return out.sort((a, b) => a - b)
+  }, [safePage, pageCount])
 
   // ── Summary counts ────────────────────────────────────
   const summary = useMemo(() => {
@@ -337,7 +354,9 @@ export default function Analytics() {
               <option value="Slow Moving">🐢 Slow Moving</option>
               <option value="No Movement">💤 No Movement</option>
             </select>
-            <span className="text-slate-400 text-sm ml-auto">{filtered.length} items</span>
+            <span className="text-slate-400 text-sm ml-auto">
+              {filtered.length} items{filtered.length > PER_PAGE ? ` · showing ${(safePage - 1) * PER_PAGE + 1}–${Math.min(safePage * PER_PAGE, filtered.length)}` : ''}
+            </span>
           </div>
 
           {/* Detail table */}
@@ -353,7 +372,7 @@ export default function Analytics() {
               <Th sortable onClick={()=>toggleSort('cls')} sorted={sortField==='cls'?sortDir:undefined}>Classification</Th>
             </tr></Thead>
             <Tbody>
-              {filtered.map(item => {
+              {paged.map(item => {
                 const trendNum = item.trend !== null ? Number(item.trend) : null
                 return (
                   <Tr key={item.id}>
@@ -381,6 +400,31 @@ export default function Analytics() {
               })}
             </Tbody>
           </Table>
+
+          {pageCount > 1 && (
+            <div className="flex items-center justify-center gap-1.5 flex-wrap mt-4">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                Prev
+              </button>
+              {pageNumbers.map((p, i) => {
+                const gap = i > 0 && p - pageNumbers[i - 1] > 1
+                return (
+                  <span key={p} className="flex items-center gap-1.5">
+                    {gap && <span className="text-slate-600 px-1">…</span>}
+                    <button onClick={() => setPage(p)}
+                      className={`min-w-[36px] px-2.5 py-1.5 rounded-lg text-sm font-medium border transition-colors ${p === safePage ? 'bg-teal-600 border-teal-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'}`}>
+                      {p}
+                    </button>
+                  </span>
+                )
+              })}
+              <button onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={safePage === pageCount}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                Next
+              </button>
+            </div>
+          )}
         </>
       )}
     </div>
