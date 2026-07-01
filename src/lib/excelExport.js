@@ -390,3 +390,97 @@ export async function exportStocktakeVarianceExcel(rows, meta = {}) {
   const buf = await wb.xlsx.writeBuffer()
   downloadBuffer(buf, meta.filename || `Stocktake_Variance_${new Date().toISOString().split('T')[0]}.xlsx`)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 5) WASTE / DISPOSAL LOG  — coloured, formatted export with a summary band.
+//   rows: waste_log records joined with items(name, part_number, unit, stores)
+//   meta: { resortName, dateFrom, dateTo }
+// ═══════════════════════════════════════════════════════════════════════════
+const WASTE_REASON_XLSX = {
+  Expired:          { bg: 'FFFFE4E6', txt: 'FFB91C1C' },
+  Damaged:          { bg: 'FFFFEDD5', txt: 'FFC2410C' },
+  Contamination:    { bg: 'FFF3E8FF', txt: 'FF7E22CE' },
+  'Over-Production': { bg: 'FFFEF9C3', txt: 'FF854D0E' },
+  Other:            { bg: 'FFF1F5F9', txt: 'FF334155' },
+}
+
+export async function exportWasteExcel(rows, meta = {}) {
+  const { default: ExcelJS } = await import('exceljs')
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Outrigger Maafushivaru Inventory'
+  wb.created = new Date()
+  const ws = wb.addWorksheet('Waste Log', {
+    views: [{ state: 'frozen', ySplit: 5 }],
+    pageSetup: { fitToPage: true, fitToWidth: 1, orientation: 'landscape' },
+  })
+
+  const headers = ['#', 'Date', 'Part #', 'Item Name', 'Store', 'Reason', 'Qty', 'Unit', 'Unit Cost', 'Total Cost', 'Logged By', 'Notes']
+  ws.columns = [
+    { width: 5 }, { width: 12 }, { width: 13 }, { width: 34 }, { width: 18 }, { width: 15 },
+    { width: 9 }, { width: 8 }, { width: 11 }, { width: 12 }, { width: 16 }, { width: 30 },
+  ]
+
+  const totalQty  = rows.reduce((s, w) => s + Number(w.quantity || 0), 0)
+  const totalCost = rows.reduce((s, w) => s + Number(w.quantity || 0) * Number(w.unit_cost || 0), 0)
+  const range = meta.dateFrom && meta.dateTo ? `${meta.dateFrom} → ${meta.dateTo}` : 'All dates'
+
+  addTitleBand(ws, 'Waste / Disposal Log',
+    `${meta.resortName || 'Outrigger Maafushivaru Resort'}  ·  ${range}  ·  ${rows.length} record(s)  ·  ${totalQty.toFixed(1)} units  ·  Est. value $${totalCost.toFixed(2)}`,
+    headers.length)
+
+  // Reason summary band (row 3)
+  const byReason = {}
+  rows.forEach(w => { byReason[w.reason] = (byReason[w.reason] || 0) + 1 })
+  ws.mergeCells(3, 1, 3, headers.length)
+  const sb = ws.getCell(3, 1)
+  sb.value = Object.entries(byReason).map(([k, v]) => `${k}: ${v}`).join('    ·    ') || 'No records'
+  sb.font = { name: 'Calibri', size: 10, italic: true, color: { argb: 'FF475569' } }
+  sb.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+  ws.getRow(3).height = 18
+
+  styleHeaderRow(ws, 5, headers)
+
+  rows.forEach((w, idx) => {
+    const rowIdx = idx + 6
+    const row = ws.getRow(rowIdx)
+    const rc = WASTE_REASON_XLSX[w.reason] || WASTE_REASON_XLSX.Other
+    const cost = Number(w.quantity || 0) * Number(w.unit_cost || 0)
+    const vals = [
+      idx + 1, w.date || '', w.items?.part_number || '', w.items?.name || '',
+      w.items?.stores?.name || '', w.reason || '', Number(w.quantity) || 0, w.items?.unit || '',
+      Number(w.unit_cost) || 0, cost, w.logged_by || '', w.notes || '',
+    ]
+    vals.forEach((v, i) => {
+      const c = row.getCell(i + 1)
+      c.value = v
+      c.font = { name: 'Calibri', size: 10 }
+      c.border = border()
+      c.alignment = { vertical: 'middle', horizontal: (i === 0 || (i >= 6 && i <= 9)) ? 'center' : 'left', wrapText: i === 3 || i === 11 }
+      c.fill = fill(idx % 2 ? GREY_ROW : WHITE)
+      if (i === 5) { // Reason chip
+        c.fill = fill(rc.bg)
+        c.font = { name: 'Calibri', size: 10, bold: true, color: { argb: rc.txt } }
+        c.alignment = { vertical: 'middle', horizontal: 'center' }
+      }
+      if (i === 8 || i === 9) c.numFmt = '#,##0.00'
+    })
+    row.height = 18
+  })
+
+  // Totals row
+  const tr = ws.getRow(rows.length + 6)
+  tr.getCell(6).value = 'TOTAL'
+  tr.getCell(7).value = totalQty
+  tr.getCell(10).value = totalCost
+  ;[6, 7, 10].forEach(ci => {
+    const c = tr.getCell(ci)
+    c.font = { name: 'Calibri', size: 10, bold: true, color: { argb: WHITE } }
+    c.fill = fill(BRAND_DARK)
+    c.alignment = { vertical: 'middle', horizontal: ci === 6 ? 'right' : 'center' }
+    if (ci === 10) c.numFmt = '#,##0.00'
+  })
+  tr.height = 20
+
+  const buffer = await wb.xlsx.writeBuffer()
+  downloadBuffer(buffer, `Waste_Log_${meta.dateFrom || 'all'}_${meta.dateTo || ''}.xlsx`)
+}

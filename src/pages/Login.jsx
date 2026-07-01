@@ -22,23 +22,27 @@ export default function Login() {
   }
 
   return (
-    <div
-      className="min-h-screen bg-slate-900 flex items-center justify-center p-4"
-      style={{ backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(15,118,110,0.18) 0%, transparent 65%)' }}
-    >
-      <div className="w-full max-w-md">
+    <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden">
+      {/* Maldivian island / sea backdrop */}
+      <div
+        className="absolute inset-0 bg-cover bg-center scale-105"
+        style={{ backgroundImage: 'url(/maldives-bg.jpg)' }}
+      />
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-900/55 via-slate-900/65 to-slate-950/85" />
+
+      <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600 rounded-2xl shadow-xl mb-5">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600/90 backdrop-blur rounded-2xl shadow-xl mb-5 ring-1 ring-white/20">
             <Waves className="w-8 h-8 text-white" />
           </div>
-          <h1 className="font-display text-3xl font-bold text-slate-100">Outrigger</h1>
-          <p className="text-slate-400 mt-1 text-sm">Maafushivaru Resort &mdash; Inventory System</p>
+          <h1 className="font-display text-3xl font-bold text-white drop-shadow-lg">Outrigger</h1>
+          <p className="text-teal-50/90 mt-1 text-sm drop-shadow">Maafushivaru Resort &mdash; Inventory System</p>
         </div>
 
-        {/* Card */}
-        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 shadow-2xl">
-          <h2 className="font-display text-xl font-semibold text-slate-100 mb-6">Sign In</h2>
+        {/* Card — glassmorphic over the lagoon */}
+        <div className="bg-slate-900/55 backdrop-blur-xl border border-white/15 rounded-2xl p-8 shadow-2xl">
+          <h2 className="font-display text-xl font-semibold text-white mb-6">Sign In</h2>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Email Address</label>

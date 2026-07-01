@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useSort } from '../hooks/useSort'
 import { supabase, selectAll } from '../lib/supabase'
-import { Trash2, Plus, Download, Search, RefreshCw } from 'lucide-react'
+import { Trash2, Plus, Download, Search, RefreshCw, FileSpreadsheet } from 'lucide-react'
+import { exportWasteExcel } from '../lib/excelExport'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from 'recharts'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -106,6 +107,17 @@ export default function Waste() {
     toast.success('CSV exported')
   }
 
+  const [exportingXlsx, setExportingXlsx] = useState(false)
+  const exportExcel = async () => {
+    if (!filtered.length) { toast.error('Nothing to export'); return }
+    setExportingXlsx(true)
+    try {
+      await exportWasteExcel(sorted, { dateFrom, dateTo, resortName: 'Outrigger Maafushivaru Resort' })
+      toast.success('Excel exported')
+    } catch (e) { toast.error(e.message || 'Export failed') }
+    setExportingXlsx(false)
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -113,6 +125,7 @@ export default function Waste() {
         <div className="flex gap-2">
           <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
           <button onClick={exportCSV} className="btn-secondary btn-sm"><Download className="w-4 h-4" /> CSV</button>
+          <button onClick={exportExcel} disabled={exportingXlsx} className="btn-secondary btn-sm"><FileSpreadsheet className="w-4 h-4" /> {exportingXlsx ? 'Exporting…' : 'Excel'}</button>
           <Button onClick={()=>{setShowModal(true);setDate(fmtDate(0))}}><Plus className="w-4 h-4" /> Log Waste</Button>
         </div>
       </div>

@@ -22,10 +22,17 @@ export const CATEGORIES = [
   { key: 'damaged',     label: 'Damaged',     xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFFE4E6' },
   { key: 'wrong_item',  label: 'Wrong Item',  xlsx: 'FFEA580C', hex: '#ea580c', bg: 'FFFFEDD5' },
   { key: 'not_arrived', label: 'Not Arrived', xlsx: 'FFDC2626', hex: '#dc2626', bg: 'FFFEE2E2' },
+  { key: 'short',       label: 'Short',       xlsx: 'FFB45309', hex: '#b45309', bg: 'FFFEF3C7' },
   { key: 'pending',     label: 'Pending',     xlsx: 'FFCA8A04', hex: '#ca8a04', bg: 'FFFEF9C3' },
 ]
 
-const HEADERS = ['#', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Received', 'Expiry', 'Supplier', 'PO', 'Note']
+// The affected-unit count for a delivery problem (damaged / short / wrong).
+function issueQty(it) {
+  const v = it.damaged_qty ?? it.short_qty ?? it.wrong_qty
+  return (v === null || v === undefined || v === '') ? '' : Number(v)
+}
+
+const HEADERS = ['#', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Received', 'Issue Qty', 'Expiry', 'Supplier', 'PO', 'Note']
 
 function rowValues(it) {
   return [
@@ -36,6 +43,7 @@ function rowValues(it) {
     it.unit || '',
     Number(it.ordered_qty) || 0,
     it.received_qty ?? '',
+    issueQty(it),
     it.expiry_date || '',
     it.supplier || '',
     it.po_number || '',
@@ -128,7 +136,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
         const c = row.getCell(i + 1)
         c.value = v
         c.font = { name: 'Calibri', size: 10 }
-        c.alignment = { vertical: 'middle', horizontal: i >= 5 && i <= 6 ? 'center' : 'left', wrapText: i === 2 || i === 10 }
+        c.alignment = { vertical: 'middle', horizontal: i >= 5 && i <= 7 ? 'center' : 'left', wrapText: i === 2 || i === 11 }
         c.fill = fill(idx % 2 ? 'FFF4F7FA' : WHITE)
         c.border = border
       })
@@ -139,7 +147,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
 
   ws.columns = [
     { width: 5 }, { width: 12 }, { width: 34 }, { width: 12 }, { width: 8 },
-    { width: 10 }, { width: 10 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 },
+    { width: 10 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 },
   ]
 
   // ---- Sheet 2: flat list with AutoFilter (fully sortable in Excel) ----
@@ -170,7 +178,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
     }
   }
   ws2.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rr - 1), column: flatHeaders.length } }
-  ws2.columns = [{ width: 12 }, { width: 5 }, { width: 12 }, { width: 34 }, { width: 12 }, { width: 8 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 }]
+  ws2.columns = [{ width: 12 }, { width: 5 }, { width: 12 }, { width: 34 }, { width: 12 }, { width: 8 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 }]
   ws2.views = [{ state: 'frozen', ySplit: 1 }]
 
   return wb.xlsx.writeBuffer()
@@ -218,8 +226,10 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
         <td>${esc(it.unit)}</td>
         <td style="text-align:center">${esc(it.ordered_qty)}</td>
         <td style="text-align:center">${esc(it.received_qty ?? '—')}</td>
+        <td style="text-align:center">${esc(issueQty(it) === '' ? '—' : issueQty(it))}</td>
         <td>${esc(it.expiry_date || '—')}</td>
         <td>${esc(it.supplier)}</td>
+        <td style="font-family:monospace">${esc(it.po_number || '—')}</td>
         <td>${esc(it.note || '')}</td>
       </tr>`).join('')
     return `
@@ -229,7 +239,7 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
       <table>
         <thead><tr>
           <th>#</th><th>Code</th><th>Product</th><th>Dept</th><th>Unit</th>
-          <th>Ord.</th><th>Rcvd</th><th>Expiry</th><th>Supplier</th><th>Note</th>
+          <th>Ord.</th><th>Rcvd</th><th>Issue Qty</th><th>Expiry</th><th>Supplier</th><th>PO</th><th>Note</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`

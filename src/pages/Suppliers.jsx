@@ -5,11 +5,11 @@ import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Modal from '../components/ui/Modal'
-import Input, { Textarea } from '../components/ui/Input'
+import Input, { Textarea, Select } from '../components/ui/Input'
 import CSVImportModal from '../components/CSVImportModal'
 import { CSV_CONFIGS } from '../lib/csvTemplates'
 
-const EMPTY = { name: '', contact_name: '', email: '', phone: '', address: '', payment_terms: '', notes: '' }
+const EMPTY = { name: '', contact_name: '', email: '', phone: '', address: '', payment_terms: '', notes: '', origin: '' }
 
 export default function Suppliers() {
   const [records, setRecords] = useState([])
@@ -38,13 +38,13 @@ export default function Suppliers() {
   const f = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
 
   const openAdd = () => { setEditing(null); setForm(EMPTY); setShowAdd(true) }
-  const openEdit = (r) => { setEditing(r.id); setForm({ name: r.name, contact_name: r.contact_name || '', email: r.email || '', phone: r.phone || '', address: r.address || '', payment_terms: r.payment_terms || '', notes: r.notes || '' }); setShowAdd(true) }
+  const openEdit = (r) => { setEditing(r.id); setForm({ name: r.name, contact_name: r.contact_name || '', email: r.email || '', phone: r.phone || '', address: r.address || '', payment_terms: r.payment_terms || '', notes: r.notes || '', origin: r.origin || '' }); setShowAdd(true) }
 
   const handleSave = async () => {
     if (!form.name.trim()) { toast.error('Supplier name is required'); return }
     if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) { toast.error('Invalid email'); return }
     setSaving(true)
-    const payload = { name: form.name.trim(), contact_name: form.contact_name.trim(), email: form.email.trim(), phone: form.phone.trim(), address: form.address.trim(), payment_terms: form.payment_terms.trim(), notes: form.notes.trim() }
+    const payload = { name: form.name.trim(), contact_name: form.contact_name.trim(), email: form.email.trim(), phone: form.phone.trim(), address: form.address.trim(), payment_terms: form.payment_terms.trim(), notes: form.notes.trim(), origin: form.origin || null }
     const { error } = editing
       ? await supabase.from('suppliers').update(payload).eq('id', editing)
       : await supabase.from('suppliers').insert(payload)
@@ -100,7 +100,14 @@ export default function Suppliers() {
                     <Building2 className="w-4 h-4 text-[#00AEEF]" />
                   </div>
                   <div>
-                    <p className="font-semibold text-slate-100 text-sm">{r.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-slate-100 text-sm">{r.name}</p>
+                      {r.origin && (
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${r.origin === 'local' ? 'bg-emerald-900/30 border-emerald-700/40 text-emerald-300' : 'bg-sky-900/30 border-sky-700/40 text-sky-300'}`}>
+                          {r.origin === 'local' ? 'Local' : 'Foreign'}
+                        </span>
+                      )}
+                    </div>
                     {r.contact_name && <p className="text-xs text-slate-400 mt-0.5">{r.contact_name}</p>}
                   </div>
                 </div>
@@ -125,6 +132,11 @@ export default function Suppliers() {
           footer={<><Button variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Button><Button onClick={handleSave} loading={saving}>Save</Button></>}>
           <div className="space-y-4">
             <Input label="Company Name *" value={form.name} onChange={f('name')} placeholder="e.g. Maldives Fresh Co" />
+            <Select label="Supplier Origin" value={form.origin} onChange={f('origin')}>
+              <option value="">— Not set —</option>
+              <option value="local">Local (arrives Thursday)</option>
+              <option value="foreign">Foreign (arrives Monday)</option>
+            </Select>
             <Input label="Contact Person" value={form.contact_name} onChange={f('contact_name')} placeholder="Full name" />
             <div className="grid grid-cols-2 gap-3">
               <Input label="Email" type="email" value={form.email} onChange={f('email')} placeholder="contact@supplier.com" />
