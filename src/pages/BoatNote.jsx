@@ -4,14 +4,21 @@ import {
   Ship, Upload, Loader, Plus, Trash2, CheckCircle2, ChevronLeft, X,
   FileSpreadsheet, History as HistoryIcon, Search, RefreshCw, AlertTriangle,
   PackageCheck, CalendarDays, ChevronDown, ChevronRight, FlaskConical, Save,
+  Printer, Mail, FileDown,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Modal from '../components/ui/Modal'
+import Input from '../components/ui/Input'
 import { parseBoatNoteFile, classifyOrigin, isSampleRow, DEPARTMENTS } from '../lib/boatnote'
 import { useSort } from '../hooks/useSort'
+import { logItemActivity, currentActor } from '../lib/activity'
+import {
+  exportBoatNoteExcel, boatNoteExcelBase64, printBoatNoteReport, reportFileName, CATEGORIES,
+} from '../lib/boatNoteReport'
+import { sendBoatNoteReport } from '../lib/brevo'
 
 const today = () => new Date().toISOString().split('T')[0]
 const cleanCode = (s) => String(s || '').replace(/^0+/, '') || ''
@@ -23,10 +30,118 @@ const STAGE = { UPLOAD: 'upload', PREVIEW: 'preview' }
 // Per-line outcome badge.
 function StatusBadge({ status }) {
   if (status === 'received')    return <Badge variant="green">received</Badge>
+  if (status === 'damaged')     return <Badge variant="red">damaged</Badge>
   if (status === 'not_arrived') return <Badge variant="red">not arrived</Badge>
   if (status === 'wrong_item')  return <Badge variant="orange">wrong item</Badge>
   if (status === 'skipped')     return <Badge variant="orange">unmatched</Badge>
   return <Badge variant="gray">pending</Badge>
+}
+
+// Reusable report action bar (Excel / Print / PDF / Send) for a boat note.
+function ReportActions({ note, getLines, size = 'sm' }) {
+  const [busy, setBusy] = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
+
+  const doExcel = async () => {
+    setBusy(true)
+    try { await exportBoatNoteExcel(note, await getLines()) }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+  const doPrint = async () => {
+    setBusy(true)
+    try { printBoatNoteReport(note, await getLines()) }
+    catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <>
+      <button onClick={doExcel} disabled={busy} className="btn-ghost btn-sm" title="Export Excel report">
+        <FileSpreadsheet className="w-4 h-4" /> Excel
+      </button>
+      <button onClick={doPrint} disabled={busy} className="btn-ghost btn-sm" title="Print / Save as PDF">
+        <Printer className="w-4 h-4" /> Print
+      </button>
+      <button onClick={doPrint} disabled={busy} className="btn-ghost btn-sm" title="Save as PDF">
+        <FileDown className="w-4 h-4" /> PDF
+      </button>
+      <button onClick={() => setSendOpen(true)} disabled={busy} className="btn-ghost btn-sm text-teal-400" title="Email report via Brevo">
+        <Mail className="w-4 h-4" /> Send
+      </button>
+      {sendOpen && <SendBoatNoteReportModal note={note} getLines={getLines} onClose={() => setSendOpen(false)} />}
+    </>
+  )
+}
+
+// Email a boat-note report (categorised summary + Excel attachment) via Brevo.
+function SendBoatNoteReportModal({ note, getLines, onClose }) {
+  const [settings, setSettings] = useState({})
+  const [recipient, setRecipient] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from('settings').select('key,value')
+      const map = (data || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
+      setSettings(map)
+      setRecipient(map.report_recipient_email || '')
+      setLoading(false)
+    })()
+  }, [])
+
+  const missing = !settings.brevo_api_key || !settings.brevo_sender_email
+
+  const send = async () => {
+    if (!recipient) { toast.error('Enter a recipient email'); return }
+    setSending(true)
+    try {
+      const lines = await getLines()
+      const counts = { total: lines.length }
+      const known = ['received', 'damaged', 'wrong_item', 'not_arrived']
+      CATEGORIES.forEach(c => {
+        counts[c.key] = lines.filter(l =>
+          c.key === 'pending' ? !known.includes(l.status) : l.status === c.key
+        ).length
+      })
+
+      const base64 = await boatNoteExcelBase64(note, lines)
+      await sendBoatNoteReport({
+        apiKey: settings.brevo_api_key,
+        senderEmail: settings.brevo_sender_email,
+        senderName: settings.brevo_sender_name || 'Roni — Store Assistant',
+        recipientEmail: recipient,
+        recipientName: settings.report_recipient_name || 'Manager',
+        note, counts,
+        attachmentBase64: base64,
+        attachmentName: reportFileName(note, 'xlsx'),
+      })
+      toast.success('Report emailed successfully')
+      onClose()
+    } catch (e) { toast.error(e.message) }
+    setSending(false)
+  }
+
+  return (
+    <Modal isOpen onClose={onClose} title="Send Boat Note Report" size="sm"
+      footer={<>
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        {!missing && <Button onClick={send} loading={sending}><Mail className="w-4 h-4" /> Send Report</Button>}
+      </>}>
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader className="w-6 h-6 text-teal-400 animate-spin" /></div>
+      ) : missing ? (
+        <div className="bg-orange-900/20 border border-orange-700/30 rounded-xl p-3 text-sm text-orange-300">
+          Email is not configured. Add your Brevo API key and sender email in <strong>Settings → Email Reports</strong> first.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-slate-400">Emails the categorised report (Received, Damaged, Wrong Item, Not Arrived, Pending) with the Excel file attached.</p>
+          <Input label="Recipient email" type="email" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="manager@resort.com" />
+          <p className="text-xs text-slate-500">From: {settings.brevo_sender_name || 'Roni'} &lt;{settings.brevo_sender_email}&gt;</p>
+        </div>
+      )}
+    </Modal>
+  )
 }
 
 // Broad department/store selector (chips). Tick one or more; empty = all.
@@ -70,6 +185,10 @@ export default function BoatNote() {
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'history' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
             <HistoryIcon className="w-4 h-4 inline mr-1.5" />History
           </button>
+          <button onClick={() => setTab('received')}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'received' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+            <PackageCheck className="w-4 h-4 inline mr-1.5" />Received
+          </button>
           <button onClick={() => setTab('notarrived')}
             className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${tab === 'notarrived' ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
             <AlertTriangle className="w-4 h-4 inline mr-1.5" />Not Arrived
@@ -83,6 +202,7 @@ export default function BoatNote() {
       {tab === 'upload' ? <UploadFlow onSaved={() => setTab('history')} />
         : tab === 'samples' ? <SamplesTab />
         : tab === 'notarrived' ? <NotArrivedTab />
+        : tab === 'received' ? <ReceivedTab />
         : <BoatNoteHistory />}
     </div>
   )
@@ -359,8 +479,12 @@ function BoatNoteHistory() {
                 <p className="text-xs text-slate-500">{n.note_date} · {n.delivery_day}</p>
               </div>
             </button>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
               <Badge variant="teal">{n.posted_items || 0}/{n.total_items} received</Badge>
+              <ReportActions note={n} getLines={async () => {
+                const { data } = await selectAll(() => supabase.from('boat_note_items').select('*').eq('boat_note_id', n.id).order('line_no'))
+                return data || []
+              }} />
               <button onClick={() => del(n)} className="btn-ghost btn-sm text-red-400" title="Delete boat note">
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -523,9 +647,16 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
         }).catch(() => {})
       }
 
-      const patch = { received_qty: totalQty, expiry_date: earliest, status: 'received', matched: true, item_id: itemId }
+      const actor = note.created_by || (await currentActor())
+      const patch = {
+        received_qty: totalQty, expiry_date: earliest, status: 'received', matched: true, item_id: itemId,
+        received_by: actor, received_at: new Date().toISOString(),
+      }
       const { error: lErr } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
       if (lErr) throw lErr
+
+      // Per-item activity trail.
+      logItemActivity(itemId, 'received', `Received ${totalQty} ${line.unit || ''} · Boat note ${note.label || note.note_date}`)
 
       // Bump the note's received counter.
       await supabase.from('boat_notes').update({ posted_items: (note.posted_items || 0) + 1 }).eq('id', note.id).catch(() => {})
@@ -613,9 +744,11 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
 
 // ── Flag a line as NOT ARRIVED or WRONG ITEM, with a note ────────────────────
 function IssueItemModal({ line, onClose, onDone }) {
-  const [kind, setKind] = useState(line.status === 'wrong_item' ? 'wrong_item' : 'not_arrived')
+  const [kind, setKind] = useState(['wrong_item', 'damaged', 'not_arrived'].includes(line.status) ? line.status : 'not_arrived')
   const [note, setNote] = useState(line.note || '')
   const [busy, setBusy] = useState(false)
+
+  const LABELS = { not_arrived: 'not arrived', wrong_item: 'wrong item', damaged: 'damaged' }
 
   const save = async () => {
     setBusy(true)
@@ -623,7 +756,7 @@ function IssueItemModal({ line, onClose, onDone }) {
       const patch = { status: kind, note: note.trim() || null }
       const { error } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
       if (error) throw error
-      toast.success(kind === 'not_arrived' ? 'Marked as not arrived' : 'Marked as wrong item')
+      toast.success(`Marked as ${LABELS[kind]}`)
       onDone(patch)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
@@ -640,14 +773,18 @@ function IssueItemModal({ line, onClose, onDone }) {
           <p className="text-sm text-slate-100 font-medium">{line.product_name}</p>
           <p className="text-xs text-slate-400 mt-0.5">Code <span className="font-mono text-[#00AEEF]">{line.part_number || '—'}</span> · {line.department || '—'} · ordered {line.ordered_qty} {line.unit}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button onClick={() => setKind('not_arrived')}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'not_arrived' ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'not_arrived' ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
             Not arrived
           </button>
           <button onClick={() => setKind('wrong_item')}
-            className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'wrong_item' ? 'bg-orange-600/20 border-orange-500 text-orange-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'wrong_item' ? 'bg-orange-600/20 border-orange-500 text-orange-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
             Wrong item
+          </button>
+          <button onClick={() => setKind('damaged')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${kind === 'damaged' ? 'bg-red-600/20 border-red-500 text-red-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+            Damaged
           </button>
         </div>
         <div>
@@ -888,6 +1025,122 @@ function SamplesTab() {
             </Table>
           </div>
         </>
+      )}
+    </div>
+  )
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// RECEIVED — every boat-note line confirmed into inventory, across all notes,
+// shown distinctly and cleanly. Searchable, filterable by store/dept, and
+// exportable (Excel / Print / PDF / Send).
+// ═════════════════════════════════════════════════════════════════════════════
+function ReceivedTab() {
+  const [rows, setRows]     = useState([])
+  const [loading, setLoad]  = useState(true)
+  const [range, setRange]   = useState({ from: '', to: '' })
+  const [search, setSearch] = useState('')
+  const [picked, setPicked] = useState([])
+
+  const load = async () => {
+    setLoad(true)
+    const { data } = await selectAll(() =>
+      supabase.from('boat_note_items')
+        .select('*, boat_notes(note_date,label,delivery_day)')
+        .eq('status', 'received'))
+    let list = (data || []).map(r => ({
+      ...r,
+      note_date:  r.boat_notes?.note_date || null,
+      note_label: r.boat_notes?.label || '',
+    }))
+    if (range.from) list = list.filter(r => (r.note_date || '') >= range.from)
+    if (range.to)   list = list.filter(r => (r.note_date || '') <= range.to)
+    list.sort((a, b) => String(b.received_at || b.note_date || '').localeCompare(String(a.received_at || a.note_date || '')))
+    setRows(list); setLoad(false)
+  }
+  useEffect(() => { load() }, [range.from, range.to])
+
+  const depts = useMemo(() => [...new Set(rows.map(r => r.department).filter(Boolean))].sort(), [rows])
+  const toggle = (d) => setPicked(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])
+
+  const filtered = useMemo(() => {
+    let list = picked.length ? rows.filter(r => picked.includes(r.department)) : rows
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(r =>
+        (r.product_name || '').toLowerCase().includes(q) ||
+        (r.part_number || '').toLowerCase().includes(q) ||
+        (r.supplier || '').toLowerCase().includes(q))
+    }
+    return list
+  }, [rows, picked, search])
+
+  const { sorted, thProps } = useSort(filtered, 'received_at', 'desc')
+
+  const totalQty = filtered.reduce((s, r) => s + (Number(r.received_qty) || 0), 0)
+
+  // Report over the currently filtered received lines.
+  const virtualNote = { label: 'Received Items', note_date: today(), created_by: 'Roni' }
+
+  return (
+    <div className="space-y-4">
+      <div className="card-sm flex items-center gap-3 flex-wrap">
+        <CalendarDays className="w-4 h-4 text-slate-400" />
+        <label className="text-xs text-slate-400">From</label>
+        <input type="date" value={range.from} onChange={e => setRange(r => ({ ...r, from: e.target.value }))} className="input text-sm py-1.5 w-auto" />
+        <label className="text-xs text-slate-400">To</label>
+        <input type="date" value={range.to} onChange={e => setRange(r => ({ ...r, to: e.target.value }))} className="input text-sm py-1.5 w-auto" />
+        {(range.from || range.to) && <button onClick={() => setRange({ from: '', to: '' })} className="btn-ghost btn-sm"><X className="w-4 h-4" /> Clear</button>}
+        <div className="relative ml-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input placeholder="Search item, code, supplier…" value={search} onChange={e => setSearch(e.target.value)} className="input pl-9 text-sm py-1.5 w-56" />
+        </div>
+      </div>
+
+      <div className="card-sm flex items-center gap-2 flex-wrap">
+        <ReportActions note={virtualNote} getLines={async () => filtered} />
+        <span className="text-xs text-slate-500 ml-auto">{filtered.length} items · {totalQty} units received</span>
+      </div>
+
+      {depts.length > 0 && <DeptFilter depts={depts} picked={picked} onToggle={toggle} onAll={() => setPicked([])} />}
+
+      {loading ? (
+        <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
+      ) : sorted.length === 0 ? (
+        <div className="card text-center text-slate-500 py-12">No received items yet — confirm items from a boat note to see them here.</div>
+      ) : (
+        <div className="card overflow-x-auto">
+          <Table>
+            <Thead><tr>
+              <Th {...thProps('part_number')}>Code</Th>
+              <Th {...thProps('product_name')}>Product</Th>
+              <Th {...thProps('department')}>Dept</Th>
+              <Th {...thProps('received_qty')}>Received</Th>
+              <Th {...thProps('unit')}>Unit</Th>
+              <Th {...thProps('expiry_date')}>Expiry</Th>
+              <Th {...thProps('supplier')}>Supplier</Th>
+              <Th {...thProps('note_date')}>Boat Note</Th>
+              <Th {...thProps('received_by')}>Received By</Th>
+              <Th {...thProps('received_at')}>Received At</Th>
+            </tr></Thead>
+            <Tbody>
+              {sorted.map(r => (
+                <Tr key={r.id}>
+                  <Td className="font-mono text-xs text-[#00AEEF]">{r.part_number}</Td>
+                  <Td className="text-slate-100 text-sm">{r.product_name}</Td>
+                  <Td className="text-slate-400 text-xs">{r.department || '—'}</Td>
+                  <Td className="font-bold text-green-400">{r.received_qty}</Td>
+                  <Td className="text-slate-400 text-xs">{r.unit}</Td>
+                  <Td className="text-slate-400 text-xs">{r.expiry_date || '—'}</Td>
+                  <Td className="text-slate-300 text-sm">{r.supplier || '—'}</Td>
+                  <Td className="text-slate-400 text-xs">{r.note_label || r.note_date || '—'}</Td>
+                  <Td className="text-slate-400 text-xs">{r.received_by || '—'}</Td>
+                  <Td className="text-slate-400 text-xs whitespace-nowrap">{r.received_at ? new Date(r.received_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </div>
       )}
     </div>
   )

@@ -537,3 +537,84 @@ export async function sendIssueReminder({ apiKey, senderEmail, senderName, recip
   }
   return { subject, count: rows.length }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// BOAT NOTE RECEIVING REPORT EMAIL
+// Sends a categorised summary (Received / Damaged / Wrong Item / Not Arrived /
+// Pending) with the full formatted Excel workbook attached.
+//   counts:  { received, damaged, wrong_item, not_arrived, pending, total }
+//   attachmentBase64 / attachmentName: the .xlsx to attach (base64, no prefix)
+// ────────────────────────────────────────────────────────────────────────────
+function buildBoatNoteEmailHTML({ note, counts }) {
+  const label = note.label || note.note_date || 'Boat Note'
+  const rows = [
+    ['Received',    counts.received,    '#15803d'],
+    ['Damaged',     counts.damaged,     '#b91c1c'],
+    ['Wrong Item',  counts.wrong_item,  '#ea580c'],
+    ['Not Arrived', counts.not_arrived, '#dc2626'],
+    ['Pending',     counts.pending,     '#ca8a04'],
+  ].map(([l, n, c]) => `
+    <tr>
+      <td style="padding:8px 12px;font-family:Arial,sans-serif;font-size:13px;color:#1e293b;border-bottom:1px solid #f1f5f9;">${l}</td>
+      <td style="padding:8px 12px;font-family:Arial,sans-serif;font-size:14px;font-weight:700;color:${c};text-align:right;border-bottom:1px solid #f1f5f9;">${n}</td>
+    </tr>`).join('')
+
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"/></head>
+  <body style="margin:0;background:#f1f5f9;padding:24px;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0;">
+      <div style="background:#00AEEF;color:#fff;padding:18px 22px;">
+        <h1 style="margin:0;font-size:18px;">Boat Note Receiving Report</h1>
+        <p style="margin:6px 0 0;font-size:12px;opacity:.95;">${label} · ${note.note_date || ''}</p>
+      </div>
+      <div style="padding:20px 22px;">
+        <p style="font-size:13px;color:#475569;margin:0 0 14px;">
+          A boat note has been processed. The full, categorised report is attached as an Excel file.
+        </p>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+          <thead><tr>
+            <th style="text-align:left;padding:8px 12px;background:#1e293b;color:#fff;font-size:11px;">Outcome</th>
+            <th style="text-align:right;padding:8px 12px;background:#1e293b;color:#fff;font-size:11px;">Items</th>
+          </tr></thead>
+          <tbody>${rows}
+            <tr><td style="padding:10px 12px;font-weight:700;font-size:13px;color:#0f172a;">Total lines</td>
+                <td style="padding:10px 12px;font-weight:700;font-size:14px;text-align:right;color:#0f172a;">${counts.total}</td></tr>
+          </tbody>
+        </table>
+        <p style="font-size:11px;color:#94a3b8;margin:16px 0 0;">Generated automatically by Maafushivaru Inventory.</p>
+      </div>
+    </div>
+  </body></html>`
+}
+
+export async function sendBoatNoteReport({
+  apiKey, senderEmail, senderName, recipientEmail, recipientName,
+  note, counts, attachmentBase64, attachmentName,
+}) {
+  if (!apiKey)         throw new Error('Brevo API key not set. Go to Settings → Email Reports.')
+  if (!senderEmail)    throw new Error('Sender email not set. Go to Settings → Email Reports.')
+  if (!recipientEmail) throw new Error('Recipient email not set. Enter a recipient or set one in Settings.')
+
+  const label = note.label || note.note_date || 'Boat Note'
+  const subject = `Boat Note Report — ${label} · ${counts.received} received / ${counts.total} lines`
+
+  const body = {
+    sender:      { name: senderName || 'Roni — Store Assistant', email: senderEmail },
+    to:          [{ email: recipientEmail, name: recipientName || 'Manager' }],
+    subject,
+    htmlContent: buildBoatNoteEmailHTML({ note, counts }),
+  }
+  if (attachmentBase64 && attachmentName) {
+    body.attachment = [{ content: attachmentBase64, name: attachmentName }]
+  }
+
+  const response = await fetch(BREVO_API, {
+    method: 'POST',
+    headers: { 'accept': 'application/json', 'api-key': apiKey, 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}))
+    throw new Error(err.message || `Brevo API error ${response.status}`)
+  }
+  return { subject, ...counts }
+}

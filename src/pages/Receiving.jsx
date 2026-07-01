@@ -9,6 +9,8 @@ import Modal from '../components/ui/Modal'
 import Input, { Textarea } from '../components/ui/Input'
 import CSVImportModal from '../components/CSVImportModal'
 import { CSV_CONFIGS } from '../lib/csvTemplates'
+import { Printer, FileDown } from 'lucide-react'
+import { printHtmlDocument } from '../lib/boatNoteReport'
 
 const today = () => new Date().toISOString().split('T')[0]
 const EMPTY = { date: today(), item_id: '', quantity_received: '', unit: '', supplier_name: '', received_by: 'Roni', invoice_number: '', unit_cost: '', note: '' }
@@ -89,6 +91,22 @@ export default function Receiving() {
 
   const selectedItem = items.find(i => i.id === form.item_id)
 
+  const printRecords = () => {
+    const esc = (v) => String(v ?? '').replace(/[&<>]/g, m => ({ '&':'&amp;','<':'&lt;','>':'&gt;' }[m]))
+    const body = sorted.map((r, i) => `<tr style="background:${i % 2 ? '#f8fafc' : '#fff'}">
+      <td>${esc(r.date)}</td><td><strong>${esc(r.item_name)}</strong></td>
+      <td style="text-align:center">${esc(r.quantity_received)} ${esc(r.unit)}</td>
+      <td>${esc(r.supplier_name)}</td><td>${esc(r.invoice_number || '—')}</td>
+      <td style="text-align:right">${r.unit_cost ? '$' + Number(r.unit_cost).toFixed(2) : '—'}</td>
+      <td>${esc(r.received_by)}</td></tr>`).join('')
+    printHtmlDocument(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Receiving (GRN)</title>
+      <style>body{font-family:Arial,sans-serif;margin:24px;color:#1e293b}.band{background:#00AEEF;color:#fff;padding:14px 18px;border-radius:8px}.band h1{margin:0;font-size:18px}
+      table{width:100%;border-collapse:collapse;margin-top:12px}th{background:#1e293b;color:#fff;font-size:11px;padding:6px 8px;text-align:left}td{border:1px solid #e2e8f0;padding:5px 8px;font-size:11px}</style></head>
+      <body><div class="band"><h1>Receiving (GRN) Report</h1><p>${sorted.length} records · Generated ${new Date().toLocaleString('en-GB')}</p></div>
+      <table><thead><tr><th>Date</th><th>Item</th><th>Qty</th><th>Supplier</th><th>Invoice</th><th>Unit Cost</th><th>Received By</th></tr></thead>
+      <tbody>${body || '<tr><td colspan=7>No records</td></tr>'}</tbody></table></body></html>`)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -98,6 +116,8 @@ export default function Receiving() {
         </div>
         <div className="flex gap-2 flex-wrap">
           <button onClick={load} className="btn-ghost btn-sm"><RefreshCw className="w-4 h-4" /></button>
+          <button onClick={printRecords} className="btn-secondary btn-sm"><Printer className="w-4 h-4" /> Print</button>
+          <button onClick={printRecords} className="btn-secondary btn-sm"><FileDown className="w-4 h-4" /> PDF</button>
           <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
           <Button onClick={() => { setShowAdd(true); setForm(EMPTY); setItemSearch('') }}><Plus className="w-4 h-4" /> Add GRN</Button>
         </div>

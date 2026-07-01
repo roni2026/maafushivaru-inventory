@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, fetchAllRows } from '../lib/supabase'
+import { logItemActivity } from '../lib/activity'
 import toast from 'react-hot-toast'
 
 export function useItems() {
@@ -47,6 +48,7 @@ export function useItems() {
       .select('*, stores(id, name, category)')
       .single()
     if (error) throw error
+    logItemActivity(data.id, 'created', `Item created: ${data.name}`)
     setItems(prev =>
       [...prev, data].sort((a, b) => {
         if (!a.expiry_date) return 1
@@ -58,6 +60,7 @@ export function useItems() {
   }
 
   const updateItem = async (id, updates) => {
+    const prevItem = items.find(i => i.id === id)
     const { data, error } = await supabase
       .from('items')
       .update(updates)
@@ -65,6 +68,12 @@ export function useItems() {
       .select('*, stores(id, name, category)')
       .single()
     if (error) throw error
+    // Distinguish a sub-category (store) move from a general edit.
+    if ('store_id' in updates && prevItem && prevItem.store_id !== data.store_id) {
+      logItemActivity(id, 'subcategory_changed', `Moved to ${data.stores?.name || 'another sub-category'}`)
+    } else {
+      logItemActivity(id, 'edited', 'Item details edited')
+    }
     setItems(prev => prev.map(i => (i.id === id ? data : i)))
     return data
   }
@@ -86,6 +95,7 @@ export function useItems() {
       .update({ active })
       .in('id', ids)
     if (error) throw error
+    ids.forEach(id => logItemActivity(id, active ? 'activated' : 'deactivated', active ? 'Item activated' : 'Item deactivated'))
     const idSet = new Set(ids)
     setItems(prev => prev.map(i => (idSet.has(i.id) ? { ...i, active } : i)))
   }
@@ -108,6 +118,9 @@ export function useItems() {
       note,
     })
     if (logErr) throw logErr
+
+    const act = quantityChange > 0 ? 'stock_add' : quantityChange < 0 ? 'stock_remove' : 'stock_set'
+    logItemActivity(itemId, act, `${quantityChange >= 0 ? '+' : ''}${quantityChange} → ${newQuantity}${note ? ' · ' + note : ''}`)
 
     setItems(prev =>
       prev.map(i => (i.id === itemId ? { ...i, current_stock: newQuantity } : i))
