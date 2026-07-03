@@ -25,8 +25,8 @@ const DEFAULTS = {
   order_max_general:      '',
   order_max_beverage:     '',
   order_default_uom:      'pcs',
-  // Boat note retention (auto-delete after N days)
-  boat_note_retention_days: '6',
+  // Boat note retention (0 = keep forever; never auto-delete)
+  boat_note_retention_days: '0',
 }
 
 export default function Settings() {
@@ -142,7 +142,7 @@ export default function Settings() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input label="Usual order unit (UOM)" value={form.order_default_uom} onChange={f('order_default_uom')} placeholder="pcs" />
-          <Input label="Boat note retention (days)" type="number" min="0" value={form.boat_note_retention_days} onChange={f('boat_note_retention_days')} placeholder="6" />
+          <Input label="Boat note retention (days) — 0 = keep forever" type="number" min="0" value={form.boat_note_retention_days} onChange={f('boat_note_retention_days')} placeholder="0" />
         </div>
         <p className="text-xs text-slate-500">Boat notes are automatically deleted this many days after their note date (0 = keep forever). You can also delete any note manually.</p>
       </div>

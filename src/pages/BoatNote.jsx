@@ -4,7 +4,7 @@ import {
   Ship, Upload, Loader, Plus, Trash2, CheckCircle2, ChevronLeft, X,
   FileSpreadsheet, History as HistoryIcon, Search, RefreshCw, AlertTriangle,
   PackageCheck, CalendarDays, ChevronDown, ChevronRight, FlaskConical, Save,
-  Printer, Mail, FileDown, Undo2, CalendarRange, PackageX,
+  Printer, Mail, FileDown, Undo2, CalendarRange, PackageX, Layers, Clock,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -15,6 +15,7 @@ import Input from '../components/ui/Input'
 import { parseBoatNoteFile, classifyOrigin, isSampleRow, DEPARTMENTS } from '../lib/boatnote'
 import { useSort } from '../hooks/useSort'
 import { logItemActivity, currentActor } from '../lib/activity'
+import { logBoatNoteEvent, fetchBoatNoteEvents, boatEventLabel, boatEventTone } from '../lib/boatNoteHistory'
 import {
   exportBoatNoteExcel, boatNoteExcelBase64, printBoatNoteReport, reportFileName, CATEGORIES,
 } from '../lib/boatNoteReport'
@@ -37,38 +38,96 @@ function StatusBadge({ status }) {
   return <Badge variant="gray">pending</Badge>
 }
 
-// Reusable report action bar (Excel / Print / PDF / Send) for a boat note.
+// Reusable report action bar for a boat note. "Export" first shows tick options
+// for WHICH departments to include, then exports (Excel / Print / PDF).
 function ReportActions({ note, getLines, size = 'sm' }) {
-  const [busy, setBusy] = useState(false)
-  const [sendOpen, setSendOpen] = useState(false)
-
-  const doExcel = async () => {
-    setBusy(true)
-    try { await exportBoatNoteExcel(note, await getLines()) }
-    catch (e) { toast.error(e.message) } finally { setBusy(false) }
-  }
-  const doPrint = async () => {
-    setBusy(true)
-    try { printBoatNoteReport(note, await getLines()) }
-    catch (e) { toast.error(e.message) } finally { setBusy(false) }
-  }
+  const [sendOpen, setSendOpen]     = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
 
   return (
     <>
-      <button onClick={doExcel} disabled={busy} className="btn-ghost btn-sm" title="Export Excel report">
-        <FileSpreadsheet className="w-4 h-4" /> Excel
+      <button onClick={() => setExportOpen(true)} className="btn-ghost btn-sm" title="Export report (pick departments)">
+        <FileSpreadsheet className="w-4 h-4" /> Export
       </button>
-      <button onClick={doPrint} disabled={busy} className="btn-ghost btn-sm" title="Print / Save as PDF">
-        <Printer className="w-4 h-4" /> Print
-      </button>
-      <button onClick={doPrint} disabled={busy} className="btn-ghost btn-sm" title="Save as PDF">
-        <FileDown className="w-4 h-4" /> PDF
-      </button>
-      <button onClick={() => setSendOpen(true)} disabled={busy} className="btn-ghost btn-sm text-teal-400" title="Email report via Brevo">
+      <button onClick={() => setSendOpen(true)} className="btn-ghost btn-sm text-teal-400" title="Email report via Brevo">
         <Mail className="w-4 h-4" /> Send
       </button>
+      {exportOpen && <ExportOptionsModal note={note} getLines={getLines} onClose={() => setExportOpen(false)} />}
       {sendOpen && <SendBoatNoteReportModal note={note} getLines={getLines} onClose={() => setSendOpen(false)} />}
     </>
+  )
+}
+
+// Pick which departments to export, then export as Excel / Print / PDF.
+function ExportOptionsModal({ note, getLines, onClose }) {
+  const [lines, setLines]   = useState(null)
+  const [picked, setPicked] = useState([])   // empty = all departments
+  const [busy, setBusy]     = useState(false)
+
+  useEffect(() => { (async () => { setLines(await getLines()) })() }, [])
+
+  const depts = useMemo(
+    () => [...new Set((lines || []).map(l => l.department).filter(Boolean))].sort(),
+    [lines]
+  )
+  const toggle = (d) => setPicked(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])
+  const filtered = useMemo(
+    () => picked.length ? (lines || []).filter(l => picked.includes(l.department)) : (lines || []),
+    [lines, picked]
+  )
+
+  const run = async (fn) => {
+    if (!filtered.length) { toast.error('No lines for the selected departments'); return }
+    setBusy(true)
+    try {
+      const scoped = picked.length
+        ? { ...note, label: `${note.label || note.note_date || 'Boat Note'} · ${picked.join(', ')}` }
+        : note
+      await fn(scoped, filtered)
+      onClose()
+    } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
+  return (
+    <Modal isOpen onClose={onClose} title="Export boat note" size="sm"
+      footer={<Button variant="secondary" onClick={onClose}>Cancel</Button>}>
+      {lines === null ? (
+        <div className="flex justify-center py-8"><Loader className="w-6 h-6 text-teal-400 animate-spin" /></div>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5" /> Departments to export
+            </p>
+            {depts.length === 0 ? (
+              <p className="text-xs text-slate-500">No departments on this note — the whole note will be exported.</p>
+            ) : (
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setPicked([])}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${!picked.length ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+                  {!picked.length ? '✓ ' : ''}All
+                </button>
+                {depts.map(d => {
+                  const on = picked.includes(d)
+                  return (
+                    <button key={d} onClick={() => toggle(d)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+                      {on ? '✓ ' : ''}{d}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            <p className="text-xs text-slate-500 mt-2">{filtered.length} line{filtered.length !== 1 ? 's' : ''} selected.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <Button variant="secondary" disabled={busy} onClick={() => run(exportBoatNoteExcel)}><FileSpreadsheet className="w-4 h-4" /> Excel</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => run((n, l) => printBoatNoteReport(n, l))}><Printer className="w-4 h-4" /> Print</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => run((n, l) => printBoatNoteReport(n, l))}><FileDown className="w-4 h-4" /> PDF</Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   )
 }
 
@@ -78,16 +137,26 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
   const [recipient, setRecipient] = useState('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
+  const [allLines, setAllLines] = useState([])
+  const [picked, setPicked] = useState([])   // empty = all departments
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('settings').select('key,value')
+      const [{ data }, ls] = await Promise.all([
+        supabase.from('settings').select('key,value'),
+        getLines(),
+      ])
       const map = (data || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
       setSettings(map)
       setRecipient(map.report_recipient_email || '')
+      setAllLines(ls || [])
       setLoading(false)
     })()
   }, [])
+
+  const depts = useMemo(() => [...new Set(allLines.map(l => l.department).filter(Boolean))].sort(), [allLines])
+  const toggleDept = (d) => setPicked(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d])
+  const scopedLines = useMemo(() => picked.length ? allLines.filter(l => picked.includes(l.department)) : allLines, [allLines, picked])
 
   const missing = !settings.brevo_api_key || !settings.brevo_sender_email
 
@@ -95,7 +164,8 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
     if (!recipient) { toast.error('Enter a recipient email'); return }
     setSending(true)
     try {
-      const lines = await getLines()
+      const lines = scopedLines
+      const sendNote = picked.length ? { ...note, label: `${note.label || note.note_date || 'Boat Note'} · ${picked.join(', ')}` } : note
       const counts = { total: lines.length }
       const known = ['received', 'damaged', 'wrong_item', 'not_arrived', 'short']
       CATEGORIES.forEach(c => {
@@ -104,16 +174,16 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
         ).length
       })
 
-      const base64 = await boatNoteExcelBase64(note, lines)
+      const base64 = await boatNoteExcelBase64(sendNote, lines)
       await sendBoatNoteReport({
         apiKey: settings.brevo_api_key,
         senderEmail: settings.brevo_sender_email,
         senderName: settings.brevo_sender_name || 'Roni — Store Assistant',
         recipientEmail: recipient,
         recipientName: settings.report_recipient_name || 'Manager',
-        note, counts,
+        note: sendNote, counts,
         attachmentBase64: base64,
-        attachmentName: reportFileName(note, 'xlsx'),
+        attachmentName: reportFileName(sendNote, 'xlsx'),
       })
       toast.success('Report emailed successfully')
       onClose()
@@ -136,6 +206,29 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-slate-400">Emails the categorised report (Received, Damaged, Wrong Item, Not Arrived, Pending) with the Excel file attached.</p>
+          {depts.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5" /> Departments to include
+              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button onClick={() => setPicked([])}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${!picked.length ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+                  {!picked.length ? '✓ ' : ''}All
+                </button>
+                {depts.map(d => {
+                  const on = picked.includes(d)
+                  return (
+                    <button key={d} onClick={() => toggleDept(d)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-teal-600/20 border-teal-500 text-teal-300' : 'bg-slate-800 border-slate-600 text-slate-400 hover:text-slate-200'}`}>
+                      {on ? '✓ ' : ''}{d}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-slate-500 mt-2">{scopedLines.length} line{scopedLines.length !== 1 ? 's' : ''} will be sent.</p>
+            </div>
+          )}
           <Input label="Recipient email" type="email" value={recipient} onChange={e => setRecipient(e.target.value)} placeholder="manager@resort.com" />
           <p className="text-xs text-slate-500">From: {settings.brevo_sender_name || 'Roni'} &lt;{settings.brevo_sender_email}&gt;</p>
         </div>
@@ -305,6 +398,21 @@ function UploadFlow({ onSaved }) {
       }
       if (res.failed) toast(`Saved note, but ${res.failed} line(s) failed to record.`, { icon: '⚠️' })
       else toast.success('Boat note saved to history')
+
+      // Record the weekly upload in the note's persistent history, with a
+      // snapshot of the ORIGINAL lines so we can always see what was there.
+      logBoatNoteEvent(note.id, 'uploaded', {
+        actor: meta.received_by,
+        detail: `Uploaded ${rows.length} line(s)${allDepts.length ? ` · ${allDepts.join(', ')}` : ''}`,
+        snapshot: {
+          note_date: safeDate, label: note.label, departments: allDepts,
+          items: rows.map(r => ({
+            line_no: r.line_no, part_number: r.part_number, product_name: r.product_name,
+            unit: r.unit, ordered_qty: Number(r.ordered_qty) || 0, department: r.department || null,
+            supplier: r.supplier || null, po_number: r.po_number || null, is_sample: !!r.is_sample,
+          })),
+        },
+      })
       onSaved?.()
     } catch (e) { toast.error(e.message) }
     setBusy(false)
@@ -447,7 +555,7 @@ function BoatNoteHistory() {
   }
 
   const del = async (n) => {
-    if (!confirm(`Delete boat note "${n.label || n.note_date}"? This removes the note and its lines from history. Stock already received is NOT reversed.`)) return
+    if (!confirm(`Are you sure? Deleting this will remove ALL the relevant data for this boat note — its history, received/not-arrived/weekly/returns/samples records for this note, and its change log. Stock already received into inventory is NOT reversed. This cannot be undone.`)) return
     const { error } = await supabase.from('boat_notes').delete().eq('id', n.id)
     if (error) { toast.error(error.message); return }
     setNotes(list => list.filter(x => x.id !== n.id))
@@ -501,11 +609,14 @@ function BoatNoteHistory() {
             </div>
           </div>
           {expanded === n.id && (
-            <NoteItemsTable
-              items={itemsMap[n.id] || []}
-              onReceive={(line) => setReceiving({ note: n, line })}
-              onIssue={(line) => setIssuing({ note: n, line })}
-            />
+            <>
+              <NoteItemsTable
+                items={itemsMap[n.id] || []}
+                onReceive={(line) => setReceiving({ note: n, line })}
+                onIssue={(line) => setIssuing({ note: n, line })}
+              />
+              <NoteHistoryPanel noteId={n.id} />
+            </>
           )}
         </div>
       ))}
@@ -522,10 +633,83 @@ function BoatNoteHistory() {
 
       {issuing && (
         <IssueItemModal
+          note={issuing.note}
           line={issuing.line}
+          inventory={inventory}
           onClose={() => setIssuing(null)}
-          onDone={(patch) => { onReceived(issuing.note.id, issuing.line.id, patch, 0); setIssuing(null) }}
+          onDone={(patch, postedDelta = 0) => { onReceived(issuing.note.id, issuing.line.id, patch, postedDelta); setIssuing(null) }}
         />
+      )}
+    </div>
+  )
+}
+
+// Persistent per-note change history: what was originally uploaded and every
+// later update (received / not arrived / wrong / damaged / short), with who & when.
+function NoteHistoryPanel({ noteId }) {
+  const [events, setEvents] = useState(null)
+  const [showSnapshot, setShowSnapshot] = useState(false)
+
+  useEffect(() => { (async () => { setEvents(await fetchBoatNoteEvents(noteId)) })() }, [noteId])
+
+  const uploaded = useMemo(() => (events || []).find(e => e.event_type === 'uploaded'), [events])
+  const snapshotItems = uploaded?.snapshot?.items || []
+
+  const fmt = (ts) => { try { return new Date(ts).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) } catch { return ts } }
+
+  return (
+    <div className="border-t border-slate-700 bg-slate-800/30 px-4 py-3">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-slate-300 uppercase tracking-wide flex items-center gap-1.5">
+          <HistoryIcon className="w-3.5 h-3.5 text-teal-400" /> Boat note history
+        </p>
+        {snapshotItems.length > 0 && (
+          <button onClick={() => setShowSnapshot(v => !v)} className="text-xs text-teal-400 hover:text-teal-300">
+            {showSnapshot ? 'Hide original' : `View original upload (${snapshotItems.length})`}
+          </button>
+        )}
+      </div>
+
+      {events === null ? (
+        <div className="flex justify-center py-4"><Loader className="w-5 h-5 text-teal-400 animate-spin" /></div>
+      ) : events.length === 0 ? (
+        <p className="text-xs text-slate-500 py-1">No history recorded for this note yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {events.map(e => (
+            <li key={e.id} className="flex items-start gap-2 text-xs">
+              <span className="mt-0.5 shrink-0"><Badge variant={boatEventTone(e.event_type)}>{boatEventLabel(e.event_type)}</Badge></span>
+              <div className="min-w-0">
+                <p className="text-slate-300">
+                  {e.product_name ? <span className="text-slate-100">{e.product_name}</span> : null}
+                  {e.qty != null ? <span className="text-slate-400"> · {e.qty}</span> : null}
+                  {e.detail ? <span className="text-slate-400">{e.product_name ? ' — ' : ''}{e.detail}</span> : null}
+                </p>
+                <p className="text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" />{fmt(e.created_at)}{e.actor ? ` · ${e.actor}` : ''}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {showSnapshot && snapshotItems.length > 0 && (
+        <div className="mt-3 overflow-x-auto rounded-lg border border-slate-700">
+          <Table>
+            <Thead><tr><Th>#</Th><Th>Code</Th><Th>Product</Th><Th>Dept</Th><Th>Unit</Th><Th>Ordered</Th></tr></Thead>
+            <Tbody>
+              {snapshotItems.map((it, i) => (
+                <Tr key={i}>
+                  <Td className="text-slate-500 text-xs">{it.line_no}</Td>
+                  <Td className="font-mono text-xs text-[#00AEEF]">{it.part_number}</Td>
+                  <Td className="text-slate-200 text-sm">{it.product_name}</Td>
+                  <Td className="text-slate-400 text-xs">{it.department || '—'}</Td>
+                  <Td className="text-slate-400 text-xs">{it.unit}</Td>
+                  <Td className="text-slate-300 text-xs">{it.ordered_qty}</Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </div>
       )}
     </div>
   )
@@ -668,6 +852,13 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
       // Per-item activity trail.
       logItemActivity(itemId, 'received', `Received ${totalQty} ${line.unit || ''} · Boat note ${note.label || note.note_date}`)
 
+      // Persistent boat-note history entry.
+      logBoatNoteEvent(note.id, 'received', {
+        boatNoteItemId: line.id, actor,
+        partNumber: line.part_number, productName: line.product_name, department: line.department,
+        qty: totalQty, detail: `Received into ${invItem?.name || 'inventory'}${earliest ? ` · expiry ${earliest}` : ''}`,
+      })
+
       // Bump the note's received counter.
       await supabase.from('boat_notes').update({ posted_items: (note.posted_items || 0) + 1 }).eq('id', note.id).catch(() => {})
 
@@ -753,7 +944,7 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
 }
 
 // ── Flag a line as NOT ARRIVED or WRONG ITEM, with a note ────────────────────
-function IssueItemModal({ line, onClose, onDone }) {
+function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone }) {
   const initKind = ['wrong_item', 'damaged', 'not_arrived', 'short'].includes(line.status) ? line.status : 'not_arrived'
   const [kind, setKind] = useState(initKind)
   const [note, setNote] = useState(line.note || '')
@@ -762,12 +953,20 @@ function IssueItemModal({ line, onClose, onDone }) {
   const [busy, setBusy] = useState(false)
 
   const LABELS = { not_arrived: 'not arrived', wrong_item: 'wrong item', damaged: 'damaged', short: 'short' }
-  // Damaged / wrong / short all need an affected-unit count; not-arrived is the whole line.
-  const needsQty = kind !== 'not_arrived'
-  const qtyLabel = kind === 'damaged' ? 'How many damaged?'
-                 : kind === 'wrong_item' ? 'How many wrong?'
-                 : kind === 'short' ? 'Short by how many?' : 'Quantity'
+  // Only DAMAGED and SHORT ask "how many is the problem" (e.g. 3 cases damaged);
+  // the rest of the delivery is then received into inventory automatically.
+  // NOT ARRIVED and WRONG ITEM are recorded straight away with no quantity.
+  const needsQty = kind === 'damaged' || kind === 'short'
+  const qtyLabel = kind === 'damaged' ? 'How many are damaged? (e.g. 3 cases)'
+                 : kind === 'short' ? 'How many are short?' : 'Quantity'
   const canReturn = kind === 'wrong_item' || kind === 'damaged'
+
+  const ordered = Number(line.ordered_qty) || 0
+  const affected = Number(qty) || 0
+  // For damaged/short the remainder (ordered − affected) is the good stock that
+  // still gets received into inventory.
+  const goodQty = needsQty ? Math.max(0, ordered - affected) : 0
+  const invItem = useMemo(() => inventory.find(i => i.id === line.item_id) || null, [inventory, line.item_id])
 
   const btn = (k, label, active) =>
     <button key={k} onClick={() => setKind(k)}
@@ -777,9 +976,13 @@ function IssueItemModal({ line, onClose, onDone }) {
 
   const save = async () => {
     const n = Number(qty)
-    if (needsQty && (!n || n <= 0)) { toast.error('Enter the affected quantity'); return }
+    if (needsQty && (!n || n <= 0)) { toast.error('Enter how many are affected'); return }
+    if (needsQty && n > ordered) { toast.error(`Only ${ordered} ${line.unit || ''} were ordered`); return }
     setBusy(true)
     try {
+      const actor = boatNote?.created_by || (await currentActor())
+      let receivedGood = 0
+
       const patch = {
         status: kind,
         note: note.trim() || null,
@@ -787,22 +990,61 @@ function IssueItemModal({ line, onClose, onDone }) {
         wrong_qty:   kind === 'wrong_item' ? n : null,
         short_qty:   kind === 'short' ? n : null,
       }
+
+      // Receive the good remainder into inventory for damaged / short.
+      if (needsQty && goodQty > 0 && line.item_id && invItem) {
+        const newStock = Number(invItem.current_stock || 0) + goodQty
+        await supabase.from('items').update({ current_stock: newStock }).eq('id', line.item_id)
+        await supabase.from('stock_updates').insert({
+          item_id: line.item_id, date: boatNote?.note_date, quantity_change: goodQty, new_quantity: newStock,
+          updated_by: actor, note: `Boat note ${boatNote?.label || boatNote?.note_date || ''} · ${kind} ${n}, ${goodQty} good received`,
+        }).catch(() => {})
+        await supabase.from('item_batches').insert({
+          item_id: line.item_id, expiry_date: line.expiry_date || null, quantity: goodQty,
+          note: `Boat note ${boatNote?.label || boatNote?.note_date || ''}`,
+        }).catch(() => {})
+        await supabase.from('receiving').insert({
+          item_id: line.item_id, item_name: invItem.name || line.product_name, date: boatNote?.note_date,
+          quantity_received: goodQty, unit: line.unit, supplier_name: line.supplier,
+          received_by: actor, invoice_number: line.po_number, note: `Boat note (${kind}): ${boatNote?.label || ''}`,
+        }).catch(() => {})
+        logItemActivity(line.item_id, 'received', `Received ${goodQty} ${line.unit || ''} (${kind} ${n}) · Boat note ${boatNote?.label || boatNote?.note_date || ''}`)
+        receivedGood = goodQty
+        patch.received_qty = goodQty
+        patch.received_by = actor
+        patch.received_at = new Date().toISOString()
+      }
+
       const { error } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
       if (error) throw error
+
       if (logReturn && canReturn) {
         await supabase.from('item_returns').insert({
           boat_note_item_id: line.id, item_id: line.item_id || null,
           part_number: line.part_number || null, product_name: line.product_name || null,
           supplier: line.supplier || null, po_number: line.po_number || null,
-          unit: line.unit || 'EA', qty: n || line.ordered_qty || 0,
-          reason: kind, status: 'awaiting_return', created_by: currentActor(),
+          unit: line.unit || 'EA', qty: (needsQty ? n : line.ordered_qty) || 0,
+          reason: kind, status: 'awaiting_return', created_by: actor,
           replacement_part_number: line.part_number || null,
           replacement_product_name: line.product_name || null,
-          replacement_qty: n || line.ordered_qty || 0,
+          replacement_qty: (needsQty ? n : line.ordered_qty) || 0,
         }).catch(() => {})
       }
-      toast.success(`Marked as ${LABELS[kind]}${logReturn && canReturn ? ' + return logged' : ''}`)
-      onDone(patch)
+
+      // Persistent boat-note history entry.
+      if (boatNote?.id) {
+        logBoatNoteEvent(boatNote.id, kind, {
+          boatNoteItemId: line.id, actor,
+          partNumber: line.part_number, productName: line.product_name, department: line.department,
+          qty: needsQty ? n : null,
+          detail: needsQty
+            ? `${LABELS[kind]} ${n} ${line.unit || ''}${receivedGood ? ` · ${receivedGood} good received into inventory` : ''}${note.trim() ? ` · ${note.trim()}` : ''}`
+            : `${LABELS[kind]}${note.trim() ? ` · ${note.trim()}` : ''}`,
+        })
+      }
+
+      toast.success(`Marked as ${LABELS[kind]}${receivedGood ? ` · ${receivedGood} good received` : ''}${logReturn && canReturn ? ' + return logged' : ''}`)
+      onDone(patch, receivedGood ? 1 : 0)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
   }
@@ -824,12 +1066,24 @@ function IssueItemModal({ line, onClose, onDone }) {
           {btn('wrong_item',  'Wrong item',  'bg-orange-600/20 border-orange-500 text-orange-300')}
           {btn('damaged',     'Damaged',     'bg-red-600/20 border-red-500 text-red-300')}
         </div>
+        {!needsQty && (
+          <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-400">
+            {kind === 'not_arrived' ? 'Recorded as not arrived — no quantity needed.' : 'Recorded as a wrong item — no quantity needed.'}
+          </div>
+        )}
         {needsQty && (
           <div>
             <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{qtyLabel}</label>
             <input type="number" min="0.01" step="0.01" value={qty} onChange={e => setQty(e.target.value)}
               placeholder={`e.g. 3  (of ${line.ordered_qty} ${line.unit})`}
               className="input w-full mt-1.5 text-sm" />
+            {affected > 0 && (
+              <p className="text-xs text-slate-500 mt-1.5">
+                {affected} {line.unit} {kind}{goodQty > 0
+                  ? <> · the remaining <span className="text-green-400 font-semibold">{goodQty} {line.unit}</span> will be received into inventory{!line.item_id ? ' (once matched)' : ''}.</>
+                  : ' · nothing left to receive.'}
+              </p>
+            )}
           </div>
         )}
         {canReturn && (

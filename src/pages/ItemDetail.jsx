@@ -5,7 +5,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell
 } from 'recharts'
-import { Package, ArrowLeft, Pencil, Clock, ArrowUpRight, ArrowDownRight, FolderInput, Printer, FileDown, History } from 'lucide-react'
+import { Package, ArrowLeft, Pencil, Clock, ArrowUpRight, ArrowDownRight, FolderInput, Printer, FileDown, History, Camera } from 'lucide-react'
+import { ImageModal } from '../components/ItemMedia'
 import toast from 'react-hot-toast'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
@@ -52,6 +53,7 @@ export default function ItemDetail() {
   const [showAllActivity, setShowAllActivity] = useState(false)
   const [stores,    setStores]    = useState([])
   const [moveOpen,  setMoveOpen]  = useState(false)
+  const [photoOpen, setPhotoOpen] = useState(false)
   const [loading,   setLoading]   = useState(true)
 
   const load = useCallback(async () => {
@@ -155,6 +157,7 @@ export default function ItemDetail() {
           </div>
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => setMoveOpen(true)} className="btn-secondary btn-sm"><FolderInput className="w-4 h-4" /> Change Sub-category</button>
+            <button onClick={() => setPhotoOpen(true)} className="btn-secondary btn-sm"><Camera className="w-4 h-4" /> {images.length ? 'Change Photos' : 'Add Photos'}</button>
             <button onClick={printItem} className="btn-secondary btn-sm"><Printer className="w-4 h-4" /> Print</button>
             <button onClick={printItem} className="btn-secondary btn-sm"><FileDown className="w-4 h-4" /> PDF</button>
             <Link to="/inventory" className="btn-secondary btn-sm"><Pencil className="w-4 h-4" /> Edit</Link>
@@ -331,6 +334,14 @@ export default function ItemDetail() {
             ))}
           </div>
         </Modal>
+      )}
+
+      {/* Manage photos — remove old, upload new (max 3) */}
+      {photoOpen && (
+        <ImageModal
+          item={item}
+          onClose={() => { setPhotoOpen(false); load() }}
+        />
       )}
     </div>
   )
