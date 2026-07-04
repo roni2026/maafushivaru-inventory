@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase, fetchAllRows } from '../lib/supabase'
+import { supabase, fetchAllRows, chunkedUpdateByIds } from '../lib/supabase'
 import { logItemActivity } from '../lib/activity'
 import toast from 'react-hot-toast'
 
@@ -90,11 +90,11 @@ export function useItems() {
   // call and patches local state in place.
   const setItemsActive = async (ids, active) => {
     if (!ids || ids.length === 0) return
-    const { error } = await supabase
-      .from('items')
-      .update({ active })
-      .in('id', ids)
-    if (error) throw error
+    // Batched (not one giant `.in('id', ids)` call) — with many UUIDs that
+    // single request's URL can exceed the server's length limit and fail
+    // with a generic 400 Bad Request past just a handful of selected items.
+    const { failed, errors } = await chunkedUpdateByIds('items', ids, { active })
+    if (failed) throw new Error(errors[0] || `Failed to update ${failed} item${failed !== 1 ? 's' : ''}`)
     ids.forEach(id => logItemActivity(id, active ? 'activated' : 'deactivated', active ? 'Item activated' : 'Item deactivated'))
     const idSet = new Set(ids)
     setItems(prev => prev.map(i => (idSet.has(i.id) ? { ...i, active } : i)))

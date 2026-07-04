@@ -530,7 +530,9 @@ function BoatNoteHistory() {
   const [issuing, setIssuing]     = useState(null)   // boat_note_item being flagged not-arrived/wrong
 
   useEffect(() => {
-    selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,expiry_date,origin').eq('active', true))
+    // Include inactive items too — they must still be matchable so receiving
+    // a delivery for a deactivated item reactivates it automatically.
+    selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,expiry_date,origin,active'))
       .then(({ data }) => setInventory(data || []))
   }, [])
 
@@ -810,7 +812,7 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
       const earliest = dated.map(b => b.expiry_date).sort()[0] || null
       const newStock = Number(invItem?.current_stock || 0) + totalQty
 
-      const upd = { current_stock: newStock }
+      const upd = { current_stock: newStock, active: true }
       if (earliest) upd.expiry_date = earliest
       if (!invItem?.origin) upd.origin = classifyOrigin(line.product_name)
       const { error: uErr } = await supabase.from('items').update(upd).eq('id', itemId)
@@ -889,6 +891,7 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
               <span className="text-green-300 font-medium">{invItem.name}</span>
               <span className="text-slate-500 ml-2 font-mono text-xs">{invItem.part_number}</span>
               <span className="text-slate-400 ml-2 text-xs">stock {Number(invItem.current_stock || 0)}</span>
+              {invItem.active === false && <div className="text-amber-400 text-xs mt-1 font-medium">Currently inactive — receiving will reactivate it</div>}
             </div>
             <button onClick={() => { setItemId(''); setSearch('') }} className="text-xs text-slate-400 hover:text-slate-200">Change</button>
           </div>
@@ -906,7 +909,7 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
                 <p className="text-xs text-slate-500 p-3">No matching items.</p>
               ) : matches.map(i => (
                 <button key={i.id} onClick={() => setItemId(i.id)} className="w-full text-left px-3 py-2 hover:bg-slate-700/40 flex items-center justify-between gap-2">
-                  <span className="text-sm text-slate-200 truncate">{i.name}</span>
+                  <span className="text-sm text-slate-200 truncate">{i.name}{i.active === false ? <span className="text-amber-400"> (inactive)</span> : ''}</span>
                   <span className="font-mono text-xs text-[#00AEEF] shrink-0">{i.part_number}</span>
                 </button>
               ))}
@@ -994,7 +997,7 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
       // Receive the good remainder into inventory for damaged / short.
       if (needsQty && goodQty > 0 && line.item_id && invItem) {
         const newStock = Number(invItem.current_stock || 0) + goodQty
-        await supabase.from('items').update({ current_stock: newStock }).eq('id', line.item_id)
+        await supabase.from('items').update({ current_stock: newStock, active: true }).eq('id', line.item_id)
         await supabase.from('stock_updates').insert({
           item_id: line.item_id, date: boatNote?.note_date, quantity_change: goodQty, new_quantity: newStock,
           updated_by: actor, note: `Boat note ${boatNote?.label || boatNote?.note_date || ''} · ${kind} ${n}, ${goodQty} good received`,

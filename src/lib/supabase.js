@@ -120,3 +120,36 @@ export async function chunkedWrite(table, rows, {
   }
   return { success, failed, errors }
 }
+
+// ────────────────────────────────────────────────────────────────────────────
+// chunkedUpdateByIds — apply the same patch to many rows by id, in batches.
+//
+// `.update(patch).in('id', ids)` puts every id in the request's query string.
+// With dozens of UUIDs (36 chars each) that string can exceed the server's/
+// proxy's URL-length limit and the request fails with a generic 400 Bad
+// Request — which is why bulk actions (e.g. "Mark Inactive" on many selected
+// items) broke past a handful of rows. Batching keeps each request small and
+// reliable, matching the pattern already used for chunkedWrite() above.
+// ────────────────────────────────────────────────────────────────────────────
+export async function chunkedUpdateByIds(table, ids, patch, { chunkSize = 100, onProgress } = {}) {
+  let success = 0
+  let failed = 0
+  const errors = []
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const { error } = await supabase.from(table).update(patch).in('id', chunk)
+    if (error) {
+      // A whole-chunk failure — retry one at a time so the good rows still
+      // get updated and we can report exactly which ones failed.
+      for (const id of chunk) {
+        const { error: rowErr } = await supabase.from(table).update(patch).eq('id', id)
+        if (rowErr) { failed++; errors.push(rowErr.message) }
+        else success++
+      }
+    } else {
+      success += chunk.length
+    }
+    onProgress?.(Math.min(i + chunkSize, ids.length), ids.length)
+  }
+  return { success, failed, errors }
+}
