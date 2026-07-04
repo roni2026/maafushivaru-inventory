@@ -55,6 +55,17 @@ const SEARCH_FIELDS = [
 export default function Inventory() {
   const { items, stores, loading, addItem, updateItem, deleteItem, setItemsActive, updateStock, refetch } = useItems()
 
+  // Existing items indexed by part number (trimmed, case-insensitive, leading
+  // zeros ignored) — used to tell a bulk-import row apart as "update" vs "new".
+  const existingPartIndex = useMemo(() => {
+    const m = new Map()
+    for (const it of items) {
+      const k = String(it.part_number || '').trim().toLowerCase().replace(/^0+/, '')
+      if (k) m.set(k, it)
+    }
+    return m
+  }, [items])
+
   // ── Search / filter ──────────────────────────────────────
   const [searchField, setSearchField] = useState('name')
   const [search,      setSearch]      = useState('')
@@ -94,6 +105,7 @@ export default function Inventory() {
   const [defaultStoreId, setDefaultStoreId] = useState('')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState({ done: 0, total: 0 })
+  const [includeNew, setIncludeNew] = useState(true) // add genuinely-new items, or update stock only
   const fileRef = useRef(null)
 
   // ── Pagination ────────────────────────────────────────────────────────────
@@ -327,6 +339,10 @@ export default function Inventory() {
       if(missing.length){ toast.error(`CSV missing columns: ${missing.join(', ')}`); return }
 
       const norm=(s)=>(s||'').trim().replace(/\s+/g,' ').toLowerCase()
+      // Match against the CURRENT inventory by part number (trimmed, case-insensitive,
+      // leading zeros ignored) so we can tell the user upfront how many rows are
+      // genuinely new items vs. existing items whose quantity is being updated.
+      const normCode=(s)=>String(s||'').trim().toLowerCase().replace(/^0+/,'')
 
       const parsed=[]; const errs=[]; const missingSet=new Map()
       rawRows.forEach((row,idx)=>{
@@ -339,6 +355,7 @@ export default function Inventory() {
         // General default). Also honours an optional `category` column.
         const { store } = resolveStore(rawStore, stores, row.category)
         if(!store){ missingSet.set(norm(rawStore), rawStore) }
+        const existing = existingPartIndex.get(normCode(row.part_number))
         parsed.push({
           part_number:row.part_number.trim(),
           name:row.name.trim(),
@@ -353,11 +370,13 @@ export default function Inventory() {
           supplier:row.supplier?.trim()||'',
           location:row.location?.trim()||'',
           notes:row.notes?.trim()||'',
+          _isNew:!existing,
         })
       })
       setCsvRows(parsed)
       setCsvErrors(errs)
       setMissingStores([...missingSet.values()].sort())
+      setIncludeNew(true)
       if(fileRef.current) fileRef.current.dataset.name=file.name
     }
     reader.readAsText(file)
@@ -366,15 +385,18 @@ export default function Inventory() {
   const handleImport = async () => {
     if(!csvRows.length){ toast.error('No rows to import'); return }
     if(missingStores.length && !defaultStoreId){ toast.error('Pick a store for unmatched rows first'); return }
+    // If "add new items" is unchecked, only update rows that already exist.
+    const rowsToImport = includeNew ? csvRows : csvRows.filter(r=>!r._isNew)
+    if(!rowsToImport.length){ toast.error('Nothing to import — all rows are new items and "Add new items" is unchecked'); return }
     setImporting(true)
-    setImportProgress({ done: 0, total: csvRows.length })
+    setImportProgress({ done: 0, total: rowsToImport.length })
 
     // Resolve store_id for every row. Matched rows keep their store; unmatched
     // rows fall back to the chosen existing store (we never create new stores —
     // the DB's row-level security forbids it).
     let skipped=0
     const payloads=[]
-    for(const row of csvRows){
+    for(const row of rowsToImport){
       const sid=row.store_id||defaultStoreId
       if(!sid){ skipped++; continue }
       payloads.push({
@@ -395,12 +417,18 @@ export default function Inventory() {
     const parts=[`Imported ${success}`]
     if(failed) parts.push(`${failed} failed`)
     if(skipped) parts.push(`${skipped} skipped (no store)`)
+    if(!includeNew && csvRows.some(r=>r._isNew)) parts.push(`${csvRows.filter(r=>r._isNew).length} new items skipped (not added)`)
     if(failed||skipped) toast(parts.join(' · '), { icon:'⚠️' })
     else toast.success(`Imported ${success} items`)
-    setShowImport(false); setCsvRows([]); setCsvErrors([]); setMissingStores([])
+    setShowImport(false); setCsvRows([]); setCsvErrors([]); setMissingStores([]); setIncludeNew(true)
     refetch()
     setImporting(false)
   }
+
+  // Bulk-import breakdown for the CSV modal (new vs. existing rows).
+  const newRowsCount = csvRows.filter(r=>r._isNew).length
+  const updateRowsCount = csvRows.length - newRowsCount
+  const importCount = includeNew ? csvRows.length : updateRowsCount
 
   const inventoryValue=items.reduce((s,i)=>s+Number(i.current_stock)*Number(i.unit_cost||0),0)
 
@@ -734,10 +762,10 @@ export default function Inventory() {
         {deleteConf&&<p className="text-slate-300">Delete <strong className="text-slate-100">{deleteConf.name}</strong>? This cannot be undone.</p>}
       </Modal>
 
-      {/* ── CSV import ───────────────────────────────────── */}
-      <Modal isOpen={showImport} onClose={()=>{setShowImport(false);setCsvRows([]);setCsvErrors([]);setMissingStores([]);if(fileRef.current)fileRef.current.value=''}}
+      {/* ── CSV import ─────────────────────────────────────────── */}
+      <Modal isOpen={showImport} onClose={()=>{setShowImport(false);setCsvRows([]);setCsvErrors([]);setMissingStores([]);setIncludeNew(true);if(fileRef.current)fileRef.current.value=''}}
         title="Bulk Import via CSV" size="lg"
-        footer={<><Button variant="secondary" onClick={downloadTemplate}><Download className="w-4 h-4" /> Template</Button>{csvRows.length>0&&<Button onClick={handleImport} loading={importing}>Import {csvRows.length.toLocaleString()} {csvRows.length===1?'Item':'Items'}</Button>}</>}>
+        footer={<><Button variant="secondary" onClick={downloadTemplate}><Download className="w-4 h-4" /> Template</Button>{csvRows.length>0&&<Button onClick={handleImport} loading={importing} disabled={importCount===0}>Import {importCount.toLocaleString()} {importCount===1?'Item':'Items'}</Button>}</>}>
         <div className="space-y-4">
           <div className="bg-blue-900/20 border border-blue-700/30 rounded-lg p-3 text-sm text-blue-300">
             Required columns: <code className="text-blue-200">part_number, name, store_name, unit</code>. Stores that don’t exist yet can be created automatically below — no need to set them up first.
@@ -745,6 +773,30 @@ export default function Inventory() {
           <input ref={fileRef} type="file" accept=".csv" onChange={handleFileChange} className="block w-full text-sm text-slate-300 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-teal-700 file:text-white file:text-sm file:font-medium hover:file:bg-teal-600 cursor-pointer" />
 
           {csvErrors.length>0&&<div className="bg-red-900/20 border border-red-700/30 rounded-lg p-3 text-sm text-red-300 space-y-1">{csvErrors.slice(0,5).map((e,i)=><p key={i}>{e}</p>)}{csvErrors.length>5&&<p className="text-red-400/70">+ {(csvErrors.length-5).toLocaleString()} more rows skipped (missing part_number/name)…</p>}</div>}
+
+          {/* Update-vs-new breakdown, matched by part number against the current
+              inventory — tells you upfront how many rows are genuinely new items
+              before anything is written, with a toggle to skip adding them. */}
+          {csvRows.length>0 && (
+            <div className="bg-slate-700/30 border border-slate-700/40 rounded-lg p-3 space-y-2.5">
+              <div className="flex items-center justify-center gap-6 text-sm flex-wrap">
+                <span className="flex items-center gap-2 text-blue-300">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
+                  <strong>{updateRowsCount}</strong> existing — stock qty will be updated
+                </span>
+                <span className="flex items-center gap-2 text-green-300">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                  <strong>{newRowsCount}</strong> new item{newRowsCount!==1?'s':''} not in inventory yet
+                </span>
+              </div>
+              {newRowsCount>0 && (
+                <label className="flex items-center justify-center gap-2 text-sm text-slate-200 pt-2 border-t border-slate-700/40 cursor-pointer">
+                  <input type="checkbox" checked={includeNew} onChange={e=>setIncludeNew(e.target.checked)} className="accent-teal-500 w-4 h-4" />
+                  Add {newRowsCount===1?'that new item':`those ${newRowsCount} new items`} to inventory
+                </label>
+              )}
+            </div>
+          )}
 
           {missingStores.length>0&&(
             <div className="bg-amber-900/20 border border-amber-700/30 rounded-lg p-3 text-sm space-y-2">
@@ -769,7 +821,7 @@ export default function Inventory() {
             </div>
           )}
 
-          {csvRows.length>0&&<div><p className="text-sm text-green-400 mb-2">✓ {csvRows.length.toLocaleString()} rows ready to import{missingStores.length>0?` (${(csvRows.filter(r=>!r.store_id).length).toLocaleString()} will use the chosen store)`:''}</p><div className="max-h-40 overflow-y-auto text-xs bg-slate-700/30 rounded-lg p-3 space-y-1">{csvRows.slice(0,15).map((r,i)=><div key={i} className="flex gap-2 text-slate-300"><span className="font-mono text-teal-400 shrink-0">{r.part_number}</span><span className="truncate flex-1">{r.name}</span><span className="text-slate-500 shrink-0">{r.store_name}</span></div>)}{csvRows.length>15&&<p className="text-slate-500 text-center pt-1">+ {(csvRows.length-15).toLocaleString()} more…</p>}</div></div>}
+          {csvRows.length>0&&<div><p className="text-sm text-green-400 mb-2">✓ {csvRows.length.toLocaleString()} rows parsed{missingStores.length>0?` (${(csvRows.filter(r=>!r.store_id).length).toLocaleString()} will use the chosen store)`:''}</p><div className="max-h-40 overflow-y-auto text-xs bg-slate-700/30 rounded-lg p-3 space-y-1">{csvRows.slice(0,15).map((r,i)=><div key={i} className="flex gap-2 text-slate-300 items-center">{r._isNew?<span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-green-900/40 text-green-300">new</span>:<span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-900/40 text-blue-300">update</span>}<span className="font-mono text-teal-400 shrink-0">{r.part_number}</span><span className="truncate flex-1">{r.name}</span><span className="text-slate-500 shrink-0">{r.store_name}</span></div>)}{csvRows.length>15&&<p className="text-slate-500 text-center pt-1">+ {(csvRows.length-15).toLocaleString()} more…</p>}</div></div>}
         </div>
       </Modal>
 
