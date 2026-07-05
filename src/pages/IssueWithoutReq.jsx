@@ -74,17 +74,6 @@ export default function IssueWithoutReq() {
   }
   useEffect(() => { load() }, [])
 
-  // Keep the open batch-details modal in sync with the latest data (e.g.
-  // after marking an item provided) instead of showing a stale snapshot;
-  // auto-closes if the whole batch was deleted.
-  useEffect(() => {
-    setViewBatch(vb => {
-      if (!vb) return vb
-      return batches.find(b => b.key === vb.key) || null
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [batches])
-
   // ── Header + line-item helpers ────────────────────────────────────────
   const h = k => e => setHeader(p => ({ ...p, [k]: e.target.value }))
   const setLine = (key, patch) => setLines(ls => ls.map(l => (l._key === key ? { ...l, ...patch } : l)))
@@ -134,6 +123,17 @@ export default function IssueWithoutReq() {
       }
     }).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
   }, [rows])
+
+  // Keep the open batch-details modal in sync with the latest data (e.g.
+  // after marking an item provided) instead of showing a stale snapshot;
+  // auto-closes if the whole batch was deleted.
+  useEffect(() => {
+    setViewBatch(vb => {
+      if (!vb) return vb
+      return batches.find(b => b.key === vb.key) || null
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batches])
 
   const filteredBatches = useMemo(() => batches.filter(b => {
     if (filter === 'pending_req' && b.pendingCount === 0) return false
