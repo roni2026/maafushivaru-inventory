@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll } from '../lib/supabase'
 import {
   ClipboardX, Plus, Search, X, RefreshCw, CheckCircle2, Mail, Clock,
-  FileCheck2, Trash2, Copy, ChefHat,
+  FileCheck2, Trash2, Copy, ChefHat, Users, Package,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -10,7 +10,6 @@ import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Modal from '../components/ui/Modal'
 import Input, { Textarea, Select } from '../components/ui/Input'
-import { useSort } from '../hooks/useSort'
 import { DEPARTMENTS } from '../lib/boatnote'
 import { sendIssueReminder } from '../lib/brevo'
 
@@ -19,6 +18,7 @@ const today = () => new Date().toISOString().split('T')[0]
 const STATUS = {
   pending_req:  { label: 'Pending Req',  badge: 'yellow' },
   req_provided: { label: 'Req Provided', badge: 'green'  },
+  partial:      { label: 'Partially Provided', badge: 'orange' },
 }
 const KITCHENS = ['MAIN KITCHEN', 'STAFF KITCHEN']
 
@@ -31,13 +31,22 @@ const EMPTY_HEADER = {
   date: today(), destination_location: 'STORE', issued_to: '', note: '',
 }
 
+// Guards a single await against hanging forever (flaky network, a stalled
+// request, etc.) so "Save" can never get stuck indefinitely — it surfaces a
+// clear timeout error instead of spinning forever.
+function withTimeout(promise, ms, label) {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out — check your connection and try again.`)), ms)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
 // Best-effort push to the "instant issued without req" Edge Function.
-// Silently no-ops if the function isn't deployed yet — Realtime + the
-// mobile app's own subscription still delivers the in-app alert.
-async function notifyIssuedWithoutReq(batchId) {
-  try {
-    await supabase.functions.invoke('send-issue-reminders', { body: { mode: 'issued', batch_id: batchId } })
-  } catch { /* function not deployed yet — safe to ignore */ }
+// Fire-and-forget on purpose — never awaited from the save flow, so it can
+// never block the UI even if the function isn't deployed or a call hangs.
+function notifyIssuedWithoutReq(batchId) {
+  supabase.functions.invoke('send-issue-reminders', { body: { mode: 'issued', batch_id: batchId } }).catch(() => {})
 }
 
 export default function IssueWithoutReq() {
@@ -53,6 +62,7 @@ export default function IssueWithoutReq() {
   const [itemSearchFor, setItemSearchFor] = useState(null) // _key of line whose dropdown is open
   const [itemSearch, setItemSearch]       = useState('')
   const [sendingReminder, setSendingReminder] = useState(false)
+  const [viewBatch, setViewBatch] = useState(null) // batch object shown in the details modal
 
   const load = async () => {
     setLoading(true)
@@ -63,6 +73,17 @@ export default function IssueWithoutReq() {
     setRows(r || []); setItems(i || []); setLoading(false)
   }
   useEffect(() => { load() }, [])
+
+  // Keep the open batch-details modal in sync with the latest data (e.g.
+  // after marking an item provided) instead of showing a stale snapshot;
+  // auto-closes if the whole batch was deleted.
+  useEffect(() => {
+    setViewBatch(vb => {
+      if (!vb) return vb
+      return batches.find(b => b.key === vb.key) || null
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batches])
 
   // ── Header + line-item helpers ────────────────────────────────────────
   const h = k => e => setHeader(p => ({ ...p, [k]: e.target.value }))
@@ -85,15 +106,45 @@ export default function IssueWithoutReq() {
     setItemSearch(''); setItemSearchFor(null)
   }
 
-  const filtered = useMemo(() => rows.filter(r => {
-    if (filter && r.status !== filter) return false
+  // ── Group individual item rows into one "batch" per date's issuance ────
+  // (one batch = one person, one date, one or more items — matches how the
+  // Add form saves them). Older rows saved before batching existed simply
+  // become their own single-item batch, keyed by their own id.
+  const batches = useMemo(() => {
+    const map = new Map()
+    for (const r of rows) {
+      const key = r.batch_id || r.id
+      if (!map.has(key)) {
+        map.set(key, {
+          key, date: r.date, destination_location: r.destination_location,
+          issued_to: r.issued_to, note: r.note, items: [],
+        })
+      }
+      map.get(key).items.push(r)
+    }
+    return Array.from(map.values()).map(b => {
+      const pendingCount = b.items.filter(i => i.status === 'pending_req').length
+      const status = pendingCount === 0 ? 'req_provided' : (pendingCount === b.items.length ? 'pending_req' : 'partial')
+      return {
+        ...b,
+        itemCount: b.items.length,
+        totalQty: b.items.reduce((s, i) => s + Number(i.quantity || 0), 0),
+        pendingCount,
+        status,
+      }
+    }).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+  }, [rows])
+
+  const filteredBatches = useMemo(() => batches.filter(b => {
+    if (filter === 'pending_req' && b.pendingCount === 0) return false
+    if (filter === 'req_provided' && b.pendingCount > 0) return false
     if (search) {
       const q = search.toLowerCase()
-      if (!(`${r.item_name} ${r.part_number} ${r.destination_location} ${r.issued_to}`.toLowerCase().includes(q))) return false
+      const hay = `${b.issued_to} ${b.destination_location} ${b.items.map(i => `${i.item_name} ${i.part_number}`).join(' ')}`.toLowerCase()
+      if (!hay.includes(q)) return false
     }
     return true
-  }), [rows, filter, search])
-  const { sorted, thProps } = useSort(filtered, 'date', 'desc')
+  }), [batches, filter, search])
 
   const counts = useMemo(() => ({
     pending_req:  rows.filter(r => r.status === 'pending_req').length,
@@ -114,38 +165,51 @@ export default function IssueWithoutReq() {
     }
 
     setSaving(true)
-    const batchId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
-    const payload = clean.map(l => ({
-      date: header.date, item_id: l.item_id || null, item_name: l.item_name,
-      part_number: l.part_number || null, quantity: l.quantity, unit: l.unit,
-      destination_location: header.destination_location, issued_to: header.issued_to || null,
-      issued_by: 'Roni', status: 'pending_req', deduct_stock: !!l.deduct_stock, note: header.note || null,
-      batch_id: batchId,
-    }))
+    try {
+      const batchId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
+      const payload = clean.map(l => ({
+        date: header.date, item_id: l.item_id || null, item_name: l.item_name,
+        part_number: l.part_number || null, quantity: l.quantity, unit: l.unit,
+        destination_location: header.destination_location, issued_to: header.issued_to || null,
+        issued_by: 'Roni', status: 'pending_req', deduct_stock: !!l.deduct_stock, note: header.note || null,
+        batch_id: batchId,
+      }))
 
-    const { error } = await supabase.from('manual_issues').insert(payload)
-    if (error) { toast.error(error.message); setSaving(false); return }
+      const { error } = await withTimeout(
+        supabase.from('manual_issues').insert(payload),
+        20000, 'Saving the issue',
+      )
+      if (error) { toast.error(error.message); return }
 
-    // Optionally reduce inventory + log the movement, per matched item.
-    for (const l of clean) {
-      if (l.deduct_stock && l.item_id) {
-        const it = items.find(i => i.id === l.item_id)
-        const newStock = Number(it?.current_stock || 0) - l.quantity
-        await supabase.from('items').update({ current_stock: newStock }).eq('id', l.item_id)
-        await supabase.from('stock_updates').insert({
-          item_id: l.item_id, date: header.date, quantity_change: -l.quantity, new_quantity: newStock,
-          updated_by: 'Issue (no req)', note: `Issued without requisition → ${header.destination_location}${header.issued_to ? ' · ' + header.issued_to : ''}`,
-        }).catch(() => {})
+      // Optionally reduce inventory + log the movement, per matched item.
+      // Best-effort: a failure here never blocks the issue record already saved.
+      for (const l of clean) {
+        if (l.deduct_stock && l.item_id) {
+          try {
+            const it = items.find(i => i.id === l.item_id)
+            const newStock = Number(it?.current_stock || 0) - l.quantity
+            await withTimeout(supabase.from('items').update({ current_stock: newStock }).eq('id', l.item_id), 15000, 'Updating stock')
+            await withTimeout(supabase.from('stock_updates').insert({
+              item_id: l.item_id, date: header.date, quantity_change: -l.quantity, new_quantity: newStock,
+              updated_by: 'Issue (no req)', note: `Issued without requisition → ${header.destination_location}${header.issued_to ? ' · ' + header.issued_to : ''}`,
+            }), 15000, 'Logging stock movement')
+          } catch { /* best-effort — the issue record itself already saved */ }
+        }
       }
+
+      // Fire the "issued without req" alert — mobile users get it instantly
+      // via Realtime; this also nudges the (optional) push Edge Function.
+      // Not awaited on purpose (see notifyIssuedWithoutReq).
+      notifyIssuedWithoutReq(batchId)
+
+      toast.success(`${clean.length} item${clean.length > 1 ? 's' : ''} recorded as Pending Req`)
+      setShowAdd(false); setHeader(EMPTY_HEADER); setLines([emptyLine()]); setItemSearch(''); setItemSearchFor(null)
+      load()
+    } catch (e) {
+      toast.error(e?.message || 'Could not save — please try again.')
+    } finally {
+      setSaving(false)
     }
-
-    // Fire the "issued without req" alert — mobile users get it instantly
-    // via Realtime; this also nudges the (optional) push Edge Function.
-    notifyIssuedWithoutReq(batchId)
-
-    toast.success(`${clean.length} item${clean.length > 1 ? 's' : ''} recorded as Pending Req`)
-    setShowAdd(false); setHeader(EMPTY_HEADER); setLines([emptyLine()]); setItemSearch(''); setItemSearchFor(null)
-    load(); setSaving(false)
   }
 
   // ── Mark an issue's requisition as provided ─────────────────────────
@@ -159,6 +223,18 @@ export default function IssueWithoutReq() {
     toast.success('Marked as Req Provided'); load()
   }
 
+  const markAllProvided = async (batch) => {
+    const pending = batch.items.filter(i => i.status === 'pending_req')
+    if (!pending.length) return
+    const req = prompt(`Enter the requisition number covering all ${pending.length} item(s) (optional):`, '')
+    if (req === null) return
+    const { error } = await supabase.from('manual_issues').update({
+      status: 'req_provided', req_number: req || null, req_provided_at: new Date().toISOString(),
+    }).in('id', pending.map(i => i.id))
+    if (error) { toast.error(error.message); return }
+    toast.success('All items marked as Req Provided'); load()
+  }
+
   const revertPending = async (row) => {
     await supabase.from('manual_issues').update({ status: 'pending_req', req_provided_at: null }).eq('id', row.id)
     toast.success('Reverted to Pending Req'); load()
@@ -167,6 +243,12 @@ export default function IssueWithoutReq() {
   const remove = async (row) => {
     if (!confirm(`Delete this entry for ${row.item_name}?`)) return
     await supabase.from('manual_issues').delete().eq('id', row.id)
+    toast.success('Deleted'); load()
+  }
+
+  const deleteBatch = async (batch) => {
+    if (!confirm(`Delete this whole issuance (${batch.itemCount} item${batch.itemCount > 1 ? 's' : ''})?`)) return
+    await supabase.from('manual_issues').delete().in('id', batch.items.map(i => i.id))
     toast.success('Deleted'); load()
   }
 
@@ -254,55 +336,99 @@ export default function IssueWithoutReq() {
       <div className="card py-3 px-4 flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input className="input text-sm pl-9" placeholder="Search item, code, destination…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="input text-sm pl-9" placeholder="Search person, item, code, destination…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         {filter && <button onClick={() => setFilter('')} className="btn-ghost btn-sm">Clear: {STATUS[filter].label} ✕</button>}
       </div>
 
+      {/* One row per date's issuance (person + date + item count) */}
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
       ) : (
         <div className="card overflow-x-auto p-0">
           <Table>
             <Thead><tr>
-              <Th {...thProps('date')}>Date</Th>
-              <Th {...thProps('part_number')}>Code</Th>
-              <Th {...thProps('item_name')}>Item</Th>
-              <Th {...thProps('quantity')}>Qty</Th>
-              <Th {...thProps('destination_location')}>Destination</Th>
-              <Th {...thProps('issued_to')}>Taken By</Th>
-              <Th {...thProps('req_number')}>Req #</Th>
-              <Th {...thProps('status')}>Status</Th>
+              <Th>Date</Th>
+              <Th>Taken By</Th>
+              <Th>Destination</Th>
+              <Th>Items</Th>
+              <Th>Total Qty</Th>
+              <Th>Status</Th>
               <Th>Action</Th>
             </tr></Thead>
             <Tbody>
-              {sorted.length === 0 ? (
-                <Tr><Td colSpan={9} className="text-center text-slate-500 py-12">No issues logged yet</Td></Tr>
-              ) : sorted.map(r => (
-                <Tr key={r.id} className={r.status === 'pending_req' ? 'bg-yellow-900/5' : ''}>
-                  <Td className="text-slate-300 text-xs whitespace-nowrap">{r.date}</Td>
-                  <Td className="font-mono text-xs text-[#00AEEF]">{r.part_number || '—'}</Td>
-                  <Td className="font-medium text-slate-100">{r.item_name}</Td>
-                  <Td className="text-slate-200">{r.quantity} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
-                  <Td><Badge variant={r.destination_location === 'ALLOWANCE' ? 'purple' : (KITCHENS.includes(r.destination_location) ? 'orange' : 'blue')}>{r.destination_location || '—'}</Badge></Td>
-                  <Td className="text-slate-400 text-xs">{r.issued_to || '—'}</Td>
-                  <Td className="text-slate-400 text-xs font-mono">{r.req_number || '—'}</Td>
-                  <Td><Badge variant={STATUS[r.status]?.badge}>{STATUS[r.status]?.label}</Badge></Td>
-                  <Td>
-                    <div className="flex gap-1.5">
-                      {r.status === 'pending_req' ? (
-                        <button onClick={() => markProvided(r)} className="btn-ghost btn-xs" title="Mark Req Provided"><CheckCircle2 className="w-4 h-4 text-green-400" /></button>
-                      ) : (
-                        <button onClick={() => revertPending(r)} className="btn-ghost btn-xs" title="Revert to Pending"><Clock className="w-4 h-4 text-yellow-400" /></button>
-                      )}
-                      <button onClick={() => remove(r)} className="btn-ghost btn-xs" title="Delete"><Trash2 className="w-4 h-4 text-red-400" /></button>
-                    </div>
+              {filteredBatches.length === 0 ? (
+                <Tr><Td colSpan={7} className="text-center text-slate-500 py-12">No issues logged yet</Td></Tr>
+              ) : filteredBatches.map(b => (
+                <Tr key={b.key} className={`cursor-pointer hover:bg-slate-700/20 ${b.pendingCount > 0 ? 'bg-yellow-900/5' : ''}`} onClick={() => setViewBatch(b)}>
+                  <Td className="text-slate-300 text-xs whitespace-nowrap">{b.date}</Td>
+                  <Td className="font-medium text-slate-100 flex items-center gap-1.5"><Users className="w-3.5 h-3.5 text-slate-500" />{b.issued_to || '—'}</Td>
+                  <Td><Badge variant={b.destination_location === 'ALLOWANCE' ? 'purple' : (KITCHENS.includes(b.destination_location) ? 'orange' : 'blue')}>{b.destination_location || '—'}</Badge></Td>
+                  <Td className="text-slate-200"><Package className="w-3.5 h-3.5 inline mr-1 text-slate-500" />{b.itemCount} item{b.itemCount > 1 ? 's' : ''}</Td>
+                  <Td className="text-slate-300">{b.totalQty}</Td>
+                  <Td><Badge variant={STATUS[b.status]?.badge}>{STATUS[b.status]?.label}</Badge></Td>
+                  <Td onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setViewBatch(b)} className="btn-ghost btn-xs text-teal-400">View details</button>
                   </Td>
                 </Tr>
               ))}
             </Tbody>
           </Table>
         </div>
+      )}
+
+      {/* Batch details modal — items taken on this date by this person */}
+      {viewBatch && (
+        <Modal isOpen title={`${viewBatch.issued_to || 'Issue'} · ${viewBatch.date}`} onClose={() => setViewBatch(null)} size="lg"
+          footer={(
+            <div className="flex gap-2 justify-between w-full">
+              <Button variant="danger" onClick={() => deleteBatch(viewBatch)}><Trash2 className="w-4 h-4" /> Delete Issuance</Button>
+              <div className="flex gap-2">
+                {viewBatch.pendingCount > 0 && (
+                  <Button onClick={() => markAllProvided(viewBatch)}><CheckCircle2 className="w-4 h-4" /> Mark All Provided</Button>
+                )}
+                <Button variant="secondary" onClick={() => setViewBatch(null)}>Close</Button>
+              </div>
+            </div>
+          )}>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2 text-sm text-slate-300">
+              <Badge variant={viewBatch.destination_location === 'ALLOWANCE' ? 'purple' : (KITCHENS.includes(viewBatch.destination_location) ? 'orange' : 'blue')}>{viewBatch.destination_location || '—'}</Badge>
+              <Badge variant={STATUS[viewBatch.status]?.badge}>{STATUS[viewBatch.status]?.label}</Badge>
+              <span className="text-slate-500">{viewBatch.itemCount} item{viewBatch.itemCount > 1 ? 's' : ''} · {viewBatch.totalQty} total qty</span>
+            </div>
+            {viewBatch.note && <p className="text-sm text-slate-400 bg-slate-900/40 rounded-lg p-2">{viewBatch.note}</p>}
+
+            <div className="card overflow-x-auto p-0">
+              <Table>
+                <Thead><tr>
+                  <Th>Code</Th><Th>Item</Th><Th>Qty</Th><Th>Req #</Th><Th>Status</Th><Th>Action</Th>
+                </tr></Thead>
+                <Tbody>
+                  {viewBatch.items.map(r => (
+                    <Tr key={r.id}>
+                      <Td className="font-mono text-xs text-[#00AEEF]">{r.part_number || '—'}</Td>
+                      <Td className="font-medium text-slate-100">{r.item_name}</Td>
+                      <Td className="text-slate-200">{r.quantity} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
+                      <Td className="text-slate-400 text-xs font-mono">{r.req_number || '—'}</Td>
+                      <Td><Badge variant={STATUS[r.status]?.badge}>{STATUS[r.status]?.label}</Badge></Td>
+                      <Td>
+                        <div className="flex gap-1.5">
+                          {r.status === 'pending_req' ? (
+                            <button onClick={() => markProvided(r)} className="btn-ghost btn-xs" title="Mark Req Provided"><CheckCircle2 className="w-4 h-4 text-green-400" /></button>
+                          ) : (
+                            <button onClick={() => revertPending(r)} className="btn-ghost btn-xs" title="Revert to Pending"><Clock className="w-4 h-4 text-yellow-400" /></button>
+                          )}
+                          <button onClick={() => remove(r)} className="btn-ghost btn-xs" title="Delete item"><Trash2 className="w-4 h-4 text-red-400" /></button>
+                        </div>
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Add modal — one date's issuance, multiple items */}
