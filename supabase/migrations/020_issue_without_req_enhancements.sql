@@ -127,3 +127,10 @@ END $$;
 --     );
 --   $$
 -- );
+
+-- ── 7. Force PostgREST to pick up the new columns immediately ───────────
+-- Without this, PostgREST's cached schema can keep rejecting inserts that
+-- reference batch_id / kitchen / notified_at (error: "Could not find the
+-- 'batch_id' column ... in the schema cache") until it reloads on its own
+-- (which can take a while). This makes the reload happen right away.
+NOTIFY pgrst, 'reload schema';
