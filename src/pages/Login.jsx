@@ -39,19 +39,21 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           {logoError ? (
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600/90 backdrop-blur rounded-2xl shadow-xl mb-5 ring-1 ring-white/20">
-              <Waves className="w-8 h-8 text-white" />
-            </div>
+            <>
+              <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600/90 backdrop-blur rounded-2xl shadow-xl mb-5 ring-1 ring-white/20">
+                <Waves className="w-8 h-8 text-white" />
+              </div>
+              <h1 className="font-display text-3xl font-bold text-white drop-shadow-lg">Outrigger</h1>
+              <p className="text-teal-50/90 mt-1 text-sm drop-shadow">Maafushivaru Resort &mdash; Inventory System</p>
+            </>
           ) : (
             <img
               src={LOGO_SRC}
-              alt="Outrigger"
+              alt="Outrigger Maafushivaru Resort"
               onError={() => setLogoError(true)}
-              className="inline-block h-16 w-auto object-contain mb-5 drop-shadow-xl"
+              className="inline-block h-28 w-auto object-contain drop-shadow-xl"
             />
           )}
-          <h1 className="font-display text-3xl font-bold text-white drop-shadow-lg">Outrigger</h1>
-          <p className="text-teal-50/90 mt-1 text-sm drop-shadow">Maafushivaru Resort &mdash; Inventory System</p>
         </div>
 
         {/* Card — glassmorphic over the lagoon */}
