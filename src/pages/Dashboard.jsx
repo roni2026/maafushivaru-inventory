@@ -92,6 +92,12 @@ export default function Dashboard() {
           .order('created_at', { ascending: false }).limit(8),
       ])
 
+      // Pending "Issue Without Requisition" count (shown as its own stat card below).
+      const { count: pendingManualIssues } = await supabase
+        .from('manual_issues')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'pending_req')
+
       // ── Core stats ──────────────────────────────────────
       const it = items || []
       const iss = issuances || []
@@ -174,6 +180,7 @@ export default function Dashboard() {
         todayTotal, todayCount: todayIss.length,
         healthData, dailyData, top5, categoryPie, expiry,
         lowStockItems, expiringItems, updates: upd,
+        pendingManualIssues: pendingManualIssues || 0,
       })
     } catch (err) {
       toast.error('Dashboard error: ' + err.message)
@@ -210,8 +217,8 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* ── 4 Stat Cards ────────────────────────────────── */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* ── 5 Stat Cards ──────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 xl:grid-cols-5 gap-4">
         <StatCard
           icon={<Package className="w-5 h-5" />}
           label="Total Items" value={d.total}
@@ -235,6 +242,12 @@ export default function Dashboard() {
           label="Issued Today" value={d.todayTotal}
           sub={`${d.todayCount} issuance lines`}
           color="blue" link="/issuance"
+        />
+        <StatCard
+          icon={<Clock className="w-5 h-5" />}
+          label="Issued W/O Req" value={d.pendingManualIssues}
+          sub="Pending a requisition"
+          color="orange" urgent={d.pendingManualIssues > 0} link="/issue-without-req"
         />
       </div>
 

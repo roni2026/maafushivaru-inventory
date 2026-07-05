@@ -3,11 +3,16 @@ import { supabase } from '../lib/supabase'
 import toast from 'react-hot-toast'
 import { Waves, Eye, EyeOff } from 'lucide-react'
 
+// Outrigger logo — drop the resort's logo file at public/outrigger-logo.png
+// (referenced below) to replace the placeholder Waves icon mark.
+const LOGO_SRC = '/outrigger-logo.png'
+
 export default function Login() {
   const [email,        setEmail]        = useState('')
   const [password,     setPassword]     = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading,      setLoading]      = useState(false)
+  const [logoError,    setLogoError]    = useState(false)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -33,9 +38,18 @@ export default function Login() {
       <div className="relative w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600/90 backdrop-blur rounded-2xl shadow-xl mb-5 ring-1 ring-white/20">
-            <Waves className="w-8 h-8 text-white" />
-          </div>
+          {logoError ? (
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-teal-600/90 backdrop-blur rounded-2xl shadow-xl mb-5 ring-1 ring-white/20">
+              <Waves className="w-8 h-8 text-white" />
+            </div>
+          ) : (
+            <img
+              src={LOGO_SRC}
+              alt="Outrigger"
+              onError={() => setLogoError(true)}
+              className="inline-block h-16 w-auto object-contain mb-5 drop-shadow-xl"
+            />
+          )}
           <h1 className="font-display text-3xl font-bold text-white drop-shadow-lg">Outrigger</h1>
           <p className="text-teal-50/90 mt-1 text-sm drop-shadow">Maafushivaru Resort &mdash; Inventory System</p>
         </div>
