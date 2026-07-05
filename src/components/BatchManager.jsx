@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
-import { Layers, Plus, Trash2, CalendarClock } from 'lucide-react'
+import { Layers, Plus, Trash2, CalendarClock, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Badge from './ui/Badge'
+import { addStockBatches } from '../lib/batchStock'
 
 function daysUntil(d) {
   if (!d) return null
@@ -23,7 +24,10 @@ function badge(days) {
 const EMPTY = { expiry_date: '', quantity: '', batch_code: '', note: '' }
 
 // Manage multiple expiry dates (batches) — each with its own quantity — for one item.
-export default function BatchManager({ itemId, unit = 'pcs' }) {
+// New stock added here is also reflected in the item's current stock. If the
+// expiry date entered has already passed, the quantity is never added to
+// inventory — it's logged straight to the Waste Log instead.
+export default function BatchManager({ itemId, unit = 'pcs', item, onStockChanged }) {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [form,    setForm]    = useState(EMPTY)
@@ -44,20 +48,23 @@ export default function BatchManager({ itemId, unit = 'pcs' }) {
 
   const addBatch = async () => {
     if (!form.expiry_date) { toast.error('Pick an expiry date'); return }
-    if (form.quantity === '' || Number(form.quantity) < 0) { toast.error('Enter a quantity'); return }
+    if (form.quantity === '' || Number(form.quantity) <= 0) { toast.error('Enter a quantity'); return }
     setSaving(true)
     try {
-      const { error } = await supabase.from('item_batches').insert({
-        item_id: itemId,
-        expiry_date: form.expiry_date,
+      const result = await addStockBatches(item || { id: itemId, current_stock: 0 }, [{
         quantity: Number(form.quantity),
-        batch_code: form.batch_code || null,
-        note: form.note || null,
-      })
-      if (error) throw error
-      toast.success('Batch added')
+        expiry_date: form.expiry_date,
+        batch_code: form.batch_code,
+        note: form.note,
+      }])
+      if (result.wastedBatches > 0) {
+        toast.error(`Already expired — ${result.wastedQty} ${unit} moved to Waste Log instead of inventory`)
+      } else {
+        toast.success(`Added ${result.addedQty} ${unit} to stock`)
+      }
       setForm(EMPTY)
       load()
+      onStockChanged?.()
     } catch (err) { toast.error(err.message) }
     setSaving(false)
   }
@@ -88,7 +95,10 @@ export default function BatchManager({ itemId, unit = 'pcs' }) {
           <span className="text-xs text-slate-400">Total across batches: <strong className="text-teal-300">{total} {unit}</strong></span>
         )}
       </div>
-      <p className="text-slate-500 text-xs mb-4">Track the same item under several expiry dates, each with its own quantity.</p>
+      <p className="text-slate-500 text-xs mb-1">Add stock under several expiry dates, each with its own quantity — this also increases the item's stock.</p>
+      <p className="text-amber-400/80 text-xs mb-4 flex items-center gap-1">
+        <AlertTriangle className="w-3 h-3 shrink-0" /> A batch dated in the past is sent straight to the Waste Log and is not added to inventory.
+      </p>
 
       {/* Add form */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">

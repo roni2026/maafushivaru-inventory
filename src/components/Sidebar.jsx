@@ -1,11 +1,13 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import {
   LayoutDashboard, Package, ClipboardList, BarChart2,
   ShoppingCart, TrendingUp, Settings, LogOut, X, History,
   Trash2, ArrowLeftRight, ClipboardCheck, Building2, Inbox,
-  ScanLine, AlertTriangle, CalendarClock, Gauge, Ship, ClipboardX, ListTodo
+  ScanLine, AlertTriangle, CalendarClock, Gauge, Ship, ClipboardX, ListTodo, UserCircle
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { getCurrentProfile } from '../lib/profile'
 import toast from 'react-hot-toast'
 
 const NAV_GROUPS = [
@@ -47,12 +49,19 @@ const NAV_GROUPS = [
       { to:'/orders',    icon:ShoppingCart, label:'Orders'    },
       { to:'/suppliers', icon:Building2,    label:'Suppliers' },
       { to:'/settings',  icon:Settings,     label:'Settings'  },
+      { to:'/profile',   icon:UserCircle,   label:'My Profile'},
     ],
   },
 ]
 
 export default function Sidebar({ session, isOpen, onClose }) {
   const navigate = useNavigate()
+  const [displayName, setDisplayName] = useState('')
+
+  useEffect(() => {
+    if (!session) return
+    getCurrentProfile().then(p => setDisplayName(p?.full_name || '')).catch(() => {})
+  }, [session])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -109,15 +118,16 @@ export default function Sidebar({ session, isOpen, onClose }) {
 
       {/* ── User footer ───────────────────────────────────── */}
       <div className="p-2 border-t border-slate-700">
-        <div className="flex items-center gap-3 px-3 py-2 rounded-xl mb-1">
+        <NavLink to="/profile" onClick={onClose}
+          className="flex items-center gap-3 px-3 py-2 rounded-xl mb-1 hover:bg-slate-700/60 transition-colors">
           <div className="w-8 h-8 bg-gradient-to-br from-[#00AEEF] to-teal-700 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0">
-            {session?.user?.email?.[0]?.toUpperCase() || 'U'}
+            {(displayName || session?.user?.email || 'U')[0]?.toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-slate-300 truncate">{session?.user?.email}</p>
-            <p className="text-[10px] text-slate-500">Inventory Manager</p>
+            <p className="text-xs text-slate-300 truncate">{displayName || session?.user?.email}</p>
+            <p className="text-[10px] text-slate-500 truncate">{displayName ? session?.user?.email : 'View profile'}</p>
           </div>
-        </div>
+        </NavLink>
         <button onClick={handleLogout}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-red-900/30 hover:text-red-400 transition-colors">
           <LogOut className="w-4 h-4" /> Sign Out

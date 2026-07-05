@@ -92,11 +92,16 @@ export default function Dashboard() {
           .order('created_at', { ascending: false }).limit(8),
       ])
 
-      // Pending "Issue Without Requisition" count (shown as its own stat card below).
-      const { count: pendingManualIssues } = await supabase
+      // "Issue Without Requisition" stats (shown as its own stat card below) —
+      // total issued today plus the all-time count, instead of just the
+      // "still pending a requisition" number.
+      const { count: manualIssuesToday } = await supabase
         .from('manual_issues')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending_req')
+        .eq('date', todayStr)
+      const { count: manualIssuesTotal } = await supabase
+        .from('manual_issues')
+        .select('*', { count: 'exact', head: true })
 
       // ── Core stats ──────────────────────────────────────
       const it = items || []
@@ -180,7 +185,8 @@ export default function Dashboard() {
         todayTotal, todayCount: todayIss.length,
         healthData, dailyData, top5, categoryPie, expiry,
         lowStockItems, expiringItems, updates: upd,
-        pendingManualIssues: pendingManualIssues || 0,
+        manualIssuesToday: manualIssuesToday || 0,
+        manualIssuesTotal: manualIssuesTotal || 0,
       })
     } catch (err) {
       toast.error('Dashboard error: ' + err.message)
@@ -245,9 +251,9 @@ export default function Dashboard() {
         />
         <StatCard
           icon={<Clock className="w-5 h-5" />}
-          label="Issued W/O Req" value={d.pendingManualIssues}
-          sub="Pending a requisition"
-          color="orange" urgent={d.pendingManualIssues > 0} link="/issue-without-req"
+          label="Issued W/O Req" value={d.manualIssuesToday}
+          sub={`${d.manualIssuesTotal} all time`}
+          color="orange" link="/issue-no-req"
         />
       </div>
 

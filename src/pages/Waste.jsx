@@ -10,6 +10,7 @@ import Badge from '../components/ui/Badge'
 import Modal from '../components/ui/Modal'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Input, { Select } from '../components/ui/Input'
+import { getCurrentUserName } from '../lib/profile'
 
 const REASONS = ['Expired','Damaged','Contamination','Over-Production','Other']
 const REASON_COLOR  = { Expired:'#ef4444', Damaged:'#f97316', Contamination:'#a855f7', 'Over-Production':'#eab308', Other:'#64748b' }
@@ -34,7 +35,7 @@ export default function Waste() {
   const [reason,   setReason]   = useState('Expired')
   const [date,     setDate]     = useState(fmtDate(0))
   const [cost,     setCost]     = useState('')
-  const [logBy,    setLogBy]    = useState('')
+  const [logBy,    setLogBy]    = useState('')   // auto-filled from the signed-in user's profile — no longer typed in
   const [notes,    setNotes]    = useState('')
   const [showSug,  setShowSug]  = useState(false)
 
@@ -51,6 +52,12 @@ export default function Waste() {
   }, [dateFrom, dateTo])
 
   useEffect(() => { load() }, [load])
+
+  // Auto-fill the "logged by" name from the signed-in user's profile —
+  // no more typing your name in every time.
+  useEffect(() => {
+    getCurrentUserName().then(name => { if (name && name !== 'Unknown') setLogBy(name) })
+  }, [])
 
   const suggestions = useMemo(() => {
     if (!query||query.length<2) return []
@@ -77,7 +84,7 @@ export default function Waste() {
       setWasteLog(prev=>[w,...prev])
       setItems(prev=>prev.map(i=>i.id===itemSel.id?{...i,current_stock:newStock}:i))
       toast.success(`Waste logged: ${q} ${itemSel.unit} of ${itemSel.name}`)
-      setShowModal(false); setItemSel(null); setQuery(''); setQty(''); setNotes(''); setCost(''); setLogBy('')
+      setShowModal(false); setItemSel(null); setQuery(''); setQty(''); setNotes(''); setCost('')
     } catch(err) { toast.error(err.message) }
     setSaving(false)
   }
@@ -228,7 +235,12 @@ export default function Waste() {
             <Input label="Unit Cost ($)" type="number" min="0" step="0.01" value={cost} onChange={e=>setCost(e.target.value)} />
           </div>
           <Input label="Date" type="date" value={date} onChange={e=>setDate(e.target.value)} />
-          <Input label="Logged By" value={logBy} onChange={e=>setLogBy(e.target.value)} placeholder="Your name" />
+          <div className="space-y-1">
+            <label className="block text-sm font-medium text-slate-300">Logged By</label>
+            <div className="w-full bg-slate-700/60 border border-slate-600 rounded-lg px-3 py-2 text-slate-300 text-sm">
+              {logBy || 'Loading…'} <span className="text-slate-500 text-xs">(signed-in user)</span>
+            </div>
+          </div>
           <Input label="Notes (optional)" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Additional details…" />
           {qty&&cost&&Number(qty)>0&&Number(cost)>0&&(
             <div className="bg-red-900/30 border border-red-700/40 rounded-lg p-3 text-sm text-red-300">

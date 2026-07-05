@@ -9,7 +9,19 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    // Explicit (rather than relying on library defaults) so a session survives
+    // closing the tab/browser and stays valid for as long as the refresh
+    // token is valid — this is what makes login "persistent" instead of
+    // silently expiring after the ~1hr access-token lifetime.
+    persistSession: true,
+    autoRefreshToken: true,
+    storage: window.localStorage,
+    storageKey: 'outrigger-inventory-auth',
+    detectSessionInUrl: true,
+  },
+})
 
 // ───────────────────────────────────────────────────────────────────────────
 // fetchAllRows — paginate past Supabase's hard 1,000-row response cap.

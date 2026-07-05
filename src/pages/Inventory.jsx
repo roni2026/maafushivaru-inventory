@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, PackagePlus,
   Download, Upload, ExternalLink, Printer, Camera, MapPin, X,
-  CheckCircle2, Ban
+  CheckCircle2, Ban, CalendarPlus
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useItems } from '../hooks/useItems'
@@ -569,15 +569,14 @@ export default function Inventory() {
               </Th>
               <Th sortable onClick={()=>toggleSort('part_number')} sorted={sortField==='part_number'?sortDir:undefined}>Part #</Th>
               <Th sortable onClick={()=>toggleSort('name')} sorted={sortField==='name'?sortDir:undefined}>Item Name</Th>
-              <Th sortable onClick={()=>toggleSort('store_name')} sorted={sortField==='store_name'?sortDir:undefined}>Store</Th>
               <Th sortable onClick={()=>toggleSort('supplier')} sorted={sortField==='supplier'?sortDir:undefined}>Supplier</Th>
-              <Th sortable onClick={()=>toggleSort('unit')} sorted={sortField==='unit'?sortDir:undefined}>Unit</Th>
+              <Th sortable onClick={()=>toggleSort('unit')} sorted={sortField==='unit'?sortDir:undefined}>UOM</Th>
               <Th sortable onClick={()=>toggleSort('current_stock')} sorted={sortField==='current_stock'?sortDir:undefined}>Stock</Th>
               <Th sortable onClick={()=>toggleSort('min_stock')} sorted={sortField==='min_stock'?sortDir:undefined}>Min</Th>
               <Th sortable onClick={()=>toggleSort('unit_cost')} sorted={sortField==='unit_cost'?sortDir:undefined}>Cost</Th>
               <Th sortable onClick={()=>toggleSort('expiry_date')} sorted={sortField==='expiry_date'?sortDir:undefined}>Expiry</Th>
               <Th>Status</Th>
-              <Th className="text-right">Actions</Th>
+              <Th className="text-right">Action</Th>
             </tr>
           </Thead>
           <Tbody>
@@ -608,6 +607,9 @@ export default function Inventory() {
                       <p className="text-[10px] text-slate-500 mt-0.5 truncate flex items-center gap-1">
                         <MapPin className="w-2.5 h-2.5 text-blue-400" />{item.location}
                       </p>
+                    )}
+                    {item.stores?.name && (
+                      <p className="text-[10px] text-slate-500 mt-0.5 truncate">{item.stores.name}</p>
                     )}
                   </Td>
                   <Td className="text-xs text-slate-400 max-w-[10rem]">
@@ -657,6 +659,11 @@ export default function Inventory() {
                         className="p-1.5 hover:bg-teal-700/30 rounded-lg transition-colors text-teal-400" title="Update Stock">
                         <PackagePlus className="w-4 h-4" />
                       </button>
+                      {/* Add quantity with expiry (batch) */}
+                      <Link to={`/inventory/${item.id}#batches`}
+                        className="p-1.5 hover:bg-purple-700/30 rounded-lg transition-colors text-purple-400 inline-flex" title="Add quantity with expiry">
+                        <CalendarPlus className="w-4 h-4" />
+                      </Link>
                       {/* Edit */}
                       <button onClick={()=>openEdit(item)} className="p-1.5 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-slate-100">
                         <Pencil className="w-4 h-4" />

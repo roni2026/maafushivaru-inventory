@@ -3,7 +3,7 @@ import { useSort } from '../hooks/useSort'
 import { supabase, selectAll } from '../lib/supabase'
 import {
   CalendarClock, Download, RefreshCw, Search, Mail, Send, Save,
-  Clock, AlertTriangle, Layers,
+  Clock, AlertTriangle, Layers, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Badge from '../components/ui/Badge'
@@ -26,12 +26,20 @@ function statusBadge(days) {
   return                    <Badge variant="green">{days}d left</Badge>
 }
 
-const SUMMARY = [
-  { key: 'exp',  label: 'Expired',     test: d => d < 0,             color: 'text-red-400' },
-  { key: '7',    label: '≤ 7 days',    test: d => d >= 0 && d <= 7,  color: 'text-red-400' },
-  { key: '30',   label: '≤ 1 month',   test: d => d > 7 && d <= 30,  color: 'text-yellow-400' },
-  { key: '120',  label: '≤ 4 months',  test: d => d > 30 && d <= 120, color: 'text-blue-400' },
-]
+// "Expired" stays as a standalone stat. The six day-thresholds below are
+// clickable — clicking one filters the table to items expiring within
+// that many days (and shows their quantities).
+const EXPIRED_STAT = { key: 'exp', label: 'Expired', test: d => d < 0, color: 'text-red-400' }
+const DAY_THRESHOLDS = [7, 15, 30, 60, 90, 120]
+
+function sumQtyByUnit(rows) {
+  const totals = {}
+  for (const r of rows) {
+    const u = r.unit || 'unit'
+    totals[u] = (totals[u] || 0) + Number(r.current_stock || 0)
+  }
+  return Object.entries(totals).map(([unit, qty]) => `${qty} ${unit}`).join(', ')
+}
 
 export default function Expiry() {
   const [rows,     setRows]    = useState([])
@@ -43,6 +51,8 @@ export default function Expiry() {
   const [toggles,  setToggles] = useState({})    // { '3m': true, ... }
   const [savingTog,setSavingTog]=useState(false)
   const [sending,  setSending] = useState(false)
+  const [emailOpen, setEmailOpen] = useState(false)   // collapsed by default — more room for the table
+  const [activeThreshold, setActiveThreshold] = useState(null)  // 7 | 15 | 30 | 60 | 90 | 120 | null
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -69,21 +79,25 @@ export default function Expiry() {
 
   useEffect(() => { load() }, [load])
 
-  const counts = useMemo(() => {
+  const expiredCount = useMemo(() => rows.filter(r => EXPIRED_STAT.test(r.days)).length, [rows])
+
+  // Item count per clickable day-threshold (0 <= days <= N).
+  const thresholdCounts = useMemo(() => {
     const c = {}
-    SUMMARY.forEach(s => { c[s.key] = rows.filter(r => s.test(r.days)).length })
+    DAY_THRESHOLDS.forEach(d => { c[d] = rows.filter(r => r.days >= 0 && r.days <= d).length })
     return c
   }, [rows])
 
   const filtered = useMemo(() => {
     let list = rows
     if (store)  list = list.filter(r => r.store === store)
+    if (activeThreshold) list = list.filter(r => r.days >= 0 && r.days <= activeThreshold)
     if (search) {
       const q = search.toLowerCase()
       list = list.filter(r => r.name.toLowerCase().includes(q) || (r.part_number || '').toLowerCase().includes(q))
     }
     return list   // already sorted shortest → longest in buildExpiryRows
-  }, [rows, store, search])
+  }, [rows, store, search, activeThreshold])
 
   const { sorted, thProps } = useSort(filtered, null, 'asc')
 
@@ -173,55 +187,84 @@ export default function Expiry() {
         </div>
       </div>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
-        {SUMMARY.map(s => (
-          <div key={s.key} className="card">
-            <p className={`text-2xl font-bold ${s.color}`}>{counts[s.key] || 0}</p>
-            <p className="text-xs text-slate-400 mt-0.5">{s.label}</p>
-          </div>
-        ))}
+      {/* Summary + clickable day-threshold filters */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-2.5">
+        <div className="card">
+          <p className={`text-2xl font-bold ${EXPIRED_STAT.color}`}>{expiredCount}</p>
+          <p className="text-xs text-slate-400 mt-0.5">{EXPIRED_STAT.label}</p>
+        </div>
+        {DAY_THRESHOLDS.map(d => {
+          const active = activeThreshold === d
+          return (
+            <button key={d} type="button"
+              onClick={() => setActiveThreshold(prev => prev === d ? null : d)}
+              className={`card text-left transition-colors ${active ? 'ring-2 ring-teal-500 border-teal-500/60' : 'hover:border-slate-500'}`}
+              title={`Show items expiring within ${d} days`}>
+              <p className={`text-2xl font-bold ${active ? 'text-teal-300' : 'text-slate-100'}`}>{thresholdCounts[d] || 0}</p>
+              <p className="text-xs text-slate-400 mt-0.5">≤ {d} days</p>
+            </button>
+          )
+        })}
       </div>
+      {activeThreshold && (
+        <div className="flex items-center justify-between gap-3 flex-wrap -mt-1">
+          <p className="text-xs text-slate-400">
+            Showing <strong className="text-teal-300">{filtered.length}</strong> item(s) expiring within <strong>{activeThreshold} days</strong>
+            {filtered.length > 0 && <> — total quantity: <strong className="text-slate-200">{sumQtyByUnit(filtered)}</strong></>}
+          </p>
+          <button onClick={() => setActiveThreshold(null)} className="btn-ghost btn-xs">Clear filter ✕</button>
+        </div>
+      )}
 
-      {/* ── Email reminder schedule ─────────────────────────────────────── */}
+      {/* ── Email reminder schedule (collapsible — click to expand) ──────────────── */}
       <div className="card space-y-3">
-        <div className="flex items-start gap-3">
+        <button type="button" onClick={() => setEmailOpen(o => !o)}
+          className="w-full flex items-start gap-3 text-left">
           <div className="w-8 h-8 rounded-lg bg-blue-900/30 border border-blue-700/30 flex items-center justify-center shrink-0">
             <Mail className="w-4 h-4 text-blue-400" />
           </div>
           <div className="flex-1">
             <p className="font-display text-sm font-semibold text-slate-100">Expiry Email Reminders (Brevo)</p>
-            <p className="text-xs text-slate-400 mt-0.5">Choose when to be reminded. Tick the lead times, save, then send now or let scheduled runs use these settings.</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              {emailOpen
+                ? 'Choose when to be reminded. Tick the lead times, save, then send now or let scheduled runs use these settings.'
+                : `Collapsed to save space — ${Object.values(toggles).filter(Boolean).length} lead time(s) enabled. Click to expand.`}
+            </p>
           </div>
-        </div>
+          {emailOpen ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0 mt-1" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0 mt-1" />}
+        </button>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-          {EXPIRY_THRESHOLDS.map(t => {
-            const on = !!toggles[t.key]
-            return (
-              <button key={t.key} onClick={() => setToggles(p => ({ ...p, [t.key]: !p[t.key] }))}
-                className={`rounded-lg border px-3 py-2.5 text-left transition-all ${on ? 'border-teal-500/60 bg-teal-900/20' : 'border-slate-600 bg-slate-700/30 hover:border-slate-500'}`}>
-                <div className="flex items-center justify-between">
-                  <Clock className={`w-3.5 h-3.5 ${on ? 'text-teal-400' : 'text-slate-500'}`} />
-                  <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold ${on ? 'bg-teal-500 text-white' : 'bg-slate-600 text-slate-400'}`}>{on ? '✓' : ''}</span>
-                </div>
-                <p className={`text-xs font-semibold mt-1.5 ${on ? 'text-teal-300' : 'text-slate-300'}`}>{t.label}</p>
-              </button>
-            )
-          })}
-        </div>
+        {emailOpen && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              {EXPIRY_THRESHOLDS.map(t => {
+                const on = !!toggles[t.key]
+                return (
+                  <button key={t.key} onClick={() => setToggles(p => ({ ...p, [t.key]: !p[t.key] }))}
+                    className={`rounded-lg border px-3 py-2.5 text-left transition-all ${on ? 'border-teal-500/60 bg-teal-900/20' : 'border-slate-600 bg-slate-700/30 hover:border-slate-500'}`}>
+                    <div className="flex items-center justify-between">
+                      <Clock className={`w-3.5 h-3.5 ${on ? 'text-teal-400' : 'text-slate-500'}`} />
+                      <span className={`w-4 h-4 rounded flex items-center justify-center text-[10px] font-bold ${on ? 'bg-teal-500 text-white' : 'bg-slate-600 text-slate-400'}`}>{on ? '✓' : ''}</span>
+                    </div>
+                    <p className={`text-xs font-semibold mt-1.5 ${on ? 'text-teal-300' : 'text-slate-300'}`}>{t.label}</p>
+                  </button>
+                )
+              })}
+            </div>
 
-        <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
-          <p className="text-xs text-slate-500">
-            {dueRows.length > 0
-              ? <><strong className="text-slate-300">{dueRows.length}</strong> item(s) currently match the ticked windows.</>
-              : 'No items currently match the ticked windows.'}
-          </p>
-          <div className="flex gap-2">
-            <Button size="sm" variant="secondary" onClick={saveToggles} loading={savingTog}><Save className="w-4 h-4" /> Save</Button>
-            <Button size="sm" onClick={sendNow} loading={sending} disabled={!dueRows.length}><Send className="w-4 h-4" /> Send now</Button>
-          </div>
-        </div>
+            <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+              <p className="text-xs text-slate-500">
+                {dueRows.length > 0
+                  ? <><strong className="text-slate-300">{dueRows.length}</strong> item(s) currently match the ticked windows.</>
+                  : 'No items currently match the ticked windows.'}
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" variant="secondary" onClick={saveToggles} loading={savingTog}><Save className="w-4 h-4" /> Save</Button>
+                <Button size="sm" onClick={sendNow} loading={sending} disabled={!dueRows.length}><Send className="w-4 h-4" /> Send now</Button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Filters */}

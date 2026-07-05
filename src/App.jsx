@@ -30,6 +30,7 @@ const BoatNote      = lazy(() => import('./pages/BoatNote'))
 const Movement      = lazy(() => import('./pages/Movement'))
 const Expiry        = lazy(() => import('./pages/Expiry'))
 const Tasks         = lazy(() => import('./pages/Tasks'))
+const Profile       = lazy(() => import('./pages/Profile'))
 
 function PageLoader() {
   return (
@@ -51,6 +52,25 @@ export default function App() {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => subscription.unsubscribe()
+  }, [])
+
+  // When the tab regains focus after being idle in the background, make sure
+  // the auth session is still fresh. Browsers throttle JS timers on hidden
+  // tabs, so the background auto-refresh can fall behind — this re-checks
+  // (and silently refreshes if needed) the moment the user comes back,
+  // instead of surprising them with a "logged out" state.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
   }, [])
 
   if (session === undefined) {
@@ -99,6 +119,7 @@ export default function App() {
                   <Route path="suppliers"     element={<Suppliers />}     />
                   <Route path="orders"        element={<Orders />}        />
                   <Route path="settings"      element={<Settings />}      />
+                  <Route path="profile"       element={<Profile />}       />
                   <Route path="*"             element={<NotFound />}      />
                 </Routes>
               </Suspense>

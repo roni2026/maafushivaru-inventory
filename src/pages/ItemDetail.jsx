@@ -76,6 +76,14 @@ export default function ItemDetail() {
 
   useEffect(() => { load() }, [load])
 
+  // Deep-link support: /inventory/:id#batches jumps straight to the
+  // "add quantity with expiry" section (used by the Inventory list action).
+  useEffect(() => {
+    if (!loading && window.location.hash === '#batches') {
+      document.getElementById('batches')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [loading])
+
   const moveSubcategory = async (storeId) => {
     try {
       const { data, error } = await supabase.from('items').update({ store_id: storeId }).eq('id', id).select('*, stores(id,name,category)').single()
@@ -259,7 +267,9 @@ export default function ItemDetail() {
       </div>
 
       {/* Expiry batches (multiple expiry dates with quantity) */}
-      <BatchManager itemId={item.id} unit={item.unit} />
+      <div id="batches">
+        <BatchManager itemId={item.id} unit={item.unit} item={item} onStockChanged={load} />
+      </div>
 
       {/* Activity / update log */}
       <div className="card">
