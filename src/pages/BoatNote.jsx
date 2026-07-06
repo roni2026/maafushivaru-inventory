@@ -528,6 +528,8 @@ function BoatNoteHistory() {
   const [inventory, setInventory] = useState([])
   const [receiving, setReceiving] = useState(null)   // boat_note_item being received
   const [issuing, setIssuing]     = useState(null)   // boat_note_item being flagged not-arrived/wrong
+  const [statusFilter, setStatusFilter] = useState('all')  // all | pending | partially_delivered | delivered | cancelled
+  const [confirmingId, setConfirmingId] = useState(null)
 
   useEffect(() => {
     // Include inactive items too — they must still be matchable so receiving
@@ -573,6 +575,40 @@ function BoatNoteHistory() {
     }
   }
 
+  // Weekly Order -> Boat Note -> Waiting for Delivery -> Items Arrive ->
+  // Confirm Delivery -> Inventory Updated. This is the final step: it posts
+  // every not-yet-posted, non-problem line to a Batch Expiry entry in one
+  // shot (safe to press more than once -- already-posted lines are
+  // skipped), moves the note to Delivered / Partially Delivered, and logs a
+  // boat_note_events entry. Individual "Receive" per line above still works
+  // for granular control; this is the one-click bulk alternative.
+  const confirmDelivery = async (n) => {
+    if (!confirm(`Confirm delivery for "${n.label || n.note_date}"? Remaining pending lines will be added to inventory as Batch Expiry entries.`)) return
+    setConfirmingId(n.id)
+    try {
+      const actor = await currentActor()
+      const { data, error } = await supabase.rpc('confirm_boat_note', { p_boat_note_id: n.id, p_actor: actor })
+      if (error) throw error
+      setNotes(list => list.map(x => x.id === n.id ? { ...x, status: data?.status || x.status, posted_items: data?.posted_items ?? x.posted_items, total_items: data?.total_items ?? x.total_items } : x))
+      if (itemsMap[n.id]) await loadItems(n.id)
+      toast.success(`Delivery confirmed \u2014 ${data?.status === 'delivered' ? 'fully delivered' : 'partially delivered'}`)
+    } catch (err) { toast.error(err.message) } finally { setConfirmingId(null) }
+  }
+
+  const STATUS_LABEL = { pending: 'Pending', partially_delivered: 'Partially Delivered', delivered: 'Delivered', cancelled: 'Cancelled', draft: 'Pending', verified: 'Pending', posted: 'Delivered' }
+  const STATUS_TONE  = { pending: 'orange', partially_delivered: 'yellow', delivered: 'green', cancelled: 'red', draft: 'orange', verified: 'orange', posted: 'green' }
+  const STATUS_FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'partially_delivered', label: 'Partially Delivered' },
+    { key: 'delivered', label: 'Delivered' },
+    { key: 'cancelled', label: 'Cancelled' },
+  ]
+  const visibleNotes = statusFilter === 'all' ? notes : notes.filter(n => {
+    const norm = n.status === 'draft' || n.status === 'verified' ? 'pending' : n.status === 'posted' ? 'delivered' : n.status
+    return norm === statusFilter
+  })
+
   return (
     <div className="space-y-4">
       <div className="card-sm flex items-center gap-3 flex-wrap">
@@ -585,22 +621,44 @@ function BoatNoteHistory() {
         <button onClick={load} className="btn-ghost btn-sm ml-auto"><RefreshCw className="w-4 h-4" /></button>
       </div>
 
+      {/* Boat Note Dashboard filters: Pending / Delivered / Partially
+          Delivered / Cancelled -- same status vocabulary the DB and
+          Android app use. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {STATUS_FILTERS.map(s => (
+          <button key={s.key} onClick={() => setStatusFilter(s.key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${statusFilter === s.key ? 'border-[#00AEEF] bg-[#00AEEF]/10 text-[#00AEEF]' : 'border-slate-600 text-slate-400 hover:border-slate-500'}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
-      ) : notes.length === 0 ? (
-        <div className="card text-center text-slate-500 py-12">No boat notes yet — upload one to get started</div>
-      ) : notes.map(n => (
+      ) : visibleNotes.length === 0 ? (
+        <div className="card text-center text-slate-500 py-12">No boat notes match this filter</div>
+      ) : visibleNotes.map(n => {
+        const normStatus = n.status === 'draft' || n.status === 'verified' ? 'pending' : n.status === 'posted' ? 'delivered' : n.status
+        const canConfirm = normStatus === 'pending' || normStatus === 'partially_delivered'
+        return (
         <div key={n.id} className="card p-0 overflow-hidden">
           <div className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-700/30">
             <button onClick={() => openNote(n.id)} className="flex items-center gap-3 min-w-0 text-left flex-1">
               {expanded === n.id ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
               <div className="min-w-0">
                 <p className="font-medium text-slate-100 truncate">{n.label || 'Boat note'}</p>
-                <p className="text-xs text-slate-500">{n.note_date} · {n.delivery_day}</p>
+                <p className="text-xs text-slate-500">{n.note_date} · {n.delivery_day}{n.note_number ? ` · #${n.note_number}` : ''}</p>
               </div>
             </button>
             <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+              <Badge variant={STATUS_TONE[n.status] || 'gray'}>{STATUS_LABEL[n.status] || n.status}</Badge>
               <Badge variant="teal">{n.posted_items || 0}/{n.total_items} received</Badge>
+              {canConfirm && (
+                <button onClick={() => confirmDelivery(n)} disabled={confirmingId === n.id}
+                  className="btn-secondary btn-sm disabled:opacity-50" title="Confirm delivery -- posts remaining lines to inventory">
+                  <CheckCircle2 className="w-4 h-4" /> {confirmingId === n.id ? 'Confirming…' : 'Confirm Delivery'}
+                </button>
+              )}
               <ReportActions note={n} getLines={async () => {
                 const { data } = await selectAll(() => supabase.from('boat_note_items').select('*').eq('boat_note_id', n.id).order('line_no'))
                 return data || []
@@ -621,7 +679,7 @@ function BoatNoteHistory() {
             </>
           )}
         </div>
-      ))}
+      )})}
 
       {receiving && (
         <ReceiveItemModal
