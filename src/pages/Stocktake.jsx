@@ -326,13 +326,19 @@ function CountEntries() {
   const approveEntry = async (entry) => {
     if (!confirm(`Approve? This will update stock from ${entry.system_quantity} to ${entry.counted_quantity} ${entry.unit}.`)) return
     setApprovingId(entry.id)
-    await supabase.from('items').update({ current_stock: entry.counted_quantity }).eq('id', entry.item_id)
-    await supabase.from('stock_updates').insert({
-      item_id: entry.item_id, date: entry.date,
-      quantity_change: entry.difference,
-      new_quantity: entry.counted_quantity,
-      updated_by: 'Stocktake', note: `Stocktake adjustment: ${entry.difference >= 0 ? '+' : ''}${entry.difference}`
-    }).catch(() => {})
+    // Route the approved count through adjust_item_stock -- a positive
+    // difference is added as a new no-expiry batch, a negative difference
+    // consumes existing batches FIFO. current_stock is never set directly;
+    // it stays SUM(remaining_quantity) across all batches, same as every
+    // other stock movement on Website + Android.
+    if (entry.difference !== 0) {
+      const { error } = await supabase.rpc('adjust_item_stock', {
+        p_item_id: entry.item_id, p_delta: entry.difference,
+        p_note: `Stocktake adjustment: ${entry.difference >= 0 ? '+' : ''}${entry.difference}`,
+        p_updated_by: 'Stocktake',
+      })
+      if (error) { toast.error(error.message); setApprovingId(null); return }
+    }
     await supabase.from('stocktake_entries').update({ status: 'approved' }).eq('id', entry.id)
     toast.success('Stock updated from stocktake'); load(); setApprovingId(null)
   }

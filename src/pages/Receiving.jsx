@@ -13,7 +13,7 @@ import { Printer, FileDown } from 'lucide-react'
 import { printHtmlDocument } from '../lib/boatNoteReport'
 
 const today = () => new Date().toISOString().split('T')[0]
-const EMPTY = { date: today(), item_id: '', quantity_received: '', unit: '', supplier_name: '', received_by: 'Roni', invoice_number: '', unit_cost: '', note: '' }
+const EMPTY = { date: today(), item_id: '', quantity_received: '', unit: '', expiry_date: '', supplier_name: '', received_by: 'Roni', invoice_number: '', unit_cost: '', note: '' }
 
 export default function Receiving() {
   const [records, setRecords] = useState([])
@@ -71,13 +71,20 @@ export default function Receiving() {
       note:              form.note,
     })
     if (error) { toast.error(error.message); setSaving(false); return }
-    // Update stock
+    // Stock is owned by Batch Expiry -- current_stock is NEVER written
+    // directly here. upsert_item_batch creates the batch AND recalculates
+    // items.current_stock = SUM(remaining_quantity) automatically, the same
+    // shared RPC used by Boat Note receiving and the Android app.
     if (item) {
-      const newStock = Number(item.current_stock) + Number(form.quantity_received)
-      await supabase.from('items').update({ current_stock: newStock }).eq('id', form.item_id)
+      const { error: batchErr } = await supabase.rpc('upsert_item_batch', {
+        p_batch_id: null, p_item_id: form.item_id, p_expiry_date: form.expiry_date || null,
+        p_quantity: Number(form.quantity_received), p_batch_code: form.invoice_number || null,
+        p_note: `Received from ${form.supplier_name || 'supplier'}`,
+      })
+      if (batchErr) { toast.error(batchErr.message); setSaving(false); return }
       await supabase.from('stock_updates').insert({
         item_id: form.item_id, date: form.date, quantity_change: Number(form.quantity_received),
-        new_quantity: newStock, updated_by: form.received_by || 'Roni', note: `Received from ${form.supplier_name || 'supplier'}`
+        new_quantity: null, updated_by: form.received_by || 'Roni', note: `Received from ${form.supplier_name || 'supplier'}`
       }).catch(() => {})
     }
     toast.success('Receiving recorded — stock updated'); setShowAdd(false); setForm(EMPTY); setItemSearch(''); load(); setSaving(false)
@@ -194,6 +201,7 @@ export default function Receiving() {
               <Input label="Qty Received *" type="number" min="0.01" step="0.01" value={form.quantity_received} onChange={f('quantity_received')} />
               <Input label="Unit Cost ($)" type="number" min="0" step="0.01" value={form.unit_cost} onChange={f('unit_cost')} placeholder="0.00" />
             </div>
+            <Input label="Batch Expiry Date (optional)" type="date" value={form.expiry_date} onChange={f('expiry_date')} hint="Creates a Batch Expiry entry. Leave blank for non-perishable stock." />
             <Input label="Supplier Name" value={form.supplier_name} onChange={f('supplier_name')} placeholder="e.g. Maldives Fresh Co" />
             <div className="grid grid-cols-2 gap-3">
               <Input label="Invoice #" value={form.invoice_number} onChange={f('invoice_number')} placeholder="INV-2026-001" />

@@ -117,23 +117,26 @@ export default function IssuanceScan() {
         note: l.note,
       })))
 
-      // 3. issuances + stock deduction for issued, matched lines
+      // 3. issuances + stock deduction for issued, matched lines -- routed
+      // through the shared issue_stock_requisition RPC (FIFO batch
+      // consumption) so scanned requisitions produce identical results to
+      // the manual Issuance page and the Android app. current_stock is
+      // never written directly.
       let logged = 0, skipped = 0
       for (const l of r.lines) {
         if (!l.issued) continue
         if (!l.item_id) { skipped++; continue }
-        const { data: it } = await supabase.from('items').select('current_stock').eq('id', l.item_id).single()
-        const newStock = Math.max(0, Number(it.current_stock) - Number(l.qty))
-        await supabase.from('items').update({ current_stock: newStock }).eq('id', l.item_id)
-        await supabase.from('issuances').insert({
-          item_id: l.item_id, date: r.date, quantity_issued: Number(l.qty),
-          issued_by: issuedBy, requisition_id: req.id, req_number: r.header.req_number,
-          note: `Requisition ${r.header.req_number || r.file}`,
+        const { data: issRow, error: issueErr } = await supabase.rpc('issue_stock_requisition', {
+          p_item_id: l.item_id, p_quantity: Number(l.qty), p_store_id: null,
+          p_logged_by: issuedBy, p_note: `Requisition ${r.header.req_number || r.file}`, p_date: r.date,
         })
-        await supabase.from('stock_updates').insert({
-          item_id: l.item_id, date: r.date, quantity_change: -Number(l.qty), new_quantity: newStock,
-          updated_by: issuedBy, note: `Issuance · ${r.header.req_number || 'requisition'}`,
-        })
+        if (issueErr) { skipped++; continue }
+        const newRow = Array.isArray(issRow) ? issRow[0] : issRow
+        if (newRow?.id) {
+          await supabase.from('issuances')
+            .update({ requisition_id: req.id, req_number: r.header.req_number })
+            .eq('id', newRow.id)
+        }
         logged++
       }
       setSummary(s => [...s, { req: r.header.req_number || r.file, logged, skipped }])

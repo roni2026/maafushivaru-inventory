@@ -49,6 +49,7 @@ const PIE = ['#00AEEF', '#14b8a6', '#f97316', '#a855f7', '#eab308', '#ef4444', '
 export default function Reports() {
   const [report, setReport] = useState('overview')
   const [items, setItems]         = useState([])
+  const [batches, setBatches]     = useState([])
   const [issuances, setIssuances] = useState([])
   const [stores, setStores]       = useState([])
   const [bnIssues, setBnIssues]   = useState([])
@@ -64,9 +65,11 @@ export default function Reports() {
     // Tables added in later migrations may not exist yet — never let one failure
     // blank the whole report.
     const safe = (q) => Promise.resolve(q).then(r => r || { data: [] }).catch(() => ({ data: [] }))
-    const [i, s, iss, bn, ret, w, sup] = await Promise.all([
-      safe(selectAll(() => supabase.from('items').select('id, part_number, name, store_id, current_stock, min_stock, unit, unit_cost, expiry_date, supplier, origin, stores(name,category)').eq('active', true))),
+    const [i, s, batchRes, iss, bn, ret, w, sup] = await Promise.all([
+      safe(selectAll(() => supabase.from('items').select('id, part_number, name, store_id, current_stock, min_stock, unit, unit_cost, supplier, origin, stores(name,category)').eq('active', true))),
       safe(supabase.from('stores').select('*')),
+      // Batch Expiry is the ONLY expiry source -- never the legacy items.expiry_date field.
+      safe(selectAll(() => supabase.from('item_batches').select('id, item_id, expiry_date, remaining_quantity'))),
       safe(selectAll(() => supabase.from('issuances').select('item_id, quantity_issued, date').gte('date', new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]))),
       safe(selectAll(() => supabase.from('boat_note_items').select('*, boat_notes(note_date)').in('status', ['not_arrived', 'wrong_item', 'damaged', 'short']))),
       safe(selectAll(() => supabase.from('item_returns').select('*').gte('created_at', since))),
@@ -75,6 +78,7 @@ export default function Reports() {
     ])
     setItems(i.data || [])
     setStores(s.data || [])
+    setBatches(batchRes.data || [])
     setIssuances(iss.data || [])
     setBnIssues(bn.data || [])
     setReturns(ret.data || [])
@@ -85,9 +89,18 @@ export default function Reports() {
   useEffect(() => { load() }, [])
 
   // ── Shared computed stats ─────────────────────────────────────────────────
-  const expiring = useMemo(() => items
-    .filter(i => { const d = daysUntil(i.expiry_date); return d !== null && d <= 30 })
-    .sort((a, b) => daysUntil(a.expiry_date) - daysUntil(b.expiry_date)), [items])
+  // Batch Expiry is the single source of truth for expiry everywhere --
+  // Dashboard, Website Expiry page, Android, and this report all read from
+  // item_batches, never the legacy items.expiry_date field. One row per
+  // active batch (not per item) so batch quantity + remaining are exact.
+  const expiring = useMemo(() => {
+    const itemById = Object.fromEntries(items.map(i => [i.id, i]))
+    return batches
+      .filter(b => Number(b.remaining_quantity) > 0 && b.expiry_date)
+      .map(b => ({ ...b, item: itemById[b.item_id] }))
+      .filter(b => b.item && daysUntil(b.expiry_date) !== null && daysUntil(b.expiry_date) <= 30)
+      .sort((a, b) => daysUntil(a.expiry_date) - daysUntil(b.expiry_date))
+  }, [items, batches])
   const lowStock   = useMemo(() => items.filter(i => Number(i.current_stock) <= Number(i.min_stock)), [items])
   const totalValue = useMemo(() => items.reduce((s, i) => s + Number(i.current_stock) * Number(i.unit_cost || 0), 0), [items])
 
@@ -318,9 +331,9 @@ export default function Reports() {
                 <div className="card">
                   <p className="font-display text-base font-semibold text-slate-100 mb-3">Expiring / Near Expiry <span className="text-orange-400 text-sm font-normal">({expiring.length})</span></p>
                   <div className="overflow-x-auto"><Table>
-                    <Thead><tr><Th>Part #</Th><Th>Item</Th><Th>Store</Th><Th>Stock</Th><Th>Expiry</Th><Th>Days Left</Th></tr></Thead>
-                    <Tbody>{expiring.map(item => { const d = daysUntil(item.expiry_date); return (
-                      <Tr key={item.id}><Td className="font-mono text-xs text-slate-400">{item.part_number}</Td><Td className="text-slate-100">{item.name}</Td><Td className="text-slate-400 text-xs">{item.stores?.name}</Td><Td className="text-slate-100 font-semibold">{item.current_stock} {item.unit}</Td><Td className="text-slate-300">{item.expiry_date}</Td>
+                    <Thead><tr><Th>Part #</Th><Th>Item</Th><Th>Store</Th><Th>Batch Qty</Th><Th>Expiry</Th><Th>Days Left</Th></tr></Thead>
+                    <Tbody>{expiring.map(b => { const d = daysUntil(b.expiry_date); return (
+                      <Tr key={b.id}><Td className="font-mono text-xs text-slate-400">{b.item.part_number}</Td><Td className="text-slate-100">{b.item.name}</Td><Td className="text-slate-400 text-xs">{b.item.stores?.name}</Td><Td className="text-slate-100 font-semibold">{b.remaining_quantity} {b.item.unit}</Td><Td className="text-slate-300">{b.expiry_date}</Td>
                         <Td>{d < 0 ? <Badge variant="red">Expired {Math.abs(d)}d ago</Badge> : d <= 7 ? <Badge variant="red">{d}d left</Badge> : d <= 15 ? <Badge variant="orange">{d}d left</Badge> : <Badge variant="yellow">{d}d left</Badge>}</Td></Tr>
                     ) })}</Tbody>
                   </Table></div>

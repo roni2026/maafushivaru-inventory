@@ -75,14 +75,19 @@ export default function Waste() {
     const q=Number(qty); if (!q||q<=0) { toast.error('Enter valid quantity'); return }
     setSaving(true)
     try {
-      const newStock = Math.max(0, Number(itemSel.current_stock)-q)
-      await supabase.from('items').update({ current_stock: newStock }).eq('id', itemSel.id)
-      await supabase.from('stock_updates').insert({ item_id:itemSel.id, date, quantity_change:-q, new_quantity:newStock, updated_by:logBy||'System', note:`Waste – ${reason}` })
+      // Waste consumes stock FIFO from existing Batch Expiry batches via the
+      // shared adjust_item_stock RPC -- current_stock is never written
+      // directly, it is always recalculated as SUM(remaining_quantity).
+      const { error: adjErr } = await supabase.rpc('adjust_item_stock', {
+        p_item_id: itemSel.id, p_delta: -q, p_note: `Waste – ${reason}`, p_updated_by: logBy||'System',
+      })
+      if (adjErr) throw adjErr
       const { data: w } = await supabase.from('waste_log')
         .insert({ item_id:itemSel.id, quantity:q, reason, date, logged_by:logBy||'System', notes, unit_cost:Number(cost)||0 })
         .select('*, items(name,part_number,unit,stores(name))').single()
       setWasteLog(prev=>[w,...prev])
-      setItems(prev=>prev.map(i=>i.id===itemSel.id?{...i,current_stock:newStock}:i))
+      const { data: refreshed } = await supabase.from('items').select('current_stock').eq('id', itemSel.id).single()
+      setItems(prev=>prev.map(i=>i.id===itemSel.id?{...i,current_stock:refreshed?.current_stock ?? i.current_stock}:i))
       toast.success(`Waste logged: ${q} ${itemSel.unit} of ${itemSel.name}`)
       setShowModal(false); setItemSel(null); setQuery(''); setQty(''); setNotes(''); setCost('')
     } catch(err) { toast.error(err.message) }
