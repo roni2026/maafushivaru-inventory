@@ -88,14 +88,25 @@ export default function Analytics() {
       // Fetch two windows' worth of issuances so the trend can compare against
       // the previous equal-length period.
       const since = new Date(); since.setDate(since.getDate() - period * 2)
-      const [{ data: items }, { data: issuances }, { data: st }] = await Promise.all([
+      // Analytics must reflect BOTH issuing paths -- issuances (with a
+      // requisition) AND manual_issues ("Issue Without Req"). Previously
+      // only `issuances` was counted here, which is why Issue Without Req
+      // always showed as 0 movement on charts/statistics.
+      const [{ data: items }, { data: issuances }, { data: manualIssues }, { data: st }] = await Promise.all([
         selectAll(() => supabase.from('items').select('*, stores(name, category)').eq('active', true)),
         selectAll(() => supabase.from('issuances')
           .select('item_id, quantity_issued, date')
           .gte('date', since.toISOString().split('T')[0])),
+        selectAll(() => supabase.from('manual_issues')
+          .select('item_id, quantity, date')
+          .gte('date', since.toISOString().split('T')[0])),
         supabase.from('stores').select('*').order('name'),
       ])
-      setClassified(classifyItems(items, issuances, period))
+      const combinedIssuances = [
+        ...(issuances || []),
+        ...(manualIssues || []).filter(m => m.item_id).map(m => ({ item_id: m.item_id, quantity_issued: m.quantity, date: m.date })),
+      ]
+      setClassified(classifyItems(items, combinedIssuances, period))
       setStores(st || [])
     } catch (err) {
       toast.error('Failed: ' + err.message)

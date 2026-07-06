@@ -81,10 +81,16 @@ export default function Dashboard() {
       const d7  = new Date(today); d7.setDate(d7.getDate()-7)
       const d14 = new Date(today); d14.setDate(d14.getDate()-14)
 
-      const [{ data: items }, { data: issuances }, { data: updates }] = await Promise.all([
+      const [{ data: items }, { data: issuances }, { data: manualIssues }, { data: updates }] = await Promise.all([
         selectAll(() => supabase.from('items').select('id, name, part_number, store_id, current_stock, min_stock, unit, expiry_date, stores(name, category)').eq('active', true)),
         supabase.from('issuances')
           .select('item_id, quantity_issued, date, items(name, unit, stores(category))')
+          .gte('date', d14.toISOString().split('T')[0])
+          .order('date'),
+        // Issue Without Req rows for the same window, in the same shape as
+        // `issuances`, so every chart/stat below counts BOTH issuing paths.
+        supabase.from('manual_issues')
+          .select('item_id, quantity, date, item_name, unit, items(name, unit, stores(category))')
           .gte('date', d14.toISOString().split('T')[0])
           .order('date'),
         supabase.from('stock_updates')
@@ -105,7 +111,17 @@ export default function Dashboard() {
 
       // ── Core stats ──────────────────────────────────────
       const it = items || []
-      const iss = issuances || []
+      // Combine BOTH issuing paths -- Issue With Requisition (`issuances`)
+      // and Issue Without Req (`manual_issues`) -- into one normalized list
+      // so every chart, stat and report below reflects everything issued,
+      // not just requisitioned issues.
+      const iss = [
+        ...(issuances || []),
+        ...(manualIssues || []).map(m => ({
+          item_id: m.item_id, quantity_issued: Number(m.quantity), date: m.date,
+          items: m.items || { name: m.item_name, unit: m.unit, stores: { category: 'Unknown' } },
+        })),
+      ]
       const upd = updates || []
       const d7Str = d7.toISOString().split('T')[0]
 
