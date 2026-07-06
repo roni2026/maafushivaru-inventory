@@ -19,13 +19,29 @@ export function useItems() {
     try {
       // Paginated fetch — pulls ALL items, not just the first 1,000 that
       // Supabase returns by default.
-      const data = await fetchAllRows(() =>
-        supabase
-          .from('items')
-          .select('*, stores(id, name, category)')
-          .order('expiry_date', { ascending: true, nullsFirst: false })
-      )
-      setItems(data)
+      const [data, { data: batches }] = await Promise.all([
+        fetchAllRows(() =>
+          supabase
+            .from('items')
+            .select('*, stores(id, name, category)')
+        ),
+        supabase.from('item_batches').select('item_id, expiry_date, remaining_quantity'),
+      ])
+      // Batch Expiry is the ONE expiry system now -- attach each item's
+      // earliest active batch expiry as a computed field (`_batchExpiry`)
+      // instead of ever reading the legacy items.expiry_date column, which
+      // is never written to for new stock anymore.
+      const earliest = {}
+      ;(batches || []).forEach(b => {
+        if (!b.expiry_date || Number(b.remaining_quantity) <= 0) return
+        if (!earliest[b.item_id] || b.expiry_date < earliest[b.item_id]) earliest[b.item_id] = b.expiry_date
+      })
+      const withExpiry = data.map(i => ({ ...i, _batchExpiry: earliest[i.id] || null }))
+      setItems(withExpiry.sort((a, b) => {
+        if (!a._batchExpiry) return 1
+        if (!b._batchExpiry) return -1
+        return new Date(a._batchExpiry) - new Date(b._batchExpiry)
+      }))
     } catch (err) {
       console.error(err)
       toast.error('Failed to load items')
@@ -50,10 +66,10 @@ export function useItems() {
     if (error) throw error
     logItemActivity(data.id, 'created', `Item created: ${data.name}`)
     setItems(prev =>
-      [...prev, data].sort((a, b) => {
-        if (!a.expiry_date) return 1
-        if (!b.expiry_date) return -1
-        return new Date(a.expiry_date) - new Date(b.expiry_date)
+      [...prev, { ...data, _batchExpiry: null }].sort((a, b) => {
+        if (!a._batchExpiry) return 1
+        if (!b._batchExpiry) return -1
+        return new Date(a._batchExpiry) - new Date(b._batchExpiry)
       })
     )
     return data
@@ -74,7 +90,7 @@ export function useItems() {
     } else {
       logItemActivity(id, 'edited', 'Item details edited')
     }
-    setItems(prev => prev.map(i => (i.id === id ? data : i)))
+    setItems(prev => prev.map(i => (i.id === id ? { ...data, _batchExpiry: i._batchExpiry ?? null } : i)))
     return data
   }
 

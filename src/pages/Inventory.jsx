@@ -146,7 +146,7 @@ export default function Inventory() {
     if (filterActive==='inactive') list=list.filter(i=>i.active===false)
     if (filterExp) {
       list=list.filter(i=>{
-        const d=daysUntil(i.expiry_date)
+        const d=daysUntil(i._batchExpiry)
         if(filterExp==='expired') return d!==null&&d<0
         if(filterExp==='7')       return d!==null&&d>=0&&d<=7
         if(filterExp==='15')      return d!==null&&d>=0&&d<=15
@@ -159,6 +159,7 @@ export default function Inventory() {
       const getv=(o)=>{
         if(sortField==='store_name') return o.stores?.name||''
         if(sortField==='category')   return o.stores?.category||''
+        if(sortField==='expiry_date') return o._batchExpiry
         return o[sortField]
       }
       let va=getv(a),vb=getv(b)
@@ -254,7 +255,7 @@ export default function Inventory() {
     }
     const rows = filtered.map(i => [
       i.part_number, i.name, i.stores?.name || '', i.stores?.category || '', i.unit,
-      i.current_stock, i.min_stock, i.unit_cost || 0, i.expiry_date || '',
+      i.current_stock, i.min_stock, i.unit_cost || 0, i._batchExpiry || '',
       i.supplier || '', i.location || '', i.notes || '',
     ].map(esc).join(','))
     const csv = [headers.join(','), ...rows].join('\n')
@@ -601,7 +602,7 @@ export default function Inventory() {
           </Thead>
           <Tbody>
             {pageItems.map(item => {
-              const days=daysUntil(item.expiry_date)
+              const days=daysUntil(item._batchExpiry)
               const lowStock=Number(item.current_stock)<=Number(item.min_stock)
               const hasImage=!!item.image_url
               const hasLoc  =!!item.location
