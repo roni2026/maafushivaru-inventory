@@ -36,7 +36,7 @@ function sumQtyByUnit(rows) {
   const totals = {}
   for (const r of rows) {
     const u = r.unit || 'unit'
-    totals[u] = (totals[u] || 0) + Number(r.current_stock || 0)
+    totals[u] = (totals[u] || 0) + Number(r.remaining_quantity ?? r.quantity ?? 0)
   }
   return Object.entries(totals).map(([unit, qty]) => `${qty} ${unit}`).join(', ')
 }
@@ -59,7 +59,7 @@ export default function Expiry() {
     try {
       const [{ data: items }, { data: batches }, { data: st }, { data: setRows_ }] = await Promise.all([
         selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,expiry_date,store_id,stores(name,category)').eq('active', true)),
-        selectAll(() => supabase.from('item_batches').select('id,item_id,expiry_date,quantity,batch_code')),
+        selectAll(() => supabase.from('item_batches').select('id,item_id,expiry_date,quantity,remaining_quantity,batch_code')),
         supabase.from('stores').select('*').order('name'),
         supabase.from('settings').select('key,value'),
       ])
@@ -298,10 +298,11 @@ export default function Expiry() {
                 <Th {...thProps('name')}>Item Name</Th>
                 <Th {...thProps('store')} className="hidden sm:table-cell">Store</Th>
                 <Th {...thProps('batch_code')} className="hidden md:table-cell">Batch</Th>
-                <Th {...thProps('current_stock')}>Stock</Th>
+                <Th {...thProps('quantity')} className="hidden md:table-cell">Batch Qty</Th>
+                <Th {...thProps('remaining_quantity')}>Remaining</Th>
                 <Th {...thProps('expiry_date')}>Expiry</Th>
-                <Th {...thProps('days')}>Days</Th>
-                <Th {...thProps('days')}>Status</Th>
+                <Th {...thProps('days')}>Days Left</Th>
+                <Th {...thProps('status')}>Status</Th>
               </tr>
             </Thead>
             <Tbody>
@@ -310,11 +311,12 @@ export default function Expiry() {
                   <Td className="font-mono text-xs text-slate-400">{r.part_number || '—'}</Td>
                   <Td>
                     <span className="font-medium text-slate-200 text-sm">{r.name}</span>
-                    {r.source === 'batch' && <Layers className="w-3 h-3 inline ml-1.5 text-slate-500" title="From batch" />}
+                    <Layers className="w-3 h-3 inline ml-1.5 text-slate-500" title="Batch Expiry" />
                   </Td>
                   <Td className="hidden sm:table-cell text-slate-400 text-sm">{r.store}</Td>
                   <Td className="hidden md:table-cell text-slate-500 text-xs">{r.batch_code || '—'}</Td>
-                  <Td className="text-slate-300 text-sm">{r.current_stock} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
+                  <Td className="hidden md:table-cell text-slate-400 text-sm">{r.quantity} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
+                  <Td className="text-teal-300 text-sm font-semibold">{r.remaining_quantity} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
                   <Td className="text-slate-300 text-sm whitespace-nowrap">{r.expiry_date}</Td>
                   <Td className={`text-sm font-bold ${expiryColorClass(r.days)}`}>{r.days < 0 ? `+${Math.abs(r.days)}` : r.days}</Td>
                   <Td>{statusBadge(r.days)}</Td>
