@@ -167,34 +167,32 @@ export default function IssueWithoutReq() {
     setSaving(true)
     try {
       const batchId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`
-      const payload = clean.map(l => ({
-        date: header.date, item_id: l.item_id || null, item_name: l.item_name,
-        part_number: l.part_number || null, quantity: l.quantity, unit: l.unit,
-        destination_location: header.destination_location, issued_to: header.issued_to || null,
-        issued_by: 'Roni', status: 'pending_req', deduct_stock: !!l.deduct_stock, note: header.note || null,
-        batch_id: batchId,
-      }))
 
-      const { error } = await withTimeout(
-        supabase.from('manual_issues').insert(payload),
-        20000, 'Saving the issue',
-      )
-      if (error) { toast.error(error.message); return }
-
-      // Optionally reduce inventory + log the movement, per matched item.
-      // Best-effort: a failure here never blocks the issue record already saved.
+      // One issue_stock_manual RPC call per line — the SAME shared FIFO
+      // function used by requisitioned issuing and by the Android app.
+      // When deduct_stock is on, this consumes the oldest-expiry batches
+      // first and keeps items.current_stock in sync automatically; the
+      // manual_issues row it inserts is what both the website Analytics
+      // page and the Android dashboard now include in issued totals.
       for (const l of clean) {
-        if (l.deduct_stock && l.item_id) {
-          try {
-            const it = items.find(i => i.id === l.item_id)
-            const newStock = Number(it?.current_stock || 0) - l.quantity
-            await withTimeout(supabase.from('items').update({ current_stock: newStock }).eq('id', l.item_id), 15000, 'Updating stock')
-            await withTimeout(supabase.from('stock_updates').insert({
-              item_id: l.item_id, date: header.date, quantity_change: -l.quantity, new_quantity: newStock,
-              updated_by: 'Issue (no req)', note: `Issued without requisition → ${header.destination_location}${header.issued_to ? ' · ' + header.issued_to : ''}`,
-            }), 15000, 'Logging stock movement')
-          } catch { /* best-effort — the issue record itself already saved */ }
-        }
+        const { error } = await withTimeout(
+          supabase.rpc('issue_stock_manual', {
+            p_item_id: l.item_id || null,
+            p_item_name: l.item_name,
+            p_part_number: l.part_number || null,
+            p_quantity: l.quantity,
+            p_unit: l.unit,
+            p_destination_location: header.destination_location,
+            p_issued_to: header.issued_to || null,
+            p_issued_by: 'Roni',
+            p_batch_group_id: batchId,
+            p_kitchen: header.destination_location,
+            p_note: header.note || null,
+            p_deduct_stock: !!l.deduct_stock,
+          }),
+          20000, 'Saving the issue',
+        )
+        if (error) throw error
       }
 
       // Fire the "issued without req" alert — mobile users get it instantly

@@ -96,22 +96,24 @@ export default function Issuance() {
     if (!form.item_id)          { toast.error('Select an item'); return }
     if (!form.quantity_issued)  { toast.error('Enter quantity'); return }
     setSaving(true)
-    const item = items.find(i => i.id === form.item_id)
-    const { error } = await supabase.from('issuances').insert({
-      item_id:         form.item_id,
-      date:            form.date,
-      quantity_issued: Number(form.quantity_issued),
-      issued_by:       form.issued_by || 'Roni',
-      note:            form.note,
-    })
-    if (error) { toast.error(error.message); setSaving(false); return }
-    if (item) {
-      const newStock = Math.max(0, Number(item.current_stock) - Number(form.quantity_issued))
-      await supabase.from('items').update({ current_stock: newStock }).eq('id', form.item_id)
-    }
-    toast.success('Issuance recorded')
-    setShowAdd(false); setForm(EMPTY); setItemSearch('')
-    load(); setSaving(false)
+    try {
+      // FIFO issuing: consumes the oldest-expiry batches first via the SAME
+      // shared RPC the mobile app calls, so stock and batch remaining
+      // quantities always agree between Website and Android.
+      const { error } = await supabase.rpc('issue_stock_requisition', {
+        p_item_id: form.item_id,
+        p_quantity: Number(form.quantity_issued),
+        p_store_id: null,
+        p_logged_by: form.issued_by || 'Roni',
+        p_note: form.note || null,
+        p_date: form.date || null,
+      })
+      if (error) throw error
+      toast.success('Issuance recorded')
+      setShowAdd(false); setForm(EMPTY); setItemSearch('')
+      load()
+    } catch (err) { toast.error(err.message) }
+    setSaving(false)
   }
 
   const handleDelete = async (id) => {
