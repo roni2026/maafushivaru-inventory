@@ -149,6 +149,19 @@ export default function Orders() {
     setPendingDismissed(false)
   }, [])
 
+  // -- Already Ordered (Boat Note) -----------------------------------------
+  // Pulls from the shared `pending_ordered_items` view: everything on a
+  // boat note that is still 'pending' or 'partially_delivered' and hasn't
+  // been posted to inventory yet. Same data source Android's ordering
+  // screen reads, so both apps warn about the exact same items.
+  const checkPendingBoatNoteItems = useCallback(async () => {
+    try {
+      const { data } = await supabase.from('pending_ordered_items').select('*')
+      setPendingBoatNoteItems(data || [])
+      setPendingBNDismissed(false)
+    } catch { setPendingBoatNoteItems([]) }
+  }, [])
+
   // ── Generate order ─────────────────────────────────────────
   const generate = useCallback(async () => {
     setLoading(true); setPendingItems([]); setPendingDismissed(false)
@@ -311,6 +324,7 @@ export default function Orders() {
 
       setRows(finalRows); setDelivery(nextDeliveryFor(deliveryDay))
       await checkUndeliveredItems()
+      await checkPendingBoatNoteItems()
     } catch (err) {
       console.error('Order generation failed:', err)
       toast.error('Order generation failed: ' + (err?.message || 'unexpected error'))
@@ -521,10 +535,14 @@ export default function Orders() {
     setMarkingId(orderId)
     for (const oi of oItems) {
       if (!oi.item_id || !oi.ordered_qty) continue
-      const { data: item } = await supabase.from('items').select('current_stock').eq('id', oi.item_id).single()
-      if (!item) continue
-      const newStock = Number(item.current_stock) + Number(oi.ordered_qty)
-      await supabase.from('items').update({ current_stock: newStock }).eq('id', oi.item_id)
+      // Stock is owned by Batch Expiry -- receiving here creates a batch via
+      // the shared RPC (no expiry known from this flow, so it's a no-expiry
+      // batch) instead of writing current_stock directly. The DB trigger
+      // recalculates current_stock = SUM(remaining_quantity) automatically.
+      await supabase.rpc('upsert_item_batch', {
+        p_batch_id: null, p_item_id: oi.item_id, p_expiry_date: null, p_quantity: Number(oi.ordered_qty),
+        p_note: 'Order received (no expiry recorded)',
+      }).catch(() => {})
       await supabase.from('order_history_items').update({ received_qty: oi.ordered_qty }).eq('id', oi.id)
     }
     await supabase.from('order_history').update({ status: 'received' }).eq('id', orderId)
@@ -532,6 +550,17 @@ export default function Orders() {
     toast.success('Order received — stock updated!'); setMarkingId(null)
   }
   const markPartialReceived = async (orderId, itemId, receivedQty) => {
+    const prevItems = expandedItems[orderId] || []
+    const prevItem = prevItems.find(i => i.id === itemId)
+    const delta = Number(receivedQty) - Number(prevItem?.received_qty || 0)
+    if (prevItem?.item_id && delta > 0) {
+      // Only the newly-received delta becomes a batch, so re-editing the
+      // received quantity never double-adds stock for the same line.
+      await supabase.rpc('upsert_item_batch', {
+        p_batch_id: null, p_item_id: prevItem.item_id, p_expiry_date: null, p_quantity: delta,
+        p_note: 'Order received (partial, no expiry recorded)',
+      }).catch(() => {})
+    }
     await supabase.from('order_history_items').update({ received_qty: receivedQty }).eq('id', itemId)
     const updatedItems = (expandedItems[orderId] || []).map(i => i.id === itemId ? { ...i, received_qty: receivedQty } : i)
     setExpandedItems(p => ({ ...p, [orderId]: updatedItems }))
@@ -743,6 +772,42 @@ export default function Orders() {
                       <div className="flex gap-2 mt-4 flex-wrap">
                         <Button onClick={addPendingToOrder}><CheckCircle2 className="w-4 h-4" /> Add {pendingItems.length} Undelivered to This Order</Button>
                         <Button variant="secondary" onClick={() => setPendingDismissed(true)}>Skip</Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Already Ordered (Boat Note) alert -- avoids double-ordering
+                  items that are sitting on an un-delivered boat note. Shows
+                  Ordered Quantity, Boat Note Number, Order Date, Expected
+                  Arrival and Pending Since, exactly per spec. */}
+              {pendingBoatNoteItems.length > 0 && !pendingBNDismissed && rows.length > 0 && (
+                <div className="card border border-blue-600/50 bg-blue-900/15">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-blue-900/40 rounded-xl flex items-center justify-center shrink-0">
+                      <PackageX className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-blue-300 text-base">
+                        {pendingBoatNoteItems.length} item{pendingBoatNoteItems.length !== 1 ? 's' : ''} already ordered but not yet delivered
+                      </p>
+                      <p className="text-sm text-blue-200/70 mt-0.5">Check before adding these to a new order -- they're already on a pending boat note.</p>
+                      <div className="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
+                        {pendingBoatNoteItems.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-4 text-sm flex-wrap">
+                            <span className="text-slate-200 truncate">{item.product_name || item.part_number}</span>
+                            <Badge variant="blue">Already Ordered</Badge>
+                            <span className="text-blue-300 font-semibold shrink-0">{item.ordered_quantity} pending</span>
+                            <span className="text-slate-400 text-xs shrink-0">#{item.note_number}</span>
+                            <span className="text-slate-400 text-xs shrink-0">Ordered {item.order_date}</span>
+                            {item.expected_arrival && <span className="text-slate-400 text-xs shrink-0">ETA {item.expected_arrival}</span>}
+                            <span className="text-slate-500 text-xs shrink-0">Pending since {new Date(item.pending_since).toLocaleDateString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2 mt-4 flex-wrap">
+                        <Button variant="secondary" onClick={() => setPendingBNDismissed(true)}>Dismiss</Button>
                       </div>
                     </div>
                   </div>
