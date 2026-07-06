@@ -809,39 +809,44 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
     setBusy(true)
     try {
       const dated = batches.filter(b => b.expiry_date && Number(b.quantity) > 0)
-      const earliest = dated.map(b => b.expiry_date).sort()[0] || null
-      const newStock = Number(invItem?.current_stock || 0) + totalQty
 
-      const upd = { current_stock: newStock, active: true }
-      if (earliest) upd.expiry_date = earliest
+      // Stock is owned by Batch Expiry -- current_stock is NEVER written
+      // directly here anymore. Each upsert_item_batch RPC call below creates
+      // the batch AND recalculates items.current_stock = SUM(remaining_
+      // quantity) automatically, which is what fixes boat-note receiving
+      // from double-counting stock (batch qty + a manual current_stock add).
+      const upd = { active: true }
       if (!invItem?.origin) upd.origin = classifyOrigin(line.product_name)
       const { error: uErr } = await supabase.from('items').update(upd).eq('id', itemId)
       if (uErr) throw uErr
 
-      await supabase.from('stock_updates').insert({
-        item_id: itemId, date: note.note_date, quantity_change: totalQty, new_quantity: newStock,
-        updated_by: note.created_by || 'Roni', note: `Boat note ${note.label || note.note_date}`,
-      })
       await supabase.from('receiving').insert({
         item_id: itemId, item_name: invItem?.name || line.product_name, date: note.note_date,
         quantity_received: totalQty, unit: line.unit, supplier_name: line.supplier,
         received_by: note.created_by || 'Roni', invoice_number: line.po_number, note: `Boat note: ${note.label || note.note_date}`,
       }).catch(() => {})
 
-      // One inventory batch per expiry (multiple expiry supported).
+      // One Batch Expiry entry per expiry date (multiple expiry dates
+      // supported) -- the shared RPC used by the Android app too.
       for (const b of dated) {
-        await supabase.from('item_batches').insert({
-          item_id: itemId, expiry_date: b.expiry_date, quantity: Number(b.quantity) || 0,
-          note: `Boat note ${note.label || note.note_date}`,
+        await supabase.rpc('upsert_item_batch', {
+          p_batch_id: null, p_item_id: itemId, p_expiry_date: b.expiry_date, p_quantity: Number(b.quantity) || 0,
+          p_note: `Boat note ${note.label || note.note_date}`,
         }).catch(() => {})
       }
       // If no dated batches but qty given, still record a no-expiry batch.
       if (!dated.length) {
-        await supabase.from('item_batches').insert({
-          item_id: itemId, expiry_date: null, quantity: totalQty,
-          note: `Boat note ${note.label || note.note_date}`,
+        await supabase.rpc('upsert_item_batch', {
+          p_batch_id: null, p_item_id: itemId, p_expiry_date: null, p_quantity: totalQty,
+          p_note: `Boat note ${note.label || note.note_date}`,
         }).catch(() => {})
       }
+
+      const earliest = dated.map(b => b.expiry_date).sort()[0] || null
+      await supabase.from('stock_updates').insert({
+        item_id: itemId, date: note.note_date, quantity_change: totalQty, new_quantity: null,
+        updated_by: note.created_by || 'Roni', note: `Boat note ${note.label || note.note_date}`,
+      }).catch(() => {})
 
       const actor = note.created_by || (await currentActor())
       const patch = {
@@ -995,16 +1000,18 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
       }
 
       // Receive the good remainder into inventory for damaged / short.
+      // Stock is derived from Batch Expiry -- current_stock is never
+      // written directly; the upsert_item_batch RPC creates the batch and
+      // recalculates it automatically (fixes double-counting on receive).
       if (needsQty && goodQty > 0 && line.item_id && invItem) {
-        const newStock = Number(invItem.current_stock || 0) + goodQty
-        await supabase.from('items').update({ current_stock: newStock, active: true }).eq('id', line.item_id)
-        await supabase.from('stock_updates').insert({
-          item_id: line.item_id, date: boatNote?.note_date, quantity_change: goodQty, new_quantity: newStock,
-          updated_by: actor, note: `Boat note ${boatNote?.label || boatNote?.note_date || ''} · ${kind} ${n}, ${goodQty} good received`,
+        await supabase.from('items').update({ active: true }).eq('id', line.item_id)
+        await supabase.rpc('upsert_item_batch', {
+          p_batch_id: null, p_item_id: line.item_id, p_expiry_date: line.expiry_date || null, p_quantity: goodQty,
+          p_note: `Boat note ${boatNote?.label || boatNote?.note_date || ''}`,
         }).catch(() => {})
-        await supabase.from('item_batches').insert({
-          item_id: line.item_id, expiry_date: line.expiry_date || null, quantity: goodQty,
-          note: `Boat note ${boatNote?.label || boatNote?.note_date || ''}`,
+        await supabase.from('stock_updates').insert({
+          item_id: line.item_id, date: boatNote?.note_date, quantity_change: goodQty, new_quantity: null,
+          updated_by: actor, note: `Boat note ${boatNote?.label || boatNote?.note_date || ''} · ${kind} ${n}, ${goodQty} good received`,
         }).catch(() => {})
         await supabase.from('receiving').insert({
           item_id: line.item_id, item_name: invItem.name || line.product_name, date: boatNote?.note_date,
