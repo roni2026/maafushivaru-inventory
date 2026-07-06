@@ -1,44 +1,41 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase } from '../lib/supabase'
-import { Layers, Plus, Trash2, CalendarClock, AlertTriangle } from 'lucide-react'
+import { Layers, Plus, Trash2, Pencil, X, Check, CalendarClock, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Badge from './ui/Badge'
-import { addStockBatches } from '../lib/batchStock'
+import { addStockBatches, fetchItemBatches, upsertItemBatch, deleteItemBatch } from '../lib/batchStock'
+import { daysUntil, batchStatus, expiryBadgeVariant } from '../lib/expiry'
 
-function daysUntil(d) {
-  if (!d) return null
-  const e = new Date(d); e.setHours(0, 0, 0, 0)
-  const n = new Date(); n.setHours(0, 0, 0, 0)
-  return Math.ceil((e - n) / 86400000)
-}
 function badge(days) {
   if (days === null) return <Badge variant="gray">No date</Badge>
-  if (days < 0)      return <Badge variant="red">Expired {Math.abs(days)}d</Badge>
-  if (days <= 7)     return <Badge variant="red">{days}d</Badge>
-  if (days <= 15)    return <Badge variant="orange">{days}d</Badge>
-  if (days <= 30)    return <Badge variant="yellow">{days}d</Badge>
-  if (days <= 60)    return <Badge variant="blue">{days}d</Badge>
-  return                    <Badge variant="green">{days}d</Badge>
+  const variant = expiryBadgeVariant(days)
+  const label = days === null ? 'No date' : days < 0 ? `Expired ${Math.abs(days)}d ago` : `${days}d left`
+  return <Badge variant={variant}>{label}</Badge>
+}
+
+function statusBadge(status) {
+  const variant = status === 'Expired' ? 'red' : status === 'Expiring Soon' ? 'orange' : 'green'
+  return <Badge variant={variant}>{status}</Badge>
 }
 
 const EMPTY = { expiry_date: '', quantity: '', batch_code: '', note: '' }
 
-// Manage multiple expiry dates (batches) — each with its own quantity — for one item.
-// New stock added here is also reflected in the item's current stock. If the
-// expiry date entered has already passed, the quantity is never added to
-// inventory — it's logged straight to the Waste Log instead.
+// Full Batch Expiry management for one item — the SAME feature and the
+// SAME data (item_batches, via shared RPCs) used by the Android app.
+// Add / Edit / Delete batches here. Quantity, Remaining Quantity, Expiry
+// and Status are always shown so nothing needs the old single-expiry field.
 export default function BatchManager({ itemId, unit = 'pcs', item, onStockChanged }) {
   const [batches, setBatches] = useState([])
   const [loading, setLoading] = useState(true)
   const [form,    setForm]    = useState(EMPTY)
   const [saving,  setSaving]  = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [editForm, setEditForm] = useState(EMPTY)
 
   const load = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('item_batches').select('*').eq('item_id', itemId)
-      .order('expiry_date', { ascending: true, nullsFirst: false })
-    if (!error) setBatches(data || [])
+    try {
+      setBatches(await fetchItemBatches(itemId))
+    } catch (err) { toast.error(err.message) }
     setLoading(false)
   }, [itemId])
 
@@ -63,39 +60,61 @@ export default function BatchManager({ itemId, unit = 'pcs', item, onStockChange
         toast.success(`Added ${result.addedQty} ${unit} to stock`)
       }
       setForm(EMPTY)
-      load()
+      await load()
       onStockChanged?.()
     } catch (err) { toast.error(err.message) }
     setSaving(false)
   }
 
-  const updateQty = async (id, quantity) => {
-    const q = Number(quantity)
-    setBatches(prev => prev.map(b => b.id === id ? { ...b, quantity: q } : b))
-    const { error } = await supabase.from('item_batches').update({ quantity: q }).eq('id', id)
-    if (error) toast.error(error.message)
+  const startEdit = (b) => {
+    setEditingId(b.id)
+    setEditForm({ expiry_date: b.expiry_date || '', quantity: String(b.quantity), batch_code: b.batch_code || '', note: b.note || '' })
+  }
+  const cancelEdit = () => { setEditingId(null); setEditForm(EMPTY) }
+
+  const saveEdit = async (b) => {
+    if (editForm.quantity === '' || Number(editForm.quantity) < 0) { toast.error('Enter a valid quantity'); return }
+    setSaving(true)
+    try {
+      await upsertItemBatch({
+        batchId: b.id,
+        itemId,
+        expiryDate: editForm.expiry_date || null,
+        quantity: Number(editForm.quantity),
+        batchCode: editForm.batch_code,
+        note: editForm.note,
+      })
+      toast.success('Batch updated — inventory synced')
+      cancelEdit()
+      await load()
+      onStockChanged?.()
+    } catch (err) { toast.error(err.message) }
+    setSaving(false)
   }
 
   const delBatch = async (id) => {
-    const { error } = await supabase.from('item_batches').delete().eq('id', id)
-    if (error) { toast.error(error.message); return }
-    setBatches(prev => prev.filter(b => b.id !== id))
-    toast.success('Batch removed')
+    if (!window.confirm('Delete this batch? Inventory quantity will update automatically.')) return
+    try {
+      await deleteItemBatch(id)
+      setBatches(prev => prev.filter(b => b.id !== id))
+      toast.success('Batch removed — inventory synced')
+      onStockChanged?.()
+    } catch (err) { toast.error(err.message) }
   }
 
-  const total = batches.reduce((s, b) => s + Number(b.quantity || 0), 0)
+  const totalRemaining = batches.reduce((s, b) => s + Number(b.remaining_quantity ?? b.quantity ?? 0), 0)
 
   return (
     <div className="card">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
         <h2 className="font-display text-base font-semibold text-slate-100 flex items-center gap-2">
-          <Layers className="w-4 h-4 text-teal-400" /> Expiry Batches
+          <Layers className="w-4 h-4 text-teal-400" /> Batch Expiry
         </h2>
         {batches.length > 0 && (
-          <span className="text-xs text-slate-400">Total across batches: <strong className="text-teal-300">{total} {unit}</strong></span>
+          <span className="text-xs text-slate-400">Inventory = SUM(remaining): <strong className="text-teal-300">{totalRemaining} {unit}</strong></span>
         )}
       </div>
-      <p className="text-slate-500 text-xs mb-1">Add stock under several expiry dates, each with its own quantity — this also increases the item's stock.</p>
+      <p className="text-slate-500 text-xs mb-1">Every batch of stock with its own expiry date. Inventory quantity always equals the sum of remaining batch quantities — add, edit or delete a batch and stock updates instantly.</p>
       <p className="text-amber-400/80 text-xs mb-4 flex items-center gap-1">
         <AlertTriangle className="w-3 h-3 shrink-0" /> A batch dated in the past is sent straight to the Waste Log and is not added to inventory.
       </p>
@@ -121,7 +140,7 @@ export default function BatchManager({ itemId, unit = 'pcs', item, onStockChange
         <div className="col-span-2 sm:col-span-1 flex items-end">
           <button onClick={addBatch} disabled={saving}
             className="btn-secondary btn-sm w-full justify-center disabled:opacity-50">
-            <Plus className="w-4 h-4" /> Add
+            <Plus className="w-4 h-4" /> Add Batch
           </button>
         </div>
       </div>
@@ -132,31 +151,61 @@ export default function BatchManager({ itemId, unit = 'pcs', item, onStockChange
       ) : batches.length === 0 ? (
         <div className="text-center py-6 text-slate-500 text-sm">
           <CalendarClock className="w-7 h-7 mx-auto mb-2 text-slate-600" />
-          No batches yet — add one above to track multiple expiry dates.
+          No batches yet — add one above to track stock with an expiry date.
         </div>
       ) : (
-        <div className="space-y-1.5">
-          {batches.map(b => {
-            const d = daysUntil(b.expiry_date)
-            return (
-              <div key={b.id} className="flex items-center gap-2 bg-slate-700/30 rounded-lg px-3 py-2 flex-wrap">
-                <span className="text-sm text-slate-200 font-medium w-28 shrink-0">{b.expiry_date || '—'}</span>
-                {badge(d)}
-                {b.batch_code && <span className="text-xs font-mono text-slate-500">#{b.batch_code}</span>}
-                <div className="flex-1" />
-                <div className="flex items-center gap-1.5">
-                  <input type="number" min="0" step="0.01" value={b.quantity}
-                    onChange={e => updateQty(b.id, e.target.value)}
-                    className="input text-sm py-1 w-24 text-teal-300 font-semibold" />
-                  <span className="text-xs text-slate-500 w-8">{unit}</span>
-                  <button onClick={() => delBatch(b.id)} className="p-1.5 text-slate-500 hover:text-red-400 transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-                {b.note && <p className="w-full text-xs text-slate-500 mt-0.5">{b.note}</p>}
-              </div>
-            )
-          })}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-[11px] text-slate-500 uppercase">
+                <th className="py-1.5 pr-2">Expiry</th>
+                <th className="py-1.5 pr-2">Days Left</th>
+                <th className="py-1.5 pr-2">Status</th>
+                <th className="py-1.5 pr-2">Quantity</th>
+                <th className="py-1.5 pr-2">Remaining</th>
+                <th className="py-1.5 pr-2">Batch Code</th>
+                <th className="py-1.5 pr-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {batches.map(b => {
+                const d = daysUntil(b.expiry_date)
+                const status = batchStatus(d)
+                const isEditing = editingId === b.id
+                return (
+                  <tr key={b.id} className="border-t border-slate-700/40">
+                    {isEditing ? (
+                      <>
+                        <td className="py-1.5 pr-2"><input type="date" className="input text-sm py-1 w-36" value={editForm.expiry_date} onChange={e => setEditForm(p => ({ ...p, expiry_date: e.target.value }))} /></td>
+                        <td className="py-1.5 pr-2 text-slate-500">—</td>
+                        <td className="py-1.5 pr-2">—</td>
+                        <td className="py-1.5 pr-2"><input type="number" min="0" step="0.01" className="input text-sm py-1 w-24" value={editForm.quantity} onChange={e => setEditForm(p => ({ ...p, quantity: e.target.value }))} /></td>
+                        <td className="py-1.5 pr-2 text-slate-500">{b.remaining_quantity ?? b.quantity}</td>
+                        <td className="py-1.5 pr-2"><input className="input text-sm py-1 w-24" value={editForm.batch_code} onChange={e => setEditForm(p => ({ ...p, batch_code: e.target.value }))} /></td>
+                        <td className="py-1.5 pr-2 text-right whitespace-nowrap">
+                          <button onClick={() => saveEdit(b)} disabled={saving} className="p-1.5 text-emerald-400 hover:text-emerald-300"><Check className="w-4 h-4" /></button>
+                          <button onClick={cancelEdit} className="p-1.5 text-slate-500 hover:text-slate-300"><X className="w-4 h-4" /></button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="py-1.5 pr-2 text-slate-200 font-medium">{b.expiry_date || '—'}</td>
+                        <td className="py-1.5 pr-2">{badge(d)}</td>
+                        <td className="py-1.5 pr-2">{statusBadge(status)}</td>
+                        <td className="py-1.5 pr-2 text-slate-300">{Number(b.quantity)} {unit}</td>
+                        <td className="py-1.5 pr-2 text-teal-300 font-semibold">{Number(b.remaining_quantity ?? b.quantity)} {unit}</td>
+                        <td className="py-1.5 pr-2 text-xs font-mono text-slate-500">{b.batch_code || '—'}</td>
+                        <td className="py-1.5 pr-2 text-right whitespace-nowrap">
+                          <button onClick={() => startEdit(b)} className="p-1.5 text-slate-500 hover:text-teal-300 transition-colors"><Pencil className="w-4 h-4" /></button>
+                          <button onClick={() => delBatch(b.id)} className="p-1.5 text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                        </td>
+                      </>
+                    )}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

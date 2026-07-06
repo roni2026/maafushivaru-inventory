@@ -1,6 +1,11 @@
-// ────────────────────────────────────────────────────────────────────────────
-// expiry.js — shared helpers for expiry tracking, thresholds & batches
-// ────────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────
+// expiry.js — shared helpers for the ONE Batch Expiry system.
+//
+// There is a single source of truth for stock + expiry: `item_batches`
+// (aliased as the `inventory_batches` view). items.current_stock is kept
+// in sync automatically by a database trigger — nothing here ever adds to
+// or edits current_stock directly.
+// ────────────────────────────────────────────────────────────────
 
 export const EXPIRY_RANGE_DAYS = 120   // 4-month look-ahead window
 
@@ -31,7 +36,6 @@ export const EXPIRY_SETTING_KEYS = {
 }
 
 // Which single threshold bucket does an item with `days` left fall into?
-// Returns the *tightest* applicable bucket key, or null if outside the window.
 export function thresholdForDays(days) {
   if (days === null) return null
   if (days < 0) return 'after'
@@ -43,70 +47,69 @@ export function thresholdForDays(days) {
   return null
 }
 
+// Status bucket used consistently across Website + Android:
+//   Expired        -> days < 0
+//   Expiring Soon   -> 0 <= days <= 60
+//   Healthy        -> days > 60 or no expiry date set
+export function batchStatus(days) {
+  if (days === null) return 'Healthy'
+  if (days < 0) return 'Expired'
+  if (days <= 60) return 'Expiring Soon'
+  return 'Healthy'
+}
+
+// Colour coding (UI Improvements spec): Green = Healthy, Orange = <60 days,
+// Red = <30 days, Dark Red = Expired.
 export function expiryColorClass(days) {
   if (days === null) return 'text-slate-400'
-  if (days < 0) return 'text-red-400'
-  if (days <= 7) return 'text-red-400'
-  if (days <= 15) return 'text-orange-400'
-  if (days <= 30) return 'text-yellow-400'
-  if (days <= 60) return 'text-blue-400'
+  if (days < 0) return 'text-red-600'
+  if (days <= 30) return 'text-red-400'
+  if (days <= 60) return 'text-orange-400'
   return 'text-emerald-400'
+}
+
+export function expiryBadgeVariant(days) {
+  if (days === null) return 'gray'
+  if (days < 0) return 'red'
+  if (days <= 30) return 'red'
+  if (days <= 60) return 'orange'
+  return 'green'
 }
 
 export function expiryRowTint(days) {
   if (days === null) return ''
-  if (days < 0 || days <= 7) return 'border-l-4 border-l-red-500'
-  if (days <= 15) return 'border-l-4 border-l-orange-500'
-  if (days <= 30) return 'border-l-4 border-l-yellow-500'
-  if (days <= 60) return 'border-l-4 border-l-blue-500'
+  if (days < 0) return 'border-l-4 border-l-red-700'
+  if (days <= 30) return 'border-l-4 border-l-red-500'
+  if (days <= 60) return 'border-l-4 border-l-orange-500'
   return 'border-l-4 border-l-emerald-600'
 }
 
-// Expand items + their batches into individual expiry rows.
-// Each item contributes:
-//   • one row per batch that has an expiry_date (qty = batch.quantity)
-//   • a fallback row from item.expiry_date when the item has no batches
+// Expand items + their batches into individual expiry rows. This is the
+// ONLY place expiry rows are built from — the legacy `items.expiry_date`
+// fallback has been removed. A batch with no expiry_date never appears on
+// the Expiry page (it isn't expiring), but it still counts toward stock.
 export function buildExpiryRows(items, batchesByItem = {}, rangeDays = EXPIRY_RANGE_DAYS) {
   const rows = []
   for (const it of items) {
-    const batches = (batchesByItem[it.id] || []).filter(b => b.expiry_date)
-    if (batches.length) {
-      for (const b of batches) {
-        const d = daysUntil(b.expiry_date)
-        if (d === null || d > rangeDays) continue
-        rows.push({
-          key: `b-${b.id}`,
-          item_id: it.id,
-          batch_id: b.id,
-          part_number: it.part_number,
-          name: it.name,
-          store: it.stores?.name || '',
-          category: it.stores?.category || '',
-          unit: it.unit,
-          current_stock: b.quantity,
-          expiry_date: b.expiry_date,
-          batch_code: b.batch_code || '',
-          days: d,
-          source: 'batch',
-        })
-      }
-    } else if (it.expiry_date) {
-      const d = daysUntil(it.expiry_date)
+    const batches = (batchesByItem[it.id] || []).filter(b => b.expiry_date && Number(b.remaining_quantity ?? b.quantity) > 0)
+    for (const b of batches) {
+      const d = daysUntil(b.expiry_date)
       if (d === null || d > rangeDays) continue
       rows.push({
-        key: `i-${it.id}`,
+        key: `b-${b.id}`,
         item_id: it.id,
-        batch_id: null,
+        batch_id: b.id,
         part_number: it.part_number,
         name: it.name,
         store: it.stores?.name || '',
         category: it.stores?.category || '',
         unit: it.unit,
-        current_stock: it.current_stock,
-        expiry_date: it.expiry_date,
-        batch_code: '',
+        quantity: Number(b.quantity),
+        remaining_quantity: Number(b.remaining_quantity ?? b.quantity),
+        expiry_date: b.expiry_date,
+        batch_code: b.batch_code || '',
         days: d,
-        source: 'item',
+        status: batchStatus(d),
       })
     }
   }
