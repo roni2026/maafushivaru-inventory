@@ -81,8 +81,8 @@ export default function Dashboard() {
       const d7  = new Date(today); d7.setDate(d7.getDate()-7)
       const d14 = new Date(today); d14.setDate(d14.getDate()-14)
 
-      const [{ data: items }, { data: issuances }, { data: manualIssues }, { data: updates }] = await Promise.all([
-        selectAll(() => supabase.from('items').select('id, name, part_number, store_id, current_stock, min_stock, unit, expiry_date, stores(name, category)').eq('active', true)),
+      const [{ data: items }, { data: issuances }, { data: manualIssues }, { data: updates }, { data: batches }] = await Promise.all([
+        selectAll(() => supabase.from('items').select('id, name, part_number, store_id, current_stock, min_stock, unit, stores(name, category)').eq('active', true)),
         supabase.from('issuances')
           .select('item_id, quantity_issued, date, items(name, unit, stores(category))')
           .gte('date', d14.toISOString().split('T')[0])
@@ -96,6 +96,8 @@ export default function Dashboard() {
         supabase.from('stock_updates')
           .select('*, items(name, part_number)')
           .order('created_at', { ascending: false }).limit(8),
+        // Batch Expiry is the ONLY expiry source now -- never items.expiry_date.
+        selectAll(() => supabase.from('item_batches').select('item_id, expiry_date, remaining_quantity')),
       ])
 
       // "Issue Without Requisition" stats (shown as its own stat card below) —
@@ -125,8 +127,19 @@ export default function Dashboard() {
       const upd = updates || []
       const d7Str = d7.toISOString().split('T')[0]
 
-      const critical = it.filter(i => { const d=daysUntil(i.expiry_date); return d!==null&&d<=7 }).length
-      const warn30   = it.filter(i => { const d=daysUntil(i.expiry_date); return d!==null&&d>7&&d<=30 }).length
+      // Earliest expiring active batch per item -- the ONE Batch Expiry
+      // system, never the legacy items.expiry_date field.
+      const earliestExpiryByItem = {}
+      ;(batches || []).forEach(b => {
+        if (!b.expiry_date || Number(b.remaining_quantity) <= 0) return
+        const d = daysUntil(b.expiry_date)
+        if (d === null) return
+        if (earliestExpiryByItem[b.item_id] === undefined || d < earliestExpiryByItem[b.item_id]) {
+          earliestExpiryByItem[b.item_id] = d
+        }
+      })
+      const critical = it.filter(i => { const d = earliestExpiryByItem[i.id]; return d !== undefined && d <= 7 }).length
+      const warn30   = it.filter(i => { const d = earliestExpiryByItem[i.id]; return d !== undefined && d > 7 && d <= 30 }).length
       const lowStock = it.filter(i => Number(i.current_stock)>0 && Number(i.current_stock)<=Number(i.min_stock)).length
       const outStock = it.filter(i => Number(i.current_stock)===0).length
       const todayIss = iss.filter(i=>i.date===todayStr)
@@ -172,12 +185,13 @@ export default function Dashboard() {
 
       // ── Expiry urgency progress bars ────────────────────
       const total = it.length
+      const dOf = (i) => earliestExpiryByItem[i.id]
       const expiry = [
-        { label:'Expired',    count:it.filter(i=>{const d=daysUntil(i.expiry_date);return d!==null&&d<0}).length,          color:'#ef4444' },
-        { label:'≤ 7 Days',   count:it.filter(i=>{const d=daysUntil(i.expiry_date);return d!==null&&d>=0&&d<=7}).length,   color:'#f97316' },
-        { label:'8–15 Days',  count:it.filter(i=>{const d=daysUntil(i.expiry_date);return d!==null&&d>7&&d<=15}).length,   color:'#eab308' },
-        { label:'16–30 Days', count:it.filter(i=>{const d=daysUntil(i.expiry_date);return d!==null&&d>15&&d<=30}).length,  color:'#22c55e' },
-        { label:'> 30 Days',  count:it.filter(i=>{const d=daysUntil(i.expiry_date);return d===null||d>30}).length,         color:'#0d9488' },
+        { label:'Expired',    count:it.filter(i=>{const d=dOf(i);return d!==undefined&&d<0}).length,          color:'#ef4444' },
+        { label:'≤ 7 Days',   count:it.filter(i=>{const d=dOf(i);return d!==undefined&&d>=0&&d<=7}).length,   color:'#f97316' },
+        { label:'8–15 Days',  count:it.filter(i=>{const d=dOf(i);return d!==undefined&&d>7&&d<=15}).length,   color:'#eab308' },
+        { label:'16–30 Days', count:it.filter(i=>{const d=dOf(i);return d!==undefined&&d>15&&d<=30}).length,  color:'#22c55e' },
+        { label:'> 30 Days',  count:it.filter(i=>{const d=dOf(i);return d===undefined||d>30}).length,         color:'#0d9488' },
       ]
 
       // ── Low stock items (sorted by % remaining asc) ─────
@@ -192,8 +206,9 @@ export default function Dashboard() {
 
       // ── Expiring items (next 15 days) ───────────────────
       const expiringItems = it
-        .filter(i=>{ const d=daysUntil(i.expiry_date); return d!==null&&d<=15 })
-        .sort((a,b)=>daysUntil(a.expiry_date)-daysUntil(b.expiry_date))
+        .filter(i=>{ const d=dOf(i); return d!==undefined&&d<=15 })
+        .map(i => ({ ...i, expiry_date: null, _days: dOf(i) }))
+        .sort((a,b)=>a._days-b._days)
         .slice(0,8)
 
       setData({
@@ -537,7 +552,7 @@ export default function Dashboard() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {d.expiringItems.map(item => {
-              const days = daysUntil(item.expiry_date)
+              const days = item._days
               const color = days !== null && days < 0 ? 'text-red-400' : days !== null && days<=7 ? 'text-orange-400' : 'text-yellow-400'
               return (
                 <div key={item.id} className="flex items-center justify-between px-4 py-2.5 rounded-lg bg-slate-700/30 border border-slate-700/40">
