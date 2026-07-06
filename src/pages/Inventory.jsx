@@ -16,6 +16,8 @@ import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Input, { Select, Textarea } from '../components/ui/Input'
 import { ImageModal, LocationModal } from '../components/ItemMedia'
+import BatchManager from '../components/BatchManager'
+import { addStockBatches } from '../lib/batchStock'
 
 // ── helpers ───────────────────────────────────────────────
 function daysUntil(d) {
@@ -279,9 +281,27 @@ export default function Inventory() {
     if(!form.part_number||!form.name||!form.store_id){ toast.error('Part #, Name, Store required'); return }
     setSaving(true)
     try {
-      const payload={...form,current_stock:Number(form.current_stock)||0,min_stock:Number(form.min_stock)||0,unit_cost:Number(form.unit_cost)||0}
-      if(editItem){ await updateItem(editItem.id,payload); toast.success('Updated'); setEditItem(null) }
-      else        { await addItem(payload); toast.success('Item added'); setShowAdd(false) }
+      // Stock + expiry are owned by Batch Expiry (see BatchManager below) --
+      // current_stock / expiry_date are never written directly here once an
+      // item exists, so a general-info edit can never fight with the batch
+      // trigger that keeps current_stock = SUM(remaining_quantity).
+      const { current_stock, expiry_date, ...generalInfo } = form
+      const payload = { ...generalInfo, min_stock: Number(form.min_stock)||0, unit_cost: Number(form.unit_cost)||0 }
+      if(editItem){
+        await updateItem(editItem.id, payload)
+        toast.success('Updated')
+        setEditItem(null)
+      } else {
+        const created = await addItem({ ...payload, current_stock: 0 })
+        // Seed the item's very first batch so stock is never a bare number
+        // detached from Batch Expiry -- everything starts life as a batch.
+        const initialQty = Number(current_stock) || 0
+        if (initialQty > 0) {
+          await addStockBatches(created, [{ quantity: initialQty, expiry_date: expiry_date || null, note: 'Initial stock' }])
+        }
+        toast.success('Item added')
+        setShowAdd(false)
+      }
     } catch(err){ toast.error(err.message) }
     setSaving(false)
   }
@@ -718,10 +738,19 @@ export default function Inventory() {
           <Select label="Unit" value={form.unit} onChange={f('unit')}>
             {UNITS.map(u=><option key={u} value={u}>{u}</option>)}
           </Select>
-          <Input label="Current Stock" type="number" min="0" step="0.01" value={form.current_stock} onChange={f('current_stock')} />
+          {editItem ? (
+            <div className="sm:col-span-1">
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">Current Stock</label>
+              <div className="input flex items-center text-slate-300 bg-slate-800/60 cursor-not-allowed">{editItem.current_stock} {editItem.unit} <span className="text-slate-500 text-xs ml-2">(from Batch Expiry below)</span></div>
+            </div>
+          ) : (
+            <Input label="Initial Stock" type="number" min="0" step="0.01" value={form.current_stock} onChange={f('current_stock')} />
+          )}
           <Input label="Minimum Stock Level" type="number" min="0" step="0.01" value={form.min_stock} onChange={f('min_stock')} />
           <Input label="Unit Cost ($)" type="number" min="0" step="0.01" value={form.unit_cost} onChange={f('unit_cost')} placeholder="0.00" />
-          <Input label="Expiry Date" type="date" value={form.expiry_date} onChange={f('expiry_date')} />
+          {!editItem && (
+            <Input label="Initial Expiry Date" type="date" value={form.expiry_date} onChange={f('expiry_date')} />
+          )}
           <Input label="Supplier" value={form.supplier} onChange={f('supplier')} placeholder="Supplier name" />
           <Select label="Origin (local / foreign)" value={form.origin} onChange={f('origin')}>
             <option value="">— Not set —</option>
@@ -738,6 +767,17 @@ export default function Inventory() {
             </div>
           )}
         </div>
+
+        {editItem && (
+          <div className="mt-5">
+            <BatchManager
+              itemId={editItem.id}
+              unit={editItem.unit}
+              item={editItem}
+              onStockChanged={refetch}
+            />
+          </div>
+        )}
       </Modal>
 
       {/* ── Stock update ─────────────────────────────────── */}

@@ -102,22 +102,21 @@ export function useItems() {
 
   // ── Stock update (manual) ─────────────────────────────
 
-  const updateStock = async ({ itemId, quantityChange, newQuantity, updatedBy, note, date }) => {
-    const { error: stockErr } = await supabase
-      .from('items')
-      .update({ current_stock: newQuantity })
-      .eq('id', itemId)
-    if (stockErr) throw stockErr
-
-    const { error: logErr } = await supabase.from('stock_updates').insert({
-      item_id:         itemId,
-      date:            date || new Date().toISOString().split('T')[0],
-      quantity_change: quantityChange,
-      new_quantity:    newQuantity,
-      updated_by:      updatedBy || 'System',
-      note,
+  // Stock is ALWAYS derived from Batch Expiry (SUM of remaining_quantity).
+  // This never writes items.current_stock directly anymore -- it calls the
+  // shared adjust_item_stock() RPC, which either tops up a no-expiry
+  // "adjustment" batch (increase) or consumes existing batches FIFO
+  // (decrease), exactly like the website and Android issuing flows. This
+  // guarantees a manual "Update Stock" edit can never be silently
+  // overwritten by the next batch change.
+  const updateStock = async ({ itemId, quantityChange, updatedBy, note, date }) => {
+    const { data: newQuantity, error } = await supabase.rpc('adjust_item_stock', {
+      p_item_id: itemId,
+      p_delta: quantityChange,
+      p_note: note,
+      p_updated_by: updatedBy || 'System',
     })
-    if (logErr) throw logErr
+    if (error) throw error
 
     const act = quantityChange > 0 ? 'stock_add' : quantityChange < 0 ? 'stock_remove' : 'stock_set'
     logItemActivity(itemId, act, `${quantityChange >= 0 ? '+' : ''}${quantityChange} → ${newQuantity}${note ? ' · ' + note : ''}`)
@@ -125,6 +124,7 @@ export function useItems() {
     setItems(prev =>
       prev.map(i => (i.id === itemId ? { ...i, current_stock: newQuantity } : i))
     )
+    return newQuantity
   }
 
   return {
