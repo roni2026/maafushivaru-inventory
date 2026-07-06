@@ -34,9 +34,10 @@ export default function NotificationBell() {
     try {
       const data = await fetchNotifications()
       setNotifs(data)
-      // Raise desktop notifications for any new critical/high alerts (no-op
-      // unless the user has enabled local notifications in Settings).
-      syncLocalNotifications(data)
+      // Fire due desktop notifications individually, respecting the
+      // configured notification_time and never repeating one (no-op unless
+      // the user has enabled local notifications in Settings).
+      syncLocalNotifications()
     } catch {}
     setLoading(false)
   }, [])

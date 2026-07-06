@@ -27,6 +27,11 @@ const DEFAULTS = {
   order_default_uom:      'pcs',
   // Boat note retention (0 = keep forever; never auto-delete)
   boat_note_retention_days: '0',
+  // Shared notification schedule (low stock / expiry / boat note alerts) --
+  // used by generate_due_notifications() so alerts fire around this time
+  // instead of in a burst whenever a device happens to poll.
+  notification_time:      '08:00',
+  notifications_enabled:  'true',
 }
 
 export default function Settings() {
@@ -300,6 +305,27 @@ export default function Settings() {
                 Notifications are blocked for this site. Enable them in your browser's site settings, then toggle again.
               </div>
             )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-700/40">
+              <Input
+                label="Notification time"
+                type="time"
+                value={form.notification_time}
+                onChange={e => setForm(f => ({ ...f, notification_time: e.target.value }))}
+              />
+              <Select
+                label="Notifications enabled"
+                value={form.notifications_enabled}
+                onChange={e => setForm(f => ({ ...f, notifications_enabled: e.target.value }))}
+              >
+                <option value="true">On</option>
+                <option value="false">Off</option>
+              </Select>
+              <p className="sm:col-span-2 text-xs text-slate-500 -mt-2">
+                Low stock, out-of-stock, expiry and boat-note-pending alerts are generated once each and
+                delivered individually around this time every day (shared by Website + Android) — they never
+                fire all at once and never repeat for the same item until it's resolved.
+              </p>
+            </div>
           </>
         )}
       </div>
