@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Bell, X, AlertTriangle, Package, Clock, RefreshCw } from 'lucide-react'
+import { Bell, X, AlertTriangle, Package, Clock, RefreshCw, ChefHat, Ship } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { fetchNotifications, getReadIds, saveReadIds } from '../lib/notifications'
 import { syncLocalNotifications } from '../lib/localNotifications'
@@ -14,7 +14,10 @@ const TYPE_ICON = {
   expired:     <AlertTriangle className="w-4 h-4" />,
   expiring:    <Clock className="w-4 h-4" />,
   low_stock:   <Package className="w-4 h-4" />,
+  out_of_stock:<Package className="w-4 h-4" />,
   no_movement: <Package className="w-4 h-4" />,
+  boat_note_pending: <Ship className="w-4 h-4" />,
+  kitchen_reminder: <ChefHat className="w-4 h-4" />,
 }
 const GROUPS = [
   { key:'critical', label:'🔴 Critical' },

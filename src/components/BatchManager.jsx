@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Layers, Plus, Trash2, Pencil, X, Check, CalendarClock, AlertTriangle } from 'lucide-react'
+import { Layers, Plus, Trash2, Pencil, X, Check, CalendarClock, AlertTriangle, FlaskConical } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Badge from './ui/Badge'
-import { addStockBatches, fetchItemBatches, upsertItemBatch, deleteItemBatch } from '../lib/batchStock'
+import { addStockBatches, fetchItemBatches, upsertItemBatch, deleteItemBatch, wasteFromBatch } from '../lib/batchStock'
 import { daysUntil, batchStatus, expiryBadgeVariant } from '../lib/expiry'
 
 function badge(days) {
@@ -30,6 +30,9 @@ export default function BatchManager({ itemId, unit = 'pcs', item, onStockChange
   const [saving,  setSaving]  = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editForm, setEditForm] = useState(EMPTY)
+  const [wastingId, setWastingId] = useState(null)
+  const [wasteQty, setWasteQty] = useState('')
+  const [wasteReason, setWasteReason] = useState('Expired')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -102,6 +105,28 @@ export default function BatchManager({ itemId, unit = 'pcs', item, onStockChange
     } catch (err) { toast.error(err.message) }
   }
 
+  // Deduct a specific quantity from THIS batch only (never touches any
+  // other batch) -- e.g. spoilage/damage found in one particular batch, or
+  // a manual correction, without affecting batches with a different expiry.
+  const startWaste = (b) => { setWastingId(b.id); setWasteQty(''); setWasteReason('Expired') }
+  const cancelWaste = () => { setWastingId(null); setWasteQty('') }
+
+  const confirmWaste = async (b) => {
+    const qty = Number(wasteQty)
+    const remaining = Number(b.remaining_quantity ?? b.quantity ?? 0)
+    if (!qty || qty <= 0) { toast.error('Enter a valid quantity'); return }
+    if (qty > remaining) { toast.error(`Only ${remaining} ${unit} remaining in this batch`); return }
+    setSaving(true)
+    try {
+      await wasteFromBatch({ item: item || { id: itemId }, batch: b, quantity: qty, reason: wasteReason })
+      toast.success(`Wasted ${qty} ${unit} from this batch — inventory synced`)
+      cancelWaste()
+      await load()
+      onStockChanged?.()
+    } catch (err) { toast.error(err.message) }
+    setSaving(false)
+  }
+
   const totalRemaining = batches.reduce((s, b) => s + Number(b.remaining_quantity ?? b.quantity ?? 0), 0)
 
   return (
@@ -172,9 +197,31 @@ export default function BatchManager({ itemId, unit = 'pcs', item, onStockChange
                 const d = daysUntil(b.expiry_date)
                 const status = batchStatus(d)
                 const isEditing = editingId === b.id
+                const isWasting = wastingId === b.id
                 return (
                   <tr key={b.id} className="border-t border-slate-700/40">
-                    {isEditing ? (
+                    {isWasting ? (
+                      <>
+                        <td className="py-1.5 pr-2 text-slate-200 font-medium">{b.expiry_date || '—'}</td>
+                        <td className="py-1.5 pr-2">{badge(d)}</td>
+                        <td className="py-1.5 pr-2">{statusBadge(status)}</td>
+                        <td className="py-1.5 pr-2 text-slate-300">{Number(b.quantity)} {unit}</td>
+                        <td className="py-1.5 pr-2">
+                          <input type="number" min="0.01" max={Number(b.remaining_quantity ?? b.quantity)} step="0.01"
+                            className="input text-sm py-1 w-20" placeholder={`≤ ${Number(b.remaining_quantity ?? b.quantity)}`}
+                            value={wasteQty} onChange={e => setWasteQty(e.target.value)} autoFocus />
+                        </td>
+                        <td className="py-1.5 pr-2">
+                          <select className="input text-sm py-1" value={wasteReason} onChange={e => setWasteReason(e.target.value)}>
+                            <option>Expired</option><option>Damaged</option><option>Contamination</option><option>Over-Production</option><option>Other</option>
+                          </select>
+                        </td>
+                        <td className="py-1.5 pr-2 text-right whitespace-nowrap">
+                          <button onClick={() => confirmWaste(b)} disabled={saving} title="Confirm waste" className="p-1.5 text-red-400 hover:text-red-300"><Check className="w-4 h-4" /></button>
+                          <button onClick={cancelWaste} className="p-1.5 text-slate-500 hover:text-slate-300"><X className="w-4 h-4" /></button>
+                        </td>
+                      </>
+                    ) : isEditing ? (
                       <>
                         <td className="py-1.5 pr-2"><input type="date" className="input text-sm py-1 w-36" value={editForm.expiry_date} onChange={e => setEditForm(p => ({ ...p, expiry_date: e.target.value }))} /></td>
                         <td className="py-1.5 pr-2 text-slate-500">—</td>
@@ -196,6 +243,7 @@ export default function BatchManager({ itemId, unit = 'pcs', item, onStockChange
                         <td className="py-1.5 pr-2 text-teal-300 font-semibold">{Number(b.remaining_quantity ?? b.quantity)} {unit}</td>
                         <td className="py-1.5 pr-2 text-xs font-mono text-slate-500">{b.batch_code || '—'}</td>
                         <td className="py-1.5 pr-2 text-right whitespace-nowrap">
+                          <button onClick={() => startWaste(b)} title="Waste from this batch" className="p-1.5 text-slate-500 hover:text-orange-400 transition-colors"><FlaskConical className="w-4 h-4" /></button>
                           <button onClick={() => startEdit(b)} className="p-1.5 text-slate-500 hover:text-teal-300 transition-colors"><Pencil className="w-4 h-4" /></button>
                           <button onClick={() => delBatch(b.id)} className="p-1.5 text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
                         </td>

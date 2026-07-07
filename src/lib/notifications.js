@@ -17,6 +17,7 @@ const TYPE_LINK = {
   expiring: '/expiry',
   expired: '/expiry',
   boat_note_pending: '/boat-note',
+  kitchen_reminder: '/issue-no-req',
 }
 
 export async function fetchNotifications() {

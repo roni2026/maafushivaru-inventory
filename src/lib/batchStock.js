@@ -123,3 +123,42 @@ export async function deleteItemBatch(batchId) {
   const { error } = await supabase.rpc('delete_item_batch', { p_batch_id: batchId })
   if (error) throw error
 }
+
+// Deduct a specific quantity from ONE selected batch (never touches other
+// batches, never goes negative -- the DB rejects a request for more than
+// that batch's own remaining_quantity). Used by Waste and the Batch Expiry
+// manager when the user picks an exact batch instead of relying on FIFO.
+export async function deductItemBatch({ batchId, quantity, reason = 'Manual adjustment', note, updatedBy }) {
+  const { data, error } = await supabase.rpc('deduct_item_batch', {
+    p_batch_id: batchId,
+    p_quantity: Number(quantity),
+    p_reason: reason,
+    p_note: note || null,
+    p_updated_by: updatedBy || null,
+  })
+  if (error) throw error
+  return data
+}
+
+// Waste a quantity out of ONE specific batch: deducts it (deduct_item_batch,
+// batch-scoped, never corrupts other batches) AND logs a full Waste Log
+// audit row (item, batch, expiry date, quantity, timestamp, reason) in one
+// call, so every "waste from a specific batch" action anywhere in the app
+// (Waste page, Batch Expiry manager) produces identical, complete records.
+export async function wasteFromBatch({ item, batch, quantity, reason = 'Expired', note, loggedBy }) {
+  const who = loggedBy || await getCurrentUserName()
+  const qty = Number(quantity)
+  await deductItemBatch({ batchId: batch.id, quantity: qty, reason, note, updatedBy: who })
+  const { error } = await supabase.from('waste_log').insert({
+    item_id: item.id,
+    batch_id: batch.id,
+    quantity: qty,
+    reason,
+    date: new Date().toISOString().split('T')[0],
+    expiry_date: batch.expiry_date || null,
+    logged_by: who,
+    notes: note || `Wasted from batch (exp ${batch.expiry_date || 'none'})`,
+    unit_cost: Number(item.unit_cost || 0),
+  })
+  if (error) throw error
+}

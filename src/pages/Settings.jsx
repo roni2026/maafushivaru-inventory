@@ -32,6 +32,12 @@ const DEFAULTS = {
   // instead of in a burst whenever a device happens to poll.
   notification_time:      '08:00',
   notifications_enabled:  'true',
+  // Kitchen reminder schedule (persistent, deduped, only while a kitchen
+  // has an unresolved "Issue Without Req" item still pending a
+  // requisition) -- shared by Website + Android via the same notifications
+  // table generate_due_notifications() already writes to.
+  kitchen_reminder_time_main:  '08:30',
+  kitchen_reminder_time_staff: '10:30',
 }
 
 export default function Settings() {
@@ -324,6 +330,22 @@ export default function Settings() {
                 Low stock, out-of-stock, expiry and boat-note-pending alerts are generated once each and
                 delivered individually around this time every day (shared by Website + Android) — they never
                 fire all at once and never repeat for the same item until it's resolved.
+              </p>
+              <Input
+                label="Main Kitchen reminder time"
+                type="time"
+                value={form.kitchen_reminder_time_main}
+                onChange={e => setForm(f => ({ ...f, kitchen_reminder_time_main: e.target.value }))}
+              />
+              <Input
+                label="Kitchen Staff reminder time"
+                type="time"
+                value={form.kitchen_reminder_time_staff}
+                onChange={e => setForm(f => ({ ...f, kitchen_reminder_time_staff: e.target.value }))}
+              />
+              <p className="sm:col-span-2 text-xs text-slate-500 -mt-2">
+                Each kitchen gets exactly one reminder per day, only while it still has an "Issue Without Req"
+                item pending a requisition — it disappears automatically once the requisition is provided.
               </p>
             </div>
           </>

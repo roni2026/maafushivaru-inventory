@@ -11,6 +11,7 @@ import Modal from '../components/ui/Modal'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Input, { Select } from '../components/ui/Input'
 import { getCurrentUserName } from '../lib/profile'
+import { fetchItemBatches, wasteFromBatch } from '../lib/batchStock'
 
 const REASONS = ['Expired','Damaged','Contamination','Over-Production','Other']
 const REASON_COLOR  = { Expired:'#ef4444', Damaged:'#f97316', Contamination:'#a855f7', 'Over-Production':'#eab308', Other:'#64748b' }
@@ -38,6 +39,8 @@ export default function Waste() {
   const [logBy,    setLogBy]    = useState('')   // auto-filled from the signed-in user's profile — no longer typed in
   const [notes,    setNotes]    = useState('')
   const [showSug,  setShowSug]  = useState(false)
+  const [itemBatches, setItemBatches]     = useState([])   // active batches of the selected item
+  const [batchId,     setBatchId]         = useState('')   // '' = FIFO across all batches (default)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -68,28 +71,50 @@ export default function Waste() {
   const selectItem = (item) => {
     setItemSel(item); setQuery(`${item.part_number} – ${item.name}`)
     setCost(item.unit_cost||''); setShowSug(false)
+    setBatchId(''); setItemBatches([])
+    fetchItemBatches(item.id)
+      .then(rows => setItemBatches((rows || []).filter(b => Number(b.remaining_quantity ?? b.quantity ?? 0) > 0)))
+      .catch(() => {})
   }
+
+  const selectedBatch = itemBatches.find(b => b.id === batchId) || null
 
   const handleLog = async () => {
     if (!itemSel) { toast.error('Select an item'); return }
     const q=Number(qty); if (!q||q<=0) { toast.error('Enter valid quantity'); return }
+    if (selectedBatch && q > Number(selectedBatch.remaining_quantity ?? selectedBatch.quantity ?? 0)) {
+      toast.error(`Only ${selectedBatch.remaining_quantity ?? selectedBatch.quantity} ${itemSel.unit} remaining in that batch`); return
+    }
     setSaving(true)
     try {
-      // Waste consumes stock FIFO from existing Batch Expiry batches via the
-      // shared adjust_item_stock RPC -- current_stock is never written
-      // directly, it is always recalculated as SUM(remaining_quantity).
-      const { error: adjErr } = await supabase.rpc('adjust_item_stock', {
-        p_item_id: itemSel.id, p_delta: -q, p_note: `Waste – ${reason}`, p_updated_by: logBy||'System',
-      })
-      if (adjErr) throw adjErr
-      const { data: w } = await supabase.from('waste_log')
-        .insert({ item_id:itemSel.id, quantity:q, reason, date, logged_by:logBy||'System', notes, unit_cost:Number(cost)||0 })
-        .select('*, items(name,part_number,unit,stores(name))').single()
+      let w
+      if (selectedBatch) {
+        // Deduct only from the SELECTED batch (never touches any other
+        // batch of this item) via the shared deduct_item_batch RPC.
+        await wasteFromBatch({ item: itemSel, batch: selectedBatch, quantity: q, reason, note: notes, loggedBy: logBy || 'System' })
+        const { data } = await supabase.from('waste_log')
+          .select('*, items(name,part_number,unit,stores(name))')
+          .order('created_at', { ascending: false }).limit(1).single()
+        w = data
+      } else {
+        // No specific batch chosen -- FIFO across all of this item's
+        // batches via the shared adjust_item_stock RPC. current_stock is
+        // never written directly, it is always recalculated as
+        // SUM(remaining_quantity).
+        const { error: adjErr } = await supabase.rpc('adjust_item_stock', {
+          p_item_id: itemSel.id, p_delta: -q, p_note: `Waste – ${reason}`, p_updated_by: logBy||'System',
+        })
+        if (adjErr) throw adjErr
+        const { data } = await supabase.from('waste_log')
+          .insert({ item_id:itemSel.id, quantity:q, reason, date, logged_by:logBy||'System', notes, unit_cost:Number(cost)||0 })
+          .select('*, items(name,part_number,unit,stores(name))').single()
+        w = data
+      }
       setWasteLog(prev=>[w,...prev])
       const { data: refreshed } = await supabase.from('items').select('current_stock').eq('id', itemSel.id).single()
       setItems(prev=>prev.map(i=>i.id===itemSel.id?{...i,current_stock:refreshed?.current_stock ?? i.current_stock}:i))
       toast.success(`Waste logged: ${q} ${itemSel.unit} of ${itemSel.name}`)
-      setShowModal(false); setItemSel(null); setQuery(''); setQty(''); setNotes(''); setCost('')
+      setShowModal(false); setItemSel(null); setQuery(''); setQty(''); setNotes(''); setCost(''); setBatchId(''); setItemBatches([])
     } catch(err) { toast.error(err.message) }
     setSaving(false)
   }
@@ -112,8 +137,8 @@ export default function Waste() {
   })).filter(d=>d.count>0)
 
   const exportCSV = () => {
-    const h=['Date','Part #','Item','Store','Reason','Qty','Unit','Unit Cost','Total Cost','Logged By','Notes']
-    const rows=filtered.map(w=>[w.date,w.items?.part_number,w.items?.name,w.items?.stores?.name,w.reason,w.quantity,w.items?.unit,w.unit_cost||0,(Number(w.quantity)*Number(w.unit_cost||0)).toFixed(2),w.logged_by||'',w.notes||''])
+    const h=['Date','Part #','Item','Store','Reason','Qty','Unit','Batch Expiry','Unit Cost','Total Cost','Logged By','Notes']
+    const rows=filtered.map(w=>[w.date,w.items?.part_number,w.items?.name,w.items?.stores?.name,w.reason,w.quantity,w.items?.unit,w.expiry_date||'',w.unit_cost||0,(Number(w.quantity)*Number(w.unit_cost||0)).toFixed(2),w.logged_by||'',w.notes||''])
     const csv=[h,...rows].map(r=>r.map(v=>`"${v}"`).join(',')).join('\n')
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'})); a.download=`waste_${dateFrom}_${dateTo}.csv`; a.click()
     toast.success('CSV exported')
@@ -189,7 +214,7 @@ export default function Waste() {
         <div className="card text-center py-16 text-slate-500"><Trash2 className="w-12 h-12 mx-auto mb-3 opacity-20" /><p className="font-medium">No waste records</p><p className="text-sm mt-1">Click "Log Waste" to record a disposal.</p></div>
       ) : (
         <Table>
-          <Thead><tr><Th {...thProps('date')}>Date</Th><Th {...thProps('items.part_number')}>Part #</Th><Th {...thProps('items.name')}>Item Name</Th><Th {...thProps('items.stores.name')}>Store</Th><Th {...thProps('reason')}>Reason</Th><Th {...thProps('quantity')}>Qty</Th><Th {...thProps('unit_cost')}>Est. Cost</Th><Th {...thProps('logged_by')}>Logged By</Th><Th {...thProps('notes')}>Notes</Th></tr></Thead>
+          <Thead><tr><Th {...thProps('date')}>Date</Th><Th {...thProps('items.part_number')}>Part #</Th><Th {...thProps('items.name')}>Item Name</Th><Th {...thProps('items.stores.name')}>Store</Th><Th {...thProps('reason')}>Reason</Th><Th {...thProps('quantity')}>Qty</Th><Th {...thProps('expiry_date')}>Batch Expiry</Th><Th {...thProps('unit_cost')}>Est. Cost</Th><Th {...thProps('logged_by')}>Logged By</Th><Th {...thProps('notes')}>Notes</Th></tr></Thead>
           <Tbody>
             {sorted.map(w=>(
               <Tr key={w.id}>
@@ -199,6 +224,7 @@ export default function Waste() {
                 <Td className="text-slate-400 text-xs">{w.items?.stores?.name}</Td>
                 <Td><Badge variant={REASON_BADGE[w.reason]||'gray'}>{w.reason}</Badge></Td>
                 <Td className="text-red-400 font-semibold">{w.quantity} <span className="text-slate-500 text-xs font-normal">{w.items?.unit}</span></Td>
+                <Td className="text-slate-400 text-xs whitespace-nowrap">{w.expiry_date || (w.batch_id ? '—' : 'FIFO')}</Td>
                 <Td className="text-slate-300">${(Number(w.quantity)*Number(w.unit_cost||0)).toFixed(2)}</Td>
                 <Td className="text-slate-400 text-xs">{w.logged_by||'—'}</Td>
                 <Td className="text-slate-500 text-xs max-w-xs truncate">{w.notes||'—'}</Td>
@@ -232,11 +258,24 @@ export default function Waste() {
             </div>
           </div>
           {itemSel&&<div className="bg-slate-700/40 rounded-lg p-3 text-sm"><p className="font-medium text-slate-100">{itemSel.name}</p><p className="text-slate-400 text-xs">In stock: <strong className="text-teal-400">{itemSel.current_stock} {itemSel.unit}</strong></p></div>}
+          {itemSel&&itemBatches.length>0&&(
+            <Select label="Batch (optional)" value={batchId} onChange={e=>setBatchId(e.target.value)}>
+              <option value="">Auto — oldest expiry first (FIFO)</option>
+              {itemBatches.map(b=>(
+                <option key={b.id} value={b.id}>
+                  {b.expiry_date ? `Exp ${b.expiry_date}` : 'No expiry'} — {Number(b.remaining_quantity ?? b.quantity)} {itemSel.unit} remaining
+                </option>
+              ))}
+            </Select>
+          )}
+          {selectedBatch && (
+            <p className="text-xs text-slate-500 -mt-2">Deducting only from this batch — other batches of {itemSel.name} are untouched.</p>
+          )}
           <Select label="Reason *" value={reason} onChange={e=>setReason(e.target.value)}>
             {REASONS.map(r=><option key={r}>{r}</option>)}
           </Select>
           <div className="grid grid-cols-2 gap-3">
-            <Input label={`Quantity${itemSel?` (${itemSel.unit})`:''} *`} type="number" min="0.01" step="0.01" value={qty} onChange={e=>setQty(e.target.value)} />
+            <Input label={`Quantity${itemSel?` (${itemSel.unit})`:''} *`} type="number" min="0.01" max={selectedBatch ? Number(selectedBatch.remaining_quantity ?? selectedBatch.quantity) : undefined} step="0.01" value={qty} onChange={e=>setQty(e.target.value)} />
             <Input label="Unit Cost ($)" type="number" min="0" step="0.01" value={cost} onChange={e=>setCost(e.target.value)} />
           </div>
           <Input label="Date" type="date" value={date} onChange={e=>setDate(e.target.value)} />
