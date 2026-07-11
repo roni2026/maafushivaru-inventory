@@ -12,18 +12,12 @@ import {
 import Badge from '../components/ui/Badge'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { daysUntil } from '../lib/expiry'
 
 // ── Colour palette ─────────────────────────────────────────
 const CHART_COLORS = ['#0d9488','#0369a1','#6366f1','#a855f7','#ec4899','#f97316','#eab308','#22c55e']
 const HEALTH_COLORS = { good:'#22c55e', ok:'#0d9488', low:'#f97316', out:'#ef4444' }
 
-// ── Util ───────────────────────────────────────────────────
-function daysUntil(d) {
-  if (!d) return null
-  const e = new Date(d); e.setHours(0,0,0,0)
-  const n = new Date();  n.setHours(0,0,0,0)
-  return Math.ceil((e - n) / 86400000)
-}
 
 // ── Custom recharts tooltip ────────────────────────────────
 function ChartTip({ active, payload, label }) {

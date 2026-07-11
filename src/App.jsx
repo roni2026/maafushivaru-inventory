@@ -4,6 +4,7 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import { supabase } from './lib/supabase'
 import Layout        from './components/Layout'
 import Login         from './pages/Login'
+import ErrorBoundary from './components/ErrorBoundary'
 
 import NotFound      from './pages/NotFound'
 
@@ -49,7 +50,10 @@ export default function App() {
   const [session, setSession] = useState(undefined)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session)).catch(err => {
+      console.error('Failed to get session:', err)
+      setSession(null)
+    })
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s))
     return () => subscription.unsubscribe()
   }, [])
@@ -62,7 +66,9 @@ export default function App() {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+        supabase.auth.getSession().then(({ data: { session } }) => setSession(session)).catch(err => {
+          console.error('Failed to refresh session on focus:', err)
+        })
       }
     }
     document.addEventListener('visibilitychange', onVisible)
@@ -96,8 +102,9 @@ export default function App() {
         <Route path="/*" element={
           <ProtectedRoute session={session}>
             <Layout session={session}>
-              <Suspense fallback={<PageLoader />}>
-                <Routes>
+              <ErrorBoundary>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
                   <Route index                element={<Dashboard />}     />
                   <Route path="inventory"     element={<Inventory />}     />
                   <Route path="inventory/:id" element={<ItemDetail />}    />
@@ -123,6 +130,7 @@ export default function App() {
                   <Route path="*"             element={<NotFound />}      />
                 </Routes>
               </Suspense>
+              </ErrorBoundary>
             </Layout>
           </ProtectedRoute>
         } />

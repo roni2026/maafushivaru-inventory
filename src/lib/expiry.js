@@ -11,9 +11,15 @@ export const EXPIRY_RANGE_DAYS = 120   // 4-month look-ahead window
 
 export function daysUntil(d) {
   if (!d) return null
-  const exp = new Date(d); exp.setHours(0, 0, 0, 0)
-  const now = new Date(); now.setHours(0, 0, 0, 0)
-  return Math.ceil((exp - now) / 86400000)
+  const exp = new Date(d)
+  // Guard against invalid dates (NaN, malformed strings, etc.)
+  if (isNaN(exp.getTime())) return null
+  exp.setHours(0, 0, 0, 0)
+  const now = new Date()
+  now.setHours(0, 0, 0, 0)
+  // Use round instead of ceil to avoid off-by-one when DST transitions
+  // shift the millisecond delta by an hour (3600000ms = 1/24 of a day).
+  return Math.round((exp - now) / 86400000)
 }
 
 // The reminder thresholds the user can toggle, in send-priority order.

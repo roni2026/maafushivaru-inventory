@@ -30,7 +30,7 @@ export default function IssuanceScan() {
 
   useEffect(() => {
     selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,stores(name)').eq('active', true))
-      .then(({ data }) => setItems(data || []))
+      .then(({ data }) => setItems(data || [])).catch(() => {})
   }, [])
 
   // ── Upload + OCR + parse ────────────────────────────────────────────

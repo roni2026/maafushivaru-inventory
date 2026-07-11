@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase, selectAll } from '../lib/supabase'
+import { daysUntil } from '../lib/expiry'
 import {
   BarChart2, Download, RefreshCw, Mail, Package, TrendingUp, AlertTriangle,
   Undo2, Trash2, Building2, LayoutDashboard,
@@ -14,12 +15,6 @@ import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import SendReportModal from '../components/SendReportModal'
 
-function daysUntil(d) {
-  if (!d) return null
-  const exp = new Date(d); exp.setHours(0, 0, 0, 0)
-  const now = new Date();  now.setHours(0, 0, 0, 0)
-  return Math.ceil((exp - now) / 86400000)
-}
 function isoWeek(dateStr) {
   if (!dateStr) return '—'
   const d = new Date(String(dateStr).slice(0, 10) + 'T00:00:00')

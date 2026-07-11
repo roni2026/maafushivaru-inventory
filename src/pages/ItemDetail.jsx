@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { daysUntil } from '../lib/expiry'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell
@@ -23,11 +24,6 @@ function fmtWhen(ts) {
   catch { return ts }
 }
 
-function daysUntil(d) {
-  if (!d) return null
-  const e=new Date(d);e.setHours(0,0,0,0);const n=new Date();n.setHours(0,0,0,0)
-  return Math.ceil((e-n)/86400000)
-}
 function statusBadge(days) {
   if (days===null) return <Badge variant="gray">No expiry</Badge>
   if (days<0)      return <Badge variant="red">Expired {Math.abs(days)}d ago</Badge>

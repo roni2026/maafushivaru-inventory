@@ -59,7 +59,7 @@ export default function Waste() {
   // Auto-fill the "logged by" name from the signed-in user's profile —
   // no more typing your name in every time.
   useEffect(() => {
-    getCurrentUserName().then(name => { if (name && name !== 'Unknown') setLogBy(name) })
+    getCurrentUserName().then(name => { if (name && name !== 'Unknown') setLogBy(name) }).catch(() => {})
   }, [])
 
   const suggestions = useMemo(() => {
@@ -73,7 +73,7 @@ export default function Waste() {
     setCost(item.unit_cost||''); setShowSug(false)
     setBatchId(''); setItemBatches([])
     fetchItemBatches(item.id)
-      .then(rows => setItemBatches((rows || []).filter(b => Number(b.remaining_quantity ?? b.quantity ?? 0) > 0)))
+      .then(rows => setItemBatches((rows || []).filter(b => Number(b.remaining_quantity ?? b.quantity ?? 0) > 0))).catch(() => {})
       .catch(() => {})
   }
 

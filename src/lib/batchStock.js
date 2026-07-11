@@ -62,18 +62,23 @@ export async function addStockBatches(item, lines, { loggedBy } = {}) {
   // 2) Still-good lines → one upsert_item_batch RPC call each. The DB
   //    trigger recalculates items.current_stock = SUM(remaining_quantity)
   //    automatically — no manual math here.
+  //    Fire all upsert calls in parallel (they're independent) to cut
+  //    round-trips from N sequential awaits to a single concurrent batch.
   if (toAdd.length) {
-    for (const b of toAdd) {
-      const { error } = await supabase.rpc('upsert_item_batch', {
-        p_batch_id: null,
-        p_item_id: item.id,
-        p_expiry_date: b.expiry_date || null,
-        p_quantity: b.quantity,
-        p_batch_code: b.batch_code || null,
-        p_note: b.note || null,
-      })
-      if (error) throw error
-    }
+    const results = await Promise.all(
+      toAdd.map(b =>
+        supabase.rpc('upsert_item_batch', {
+          p_batch_id: null,
+          p_item_id: item.id,
+          p_expiry_date: b.expiry_date || null,
+          p_quantity: b.quantity,
+          p_batch_code: b.batch_code || null,
+          p_note: b.note || null,
+        })
+      )
+    )
+    const firstErr = results.find(r => r.error)
+    if (firstErr) throw firstErr.error
 
     try {
       await supabase.from('stock_updates').insert({
@@ -148,7 +153,16 @@ export async function deductItemBatch({ batchId, quantity, reason = 'Manual adju
 export async function wasteFromBatch({ item, batch, quantity, reason = 'Expired', note, loggedBy }) {
   const who = loggedBy || await getCurrentUserName()
   const qty = Number(quantity)
-  await deductItemBatch({ batchId: batch.id, quantity: qty, reason, note, updatedBy: who })
+  if (!batch?.id) throw new Error('Batch ID is required for waste operation')
+  if (isNaN(qty) || qty <= 0) throw new Error('Quantity must be a positive number')
+
+  // Deduct from the batch first (batch-scoped, never corrupts other batches).
+  const deductResult = await deductItemBatch({ batchId: batch.id, quantity: qty, reason, note, updatedBy: who })
+
+  // Then log the waste audit row. If this fails after a successful deduct,
+  // the stock is already reduced — we throw with a descriptive message so
+  // the caller can inform the user that the deduction succeeded but the
+  // audit log entry failed.
   const { error } = await supabase.from('waste_log').insert({
     item_id: item.id,
     batch_id: batch.id,
@@ -160,5 +174,11 @@ export async function wasteFromBatch({ item, batch, quantity, reason = 'Expired'
     notes: note || `Wasted from batch (exp ${batch.expiry_date || 'none'})`,
     unit_cost: Number(item.unit_cost || 0),
   })
-  if (error) throw error
+  if (error) {
+    throw new Error(
+      `Stock was deducted but the waste log entry failed: ${error.message}. ` +
+      `Please record this manually — item ${item.id}, batch ${batch.id}, qty ${qty}.`
+    )
+  }
+  return deductResult
 }

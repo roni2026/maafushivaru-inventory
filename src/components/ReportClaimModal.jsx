@@ -59,7 +59,7 @@ export default function ReportClaimModal({ prefill = {}, onClose, onSaved }) {
     // Load items only if no item was prefilled (manual claim entry)
     if (!prefill.item_id) {
       selectAll(() => supabase.from('items').select('id,name,part_number,unit,supplier,stores(name)').eq('active', true).order('name'))
-        .then(({ data }) => setItems(data || []))
+        .then(({ data }) => setItems(data || [])).catch(() => {})
     }
   }, [prefill.item_id])
 

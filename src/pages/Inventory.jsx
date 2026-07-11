@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { daysUntil } from '../lib/expiry'
 import {
   Plus, Search, Pencil, Trash2, RefreshCw, PackagePlus,
   Download, Upload, ExternalLink, Printer, Camera, MapPin, X,
@@ -20,11 +21,6 @@ import BatchManager from '../components/BatchManager'
 import { addStockBatches } from '../lib/batchStock'
 
 // ── helpers ───────────────────────────────────────────────
-function daysUntil(d) {
-  if (!d) return null
-  const exp=new Date(d);exp.setHours(0,0,0,0);const now=new Date();now.setHours(0,0,0,0)
-  return Math.ceil((exp-now)/86400000)
-}
 function rowClass(days){
   if(days===null) return 'row-none'
   if(days<0||days<=7) return 'row-expired'

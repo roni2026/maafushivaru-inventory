@@ -9,19 +9,76 @@ if (!supabaseUrl || !supabaseAnonKey) {
   )
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    // Explicit (rather than relying on library defaults) so a session survives
-    // closing the tab/browser and stays valid for as long as the refresh
-    // token is valid — this is what makes login "persistent" instead of
-    // silently expiring after the ~1hr access-token lifetime.
-    persistSession: true,
-    autoRefreshToken: true,
-    storage: window.localStorage,
-    storageKey: 'outrigger-inventory-auth',
-    detectSessionInUrl: true,
-  },
-})
+// ── Singleton guard ──────────────────────────────────────────────────────
+// In React 18 StrictMode (dev) and with HMR, module-level code can re-execute.
+// Creating multiple Supabase clients leads to duplicate auth listeners, stale
+// GoTrue WebSocket connections, and memory leaks. Guard with a global so only
+// one client ever exists per browser tab.
+const GLOBAL_KEY = '__outrigger_supabase_client__'
+
+let supabase
+
+if (window[GLOBAL_KEY]) {
+  supabase = window[GLOBAL_KEY]
+} else {
+  supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      // Explicit (rather than relying on library defaults) so a session survives
+      // closing the tab/browser and stays valid for as long as the refresh
+      // token is valid — this is what makes login "persistent" instead of
+      // silently expiring after the ~1hr access-token lifetime.
+      persistSession: true,
+      autoRefreshToken: true,
+      storage: window.localStorage,
+      storageKey: 'outrigger-inventory-auth',
+      detectSessionInUrl: true,
+    },
+    global: {
+      fetch: (...args) => {
+        // Wrap fetch with a retry for transient network errors (timeout,
+        // network offline, 5xx). This prevents a single dropped packet from
+        // failing an entire data load — the Supabase JS SDK itself has no
+        // built-in retry for non-auth requests.
+        return retryFetch(fetch, 2, 800)(...args)
+      },
+    },
+  })
+  window[GLOBAL_KEY] = supabase
+}
+
+// ── Retry-aware fetch wrapper ────────────────────────────────────────────
+// Retries on network errors and 5xx responses with exponential backoff.
+// Returns the original fetch signature so it's a transparent drop-in.
+function retryFetch(originalFetch, maxRetries, baseDelay) {
+  return async (input, init) => {
+    let lastError
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const response = await originalFetch(input, init)
+        // Retry on server errors (likely transient)
+        if (response.status >= 500 && attempt < maxRetries) {
+          await sleep(baseDelay * Math.pow(2, attempt))
+          continue
+        }
+        return response
+      } catch (err) {
+        lastError = err
+        // Network-level error (DNS, timeout, offline) — retry with backoff
+        if (attempt < maxRetries) {
+          await sleep(baseDelay * Math.pow(2, attempt))
+          continue
+        }
+      }
+    }
+    throw lastError
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+export { supabase }
 
 // ───────────────────────────────────────────────────────────────────────────
 // fetchAllRows — paginate past Supabase's hard 1,000-row response cap.

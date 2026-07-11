@@ -78,6 +78,9 @@ export default function Settings() {
         setForm(f => ({ ...f, ...smap }))
       }
       setLoading(false)
+    }).catch(err => {
+      console.error('Failed to load settings:', err)
+      setLoading(false)
     })
   }, [])
 

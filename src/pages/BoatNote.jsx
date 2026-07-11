@@ -326,7 +326,7 @@ function UploadFlow({ onSaved }) {
 
   useEffect(() => {
     selectAll(() => supabase.from('items').select('id,name,part_number').eq('active', true))
-      .then(({ data }) => setItems(data || []))
+      .then(({ data }) => setItems(data || [])).catch(() => {})
   }, [])
   const byCode = useMemo(() => {
     const m = new Map(); for (const it of items) m.set(cleanCode(it.part_number), it); return m
@@ -535,7 +535,7 @@ function BoatNoteHistory() {
     // Include inactive items too — they must still be matchable so receiving
     // a delivery for a deactivated item reactivates it automatically.
     selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,expiry_date,origin,active'))
-      .then(({ data }) => setInventory(data || []))
+      .then(({ data }) => setInventory(data || [])).catch(() => {})
   }, [])
 
   const load = useCallback(async () => {

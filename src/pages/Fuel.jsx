@@ -66,7 +66,7 @@ export default function Fuel() {
   useEffect(() => {
     loadMonths()
     supabase.from('settings').select('key,value').eq('key', 'ocr_space_api_key')
-      .then(({ data }) => { if (data?.[0]?.value) setApiKey(data[0].value) })
+      .then(({ data }) => { if (data?.[0]?.value) setApiKey(data[0].value) }).catch(() => {})
   }, [loadMonths])
 
   useEffect(() => { load(month) }, [month, load])

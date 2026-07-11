@@ -60,7 +60,7 @@ function AnalyzeFlow() {
 
   useEffect(() => {
     selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,unit_cost').eq('active', true))
-      .then(({ data }) => setItems(data || []))
+      .then(({ data }) => setItems(data || [])).catch(() => {})
   }, [])
   const byCode = useMemo(() => {
     const m = new Map(); for (const it of items) m.set(cleanCode(it.part_number), it); return m
