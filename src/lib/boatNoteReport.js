@@ -18,7 +18,8 @@ const WHITE      = 'FFFFFFFF'
 
 // Category order + presentation colours.
 export const CATEGORIES = [
-  { key: 'received',    label: 'Received',    xlsx: 'FF15803D', hex: '#15803d', bg: 'FFDCFCE7' },
+  { key: 'received',    label: 'In Inventory', xlsx: 'FF15803D', hex: '#15803d', bg: 'FFDCFCE7' },
+  { key: 'arrived',     label: 'Arrived (not posted)', xlsx: 'FF0F766E', hex: '#0f766e', bg: 'FFCCFBF1' },
   { key: 'damaged',     label: 'Damaged',     xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFFE4E6' },
   { key: 'wrong_item',  label: 'Wrong Item',  xlsx: 'FFEA580C', hex: '#ea580c', bg: 'FFFFEDD5' },
   { key: 'not_arrived', label: 'Not Arrived', xlsx: 'FFDC2626', hex: '#dc2626', bg: 'FFFEE2E2' },

@@ -30,8 +30,10 @@ const STAGE = { UPLOAD: 'upload', PREVIEW: 'preview' }
 
 // Per-line outcome badge.
 function StatusBadge({ status }) {
-  if (status === 'received')    return <Badge variant="green">received</Badge>
+  if (status === 'received')    return <Badge variant="green">in inventory</Badge>
+  if (status === 'arrived')     return <Badge variant="teal">arrived</Badge>
   if (status === 'damaged')     return <Badge variant="red">damaged</Badge>
+  if (status === 'short')       return <Badge variant="yellow">short</Badge>
   if (status === 'not_arrived') return <Badge variant="red">not arrived</Badge>
   if (status === 'wrong_item')  return <Badge variant="orange">wrong item</Badge>
   if (status === 'skipped')     return <Badge variant="orange">unmatched</Badge>
@@ -167,7 +169,7 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
       const lines = scopedLines
       const sendNote = picked.length ? { ...note, label: `${note.label || note.note_date || 'Boat Note'} · ${picked.join(', ')}` } : note
       const counts = { total: lines.length }
-      const known = ['received', 'damaged', 'wrong_item', 'not_arrived', 'short']
+      const known = ['received', 'arrived', 'damaged', 'wrong_item', 'not_arrived', 'short']
       CATEGORIES.forEach(c => {
         counts[c.key] = lines.filter(l =>
           c.key === 'pending' ? !known.includes(l.status) : l.status === c.key
@@ -530,6 +532,7 @@ function BoatNoteHistory() {
   const [issuing, setIssuing]     = useState(null)   // boat_note_item being flagged not-arrived/wrong
   const [statusFilter, setStatusFilter] = useState('all')  // all | pending | partially_delivered | delivered | cancelled
   const [confirmingId, setConfirmingId] = useState(null)
+  const [updatingId, setUpdatingId] = useState(null)
 
   useEffect(() => {
     // Include inactive items too — they must still be matchable so receiving
@@ -575,24 +578,48 @@ function BoatNoteHistory() {
     }
   }
 
-  // Weekly Order -> Boat Note -> Waiting for Delivery -> Items Arrive ->
-  // Confirm Delivery -> Inventory Updated. This is the final step: it posts
-  // every not-yet-posted, non-problem line to a Batch Expiry entry in one
-  // shot (safe to press more than once -- already-posted lines are
-  // skipped), moves the note to Delivered / Partially Delivered, and logs a
-  // boat_note_events entry. Individual "Receive" per line above still works
-  // for granular control; this is the one-click bulk alternative.
+  // Two-step flow:
+  //   1) Confirm Arrived  — marks pending lines as arrived (no stock change)
+  //   2) Update Inventory — posts only arrived / good damaged-short lines
+  //                         into Batch Expiry. Idempotent via posted_to_inventory.
   const confirmDelivery = async (n) => {
-    if (!confirm(`Confirm delivery for "${n.label || n.note_date}"? Remaining pending lines will be added to inventory as Batch Expiry entries.`)) return
+    if (!confirm(`Confirm arrival for "${n.label || n.note_date}"? Pending lines will be marked arrived. Inventory is NOT updated yet — use Update Inventory for that.`)) return
     setConfirmingId(n.id)
     try {
       const actor = await currentActor()
       const { data, error } = await supabase.rpc('confirm_boat_note', { p_boat_note_id: n.id, p_actor: actor })
       if (error) throw error
-      setNotes(list => list.map(x => x.id === n.id ? { ...x, status: data?.status || x.status, posted_items: data?.posted_items ?? x.posted_items, total_items: data?.total_items ?? x.total_items } : x))
+      setNotes(list => list.map(x => x.id === n.id ? {
+        ...x,
+        status: data?.status || x.status,
+        posted_items: data?.posted_items ?? x.posted_items,
+        total_items: data?.total_items ?? x.total_items,
+      } : x))
       if (itemsMap[n.id]) await loadItems(n.id)
-      toast.success(`Delivery confirmed \u2014 ${data?.status === 'delivered' ? 'fully delivered' : 'partially delivered'}`)
+      toast.success(`Arrival confirmed · ${data?.arrived_now || 0} new line(s) marked arrived`)
     } catch (err) { toast.error(err.message) } finally { setConfirmingId(null) }
+  }
+
+  const updateInventory = async (n) => {
+    if (!confirm(`Update inventory for "${n.label || n.note_date}"? Only confirmed arrived items (not already posted) will be added. Clicking twice will not double quantity.`)) return
+    setUpdatingId(n.id)
+    try {
+      const actor = await currentActor()
+      const { data, error } = await supabase.rpc('update_boat_note_inventory', { p_boat_note_id: n.id, p_actor: actor })
+      if (error) throw error
+      setNotes(list => list.map(x => x.id === n.id ? {
+        ...x,
+        status: data?.status || x.status,
+        posted_items: data?.posted_items ?? x.posted_items,
+        total_items: data?.total_items ?? x.total_items,
+      } : x))
+      if (itemsMap[n.id]) await loadItems(n.id)
+      const posted = data?.posted_now ?? 0
+      const skipped = data?.skipped_already ?? 0
+      toast.success(posted > 0
+        ? `Inventory updated · ${posted} new item(s) posted${skipped ? ` · ${skipped} already posted (skipped)` : ''}`
+        : `Nothing new to post${skipped ? ` · ${skipped} already in inventory` : ''}`)
+    } catch (err) { toast.error(err.message) } finally { setUpdatingId(null) }
   }
 
   const STATUS_LABEL = { pending: 'Pending', partially_delivered: 'Partially Delivered', delivered: 'Delivered', cancelled: 'Cancelled', draft: 'Pending', verified: 'Pending', posted: 'Delivered' }
@@ -652,11 +679,17 @@ function BoatNoteHistory() {
             </button>
             <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
               <Badge variant={STATUS_TONE[n.status] || 'gray'}>{STATUS_LABEL[n.status] || n.status}</Badge>
-              <Badge variant="teal">{n.posted_items || 0}/{n.total_items} received</Badge>
+              <Badge variant="teal">{n.posted_items || 0}/{n.total_items} in inventory</Badge>
               {canConfirm && (
-                <button onClick={() => confirmDelivery(n)} disabled={confirmingId === n.id}
-                  className="btn-secondary btn-sm disabled:opacity-50" title="Confirm delivery -- posts remaining lines to inventory">
-                  <CheckCircle2 className="w-4 h-4" /> {confirmingId === n.id ? 'Confirming…' : 'Confirm Delivery'}
+                <button onClick={() => confirmDelivery(n)} disabled={confirmingId === n.id || updatingId === n.id}
+                  className="btn-secondary btn-sm disabled:opacity-50" title="Mark remaining pending lines as arrived (no stock change)">
+                  <CheckCircle2 className="w-4 h-4" /> {confirmingId === n.id ? 'Confirming…' : 'Confirm Arrived'}
+                </button>
+              )}
+              {(canConfirm || normStatus === 'delivered' || normStatus === 'partially_delivered') && (
+                <button onClick={() => updateInventory(n)} disabled={updatingId === n.id || confirmingId === n.id}
+                  className="btn-primary btn-sm disabled:opacity-50" title="Post confirmed arrived items into inventory (safe to press more than once)">
+                  <PackageCheck className="w-4 h-4" /> {updatingId === n.id ? 'Updating…' : 'Update Inventory'}
                 </button>
               )}
               <ReportActions note={n} getLines={async () => {
@@ -817,11 +850,17 @@ function NoteItemsTable({ items, onReceive, onIssue }) {
                 <Td className="text-slate-400 text-xs">{it.expiry_date || '—'}</Td>
                 <Td><StatusBadge status={it.status} /></Td>
                 <Td>
-                  {it.status === 'received' ? (
-                    <span className="text-xs text-green-400 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> done</span>
+                  {it.status === 'received' || it.posted_to_inventory ? (
+                    <span className="text-xs text-green-400 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> in inventory</span>
+                  ) : it.status === 'arrived' ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-teal-300 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> arrived</span>
+                      <button onClick={() => onIssue(it)} title="Change to not arrived / problem"
+                        className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-900/20"><AlertTriangle className="w-4 h-4" /></button>
+                    </div>
                   ) : (
                     <div className="flex items-center gap-1.5">
-                      <Button size="sm" variant="secondary" onClick={() => onReceive(it)}><PackageCheck className="w-4 h-4" /> Receive</Button>
+                      <Button size="sm" variant="secondary" onClick={() => onReceive(it)}><PackageCheck className="w-4 h-4" /> Confirm Arrived</Button>
                       <button onClick={() => onIssue(it)} title="Not arrived / wrong item"
                         className="p-1.5 rounded-lg text-amber-400 hover:bg-amber-900/20"><AlertTriangle className="w-4 h-4" /></button>
                     </div>
@@ -862,82 +901,55 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
   const delBatch = (id) => setBatches(prev => prev.length > 1 ? prev.filter(b => b.id !== id) : prev)
 
   const post = async () => {
-    if (!itemId) { toast.error('Pick the inventory item to receive into'); return }
-    if (totalQty <= 0) { toast.error('Enter a received quantity'); return }
+    if (!itemId) { toast.error('Pick the inventory item this line maps to'); return }
+    if (totalQty <= 0) { toast.error('Enter the arrived quantity'); return }
     setBusy(true)
     try {
       const dated = batches.filter(b => b.expiry_date && Number(b.quantity) > 0)
+      const earliest = dated.map(b => b.expiry_date).sort()[0] || null
+      const actor = note.created_by || (await currentActor())
 
-      // Stock is owned by Batch Expiry -- current_stock is NEVER written
-      // directly here anymore. Each upsert_item_batch RPC call below creates
-      // the batch AND recalculates items.current_stock = SUM(remaining_
-      // quantity) automatically, which is what fixes boat-note receiving
-      // from double-counting stock (batch qty + a manual current_stock add).
+      // Confirm arrival only — stock is added later via Update Inventory
+      // (idempotent). We only link the inventory item + record qty/expiry.
       const upd = { active: true }
       if (!invItem?.origin) upd.origin = classifyOrigin(line.product_name)
       const { error: uErr } = await supabase.from('items').update(upd).eq('id', itemId)
       if (uErr) throw uErr
 
-      await supabase.from('receiving').insert({
-        item_id: itemId, item_name: invItem?.name || line.product_name, date: note.note_date,
-        quantity_received: totalQty, unit: line.unit, supplier_name: line.supplier,
-        received_by: note.created_by || 'Roni', invoice_number: line.po_number, note: `Boat note: ${note.label || note.note_date}`,
-      }).catch(() => {})
-
-      // One Batch Expiry entry per expiry date (multiple expiry dates
-      // supported) -- the shared RPC used by the Android app too.
-      for (const b of dated) {
-        await supabase.rpc('upsert_item_batch', {
-          p_batch_id: null, p_item_id: itemId, p_expiry_date: b.expiry_date, p_quantity: Number(b.quantity) || 0,
-          p_note: `Boat note ${note.label || note.note_date}`,
-        }).catch(() => {})
-      }
-      // If no dated batches but qty given, still record a no-expiry batch.
-      if (!dated.length) {
-        await supabase.rpc('upsert_item_batch', {
-          p_batch_id: null, p_item_id: itemId, p_expiry_date: null, p_quantity: totalQty,
-          p_note: `Boat note ${note.label || note.note_date}`,
-        }).catch(() => {})
-      }
-
-      const earliest = dated.map(b => b.expiry_date).sort()[0] || null
-      await supabase.from('stock_updates').insert({
-        item_id: itemId, date: note.note_date, quantity_change: totalQty, new_quantity: null,
-        updated_by: note.created_by || 'Roni', note: `Boat note ${note.label || note.note_date}`,
-      }).catch(() => {})
-
-      const actor = note.created_by || (await currentActor())
       const patch = {
-        received_qty: totalQty, expiry_date: earliest, status: 'received', matched: true, item_id: itemId,
-        received_by: actor, received_at: new Date().toISOString(),
+        received_qty: totalQty,
+        expiry_date: earliest,
+        status: 'arrived',
+        matched: true,
+        item_id: itemId,
+        received_by: actor,
+        received_at: new Date().toISOString(),
+        // store multi-batch detail in note field if more than one expiry
+        note: dated.length > 1
+          ? `Batches: ${dated.map(b => `${b.quantity}@${b.expiry_date}`).join(', ')}`
+          : (line.note || null),
       }
       const { error: lErr } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
       if (lErr) throw lErr
 
-      // Per-item activity trail.
-      logItemActivity(itemId, 'received', `Received ${totalQty} ${line.unit || ''} · Boat note ${note.label || note.note_date}`)
-
-      // Persistent boat-note history entry.
-      logBoatNoteEvent(note.id, 'received', {
+      logBoatNoteEvent(note.id, 'arrived', {
         boatNoteItemId: line.id, actor,
         partNumber: line.part_number, productName: line.product_name, department: line.department,
-        qty: totalQty, detail: `Received into ${invItem?.name || 'inventory'}${earliest ? ` · expiry ${earliest}` : ''}`,
+        qty: totalQty,
+        detail: `Confirmed arrived · linked to ${invItem?.name || 'inventory'}${earliest ? ` · expiry ${earliest}` : ''} · stock not updated yet`,
       })
 
-      // Bump the note's received counter.
-      await supabase.from('boat_notes').update({ posted_items: (note.posted_items || 0) + 1 }).eq('id', note.id).catch(() => {})
-
-      toast.success(`Received ${totalQty} ${line.unit || ''} into ${invItem?.name || 'inventory'}`)
-      onDone(patch, 1)
+      toast.success(`Marked arrived · ${totalQty} ${line.unit || ''} (use Update Inventory to post stock)`)
+      onDone(patch, 0)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
   }
 
   return (
-    <Modal isOpen onClose={onClose} title="Receive item into inventory" size="md"
+    <Modal isOpen onClose={onClose} title="Confirm item arrived" size="md"
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button variant="success" loading={busy} onClick={post}><CheckCircle2 className="w-4 h-4" /> Receive {totalQty || ''}</Button>
+        <Button variant="success" loading={busy} onClick={post}><CheckCircle2 className="w-4 h-4" /> Confirm Arrived {totalQty || ''}</Button>
       </>}>
       <div className="space-y-4">
         <div className="bg-slate-700/30 rounded-lg p-3">
@@ -999,7 +1011,7 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
             ))}
           </div>
           <p className="text-xs text-slate-500 mt-2">
-            Total to receive: <span className="text-slate-200 font-semibold">{totalQty || 0}</span> {line.unit}
+            Total arrived: <span className="text-slate-200 font-semibold">{totalQty || 0}</span> {line.unit}
             {batches.length > 1 ? ` across ${batches.filter(b => Number(b.quantity) > 0).length} batches` : ''}.
             Leave the date blank for items with no expiry.
           </p>
@@ -1057,30 +1069,16 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
         short_qty:   kind === 'short' ? n : null,
       }
 
-      // Receive the good remainder into inventory for damaged / short.
-      // Stock is derived from Batch Expiry -- current_stock is never
-      // written directly; the upsert_item_batch RPC creates the batch and
-      // recalculates it automatically (fixes double-counting on receive).
-      if (needsQty && goodQty > 0 && line.item_id && invItem) {
-        await supabase.from('items').update({ active: true }).eq('id', line.item_id)
-        await supabase.rpc('upsert_item_batch', {
-          p_batch_id: null, p_item_id: line.item_id, p_expiry_date: line.expiry_date || null, p_quantity: goodQty,
-          p_note: `Boat note ${boatNote?.label || boatNote?.note_date || ''}`,
-        }).catch(() => {})
-        await supabase.from('stock_updates').insert({
-          item_id: line.item_id, date: boatNote?.note_date, quantity_change: goodQty, new_quantity: null,
-          updated_by: actor, note: `Boat note ${boatNote?.label || boatNote?.note_date || ''} · ${kind} ${n}, ${goodQty} good received`,
-        }).catch(() => {})
-        await supabase.from('receiving').insert({
-          item_id: line.item_id, item_name: invItem.name || line.product_name, date: boatNote?.note_date,
-          quantity_received: goodQty, unit: line.unit, supplier_name: line.supplier,
-          received_by: actor, invoice_number: line.po_number, note: `Boat note (${kind}): ${boatNote?.label || ''}`,
-        }).catch(() => {})
-        logItemActivity(line.item_id, 'received', `Received ${goodQty} ${line.unit || ''} (${kind} ${n}) · Boat note ${boatNote?.label || boatNote?.note_date || ''}`)
+      // For damaged / short: record the good remainder as arrived qty.
+      // Inventory is only updated later via Update Inventory (idempotent).
+      if (needsQty && goodQty > 0) {
         receivedGood = goodQty
         patch.received_qty = goodQty
         patch.received_by = actor
         patch.received_at = new Date().toISOString()
+        if (line.item_id) {
+          await supabase.from('items').update({ active: true }).eq('id', line.item_id).catch(() => {})
+        }
       }
 
       const { error } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
@@ -1106,12 +1104,12 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
           partNumber: line.part_number, productName: line.product_name, department: line.department,
           qty: needsQty ? n : null,
           detail: needsQty
-            ? `${LABELS[kind]} ${n} ${line.unit || ''}${receivedGood ? ` · ${receivedGood} good received into inventory` : ''}${note.trim() ? ` · ${note.trim()}` : ''}`
+            ? `${LABELS[kind]} ${n} ${line.unit || ''}${receivedGood ? ` · ${receivedGood} good to post later` : ''}${note.trim() ? ` · ${note.trim()}` : ''}`
             : `${LABELS[kind]}${note.trim() ? ` · ${note.trim()}` : ''}`,
         })
       }
 
-      toast.success(`Marked as ${LABELS[kind]}${receivedGood ? ` · ${receivedGood} good received` : ''}${logReturn && canReturn ? ' + return logged' : ''}`)
+      toast.success(`Marked as ${LABELS[kind]}${receivedGood ? ` · ${receivedGood} good pending inventory update` : ''}${logReturn && canReturn ? ' + return logged' : ''}`)
       onDone(patch, receivedGood ? 1 : 0)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
@@ -1182,6 +1180,7 @@ function NotArrivedTab() {
   const [range, setRange]   = useState({ from: '', to: '' })
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState([])
+  const [expandedDate, setExpandedDate] = useState(null)
 
   const load = async () => {
     setLoad(true)
@@ -1193,6 +1192,7 @@ function NotArrivedTab() {
       ...r,
       note_date:  r.boat_notes?.note_date || null,
       note_label: r.boat_notes?.label || '',
+      delivery_day: r.boat_notes?.delivery_day || '',
     }))
     list.sort((a, b) => String(b.note_date || '').localeCompare(String(a.note_date || '')))
     setRows(list); setLoad(false)
@@ -1221,13 +1221,24 @@ function NotArrivedTab() {
     return true
   }), [rows, picked, range, search])
 
-  const { sorted, thProps } = useSort(filtered, 'note_date', 'desc')
+  // Group outstanding lines by boat-note date (same shape as boat notes list).
+  const byDate = useMemo(() => {
+    const map = new Map()
+    for (const r of filtered) {
+      const key = r.note_date || 'unknown'
+      if (!map.has(key)) map.set(key, { date: key, labels: new Set(), items: [] })
+      const g = map.get(key)
+      if (r.note_label) g.labels.add(r.note_label)
+      g.items.push(r)
+    }
+    return [...map.values()].sort((a, b) => String(b.date).localeCompare(String(a.date)))
+  }, [filtered])
 
   return (
     <div className="space-y-4">
       <div className="bg-red-900/15 border border-red-700/30 rounded-lg p-4 text-sm text-red-200">
-        <p className="font-semibold flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4" /> Outstanding deliveries</p>
-        <p>Every boat-note line marked <strong>not arrived</strong> or <strong>wrong item</strong>. Filter by store / department to see what is still outstanding for each store.</p>
+        <p className="font-semibold flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4" /> Not arrived — by boat note date</p>
+        <p>Every boat-note line marked <strong>not arrived</strong> or <strong>wrong item</strong>, grouped under the boat note date just like the boat note list. Confirmed arrived items stay on the boat note until you run <strong>Update Inventory</strong>.</p>
       </div>
 
       <div className="card-sm flex items-center gap-3 flex-wrap">
@@ -1262,50 +1273,65 @@ function NotArrivedTab() {
 
       {loading ? (
         <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
-      ) : filtered.length === 0 ? (
+      ) : byDate.length === 0 ? (
         <div className="card text-center text-slate-500 py-12">Nothing outstanding 🎉</div>
       ) : (
         <>
-          <p className="text-xs text-slate-400">{filtered.length} outstanding line{filtered.length !== 1 ? 's' : ''}</p>
-          <div className="card overflow-x-auto p-0">
-            <Table>
-              <Thead><tr>
-                <Th {...thProps('note_date')}>Date</Th>
-                <Th {...thProps('note_label')}>Boat Note</Th>
-                <Th {...thProps('department')}>Store / Dept</Th>
-                <Th {...thProps('part_number')}>Code</Th>
-                <Th {...thProps('product_name')}>Product</Th>
-                <Th {...thProps('ordered_qty')}>Ordered</Th>
-                <Th {...thProps('status')}>Problem</Th>
-                <Th>Note</Th>
-                <Th></Th>
-              </tr></Thead>
-              <Tbody>
-                {sorted.map(r => (
-                  <Tr key={r.id}>
-                    <Td className="text-slate-300 text-xs whitespace-nowrap">{r.note_date || '—'}</Td>
-                    <Td className="text-slate-300 text-sm">{r.note_label || '—'}</Td>
-                    <Td><Badge variant="blue">{r.department || '—'}</Badge></Td>
-                    <Td className="font-mono text-xs text-[#00AEEF]">{r.part_number}</Td>
-                    <Td className="text-slate-100 text-sm">{r.product_name}</Td>
-                    <Td className="text-slate-400 text-xs">{r.ordered_qty} {r.unit}</Td>
-                    <Td><StatusBadge status={r.status} /></Td>
-                    <Td className="text-slate-400 text-xs max-w-[220px]">{r.note || '—'}</Td>
-                    <Td><Button size="sm" variant="ghost" onClick={() => resolve(r)}><CheckCircle2 className="w-4 h-4" /> Resolve</Button></Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </div>
+          <p className="text-xs text-slate-400">{filtered.length} outstanding line{filtered.length !== 1 ? 's' : ''} across {byDate.length} date{byDate.length !== 1 ? 's' : ''}</p>
+          {byDate.map(group => {
+            const open = expandedDate === group.date
+            return (
+              <div key={group.date} className="card p-0 overflow-hidden">
+                <button onClick={() => setExpandedDate(open ? null : group.date)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-slate-700/30 text-left">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {open ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                    <div className="min-w-0">
+                      <p className="font-medium text-slate-100">{group.date || 'Unknown date'}</p>
+                      <p className="text-xs text-slate-500 truncate">{[...group.labels].join(' · ') || 'Boat note'}</p>
+                    </div>
+                  </div>
+                  <Badge variant="red">{group.items.length} not arrived</Badge>
+                </button>
+                {open && (
+                  <div className="border-t border-slate-700 overflow-x-auto">
+                    <Table>
+                      <Thead><tr>
+                        <Th>Boat Note</Th>
+                        <Th>Store / Dept</Th>
+                        <Th>Code</Th>
+                        <Th>Product</Th>
+                        <Th>Ordered</Th>
+                        <Th>Problem</Th>
+                        <Th>Note</Th>
+                        <Th></Th>
+                      </tr></Thead>
+                      <Tbody>
+                        {group.items.map(r => (
+                          <Tr key={r.id}>
+                            <Td className="text-slate-300 text-sm">{r.note_label || '—'}</Td>
+                            <Td><Badge variant="blue">{r.department || '—'}</Badge></Td>
+                            <Td className="font-mono text-xs text-[#00AEEF]">{r.part_number}</Td>
+                            <Td className="text-slate-100 text-sm">{r.product_name}</Td>
+                            <Td className="text-slate-400 text-xs">{r.ordered_qty} {r.unit}</Td>
+                            <Td><StatusBadge status={r.status} /></Td>
+                            <Td className="text-slate-400 text-xs max-w-[220px]">{r.note || '—'}</Td>
+                            <Td><Button size="sm" variant="ghost" onClick={() => resolve(r)}><CheckCircle2 className="w-4 h-4" /> Resolve</Button></Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </>
       )}
     </div>
   )
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// SAMPLES — every sample that has arrived over time (item code contains "sample")
-// ════════════════════════════════════════════════════════════════════════════
 function SamplesTab() {
   const [samples, setSamples] = useState([])
   const [loading, setLoad]    = useState(true)
@@ -1421,7 +1447,7 @@ function ReceivedTab() {
     const { data } = await selectAll(() =>
       supabase.from('boat_note_items')
         .select('*, boat_notes(note_date,label,delivery_day)')
-        .eq('status', 'received'))
+        .or('status.eq.received,posted_to_inventory.eq.true'))
     let list = (data || []).map(r => ({
       ...r,
       note_date:  r.boat_notes?.note_date || null,
