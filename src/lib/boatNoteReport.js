@@ -27,6 +27,16 @@ export const CATEGORIES = [
   { key: 'pending',     label: 'Pending',     xlsx: 'FFCA8A04', hex: '#ca8a04', bg: 'FFFEF9C3' },
 ]
 
+// Two top-level bands the user asked for: everything that ARRIVED first, then
+// everything that did NOT arrive. Each band groups the detailed categories.
+export const GROUPS = [
+  { key: 'arrived',     label: 'ARRIVED',     xlsx: 'FF15803D', hex: '#15803d', bg: 'FFBBF7D0', cats: ['received', 'arrived', 'damaged', 'short'] },
+  { key: 'not_arrived', label: 'NOT ARRIVED', xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFECACA', cats: ['not_arrived', 'wrong_item', 'pending'] },
+]
+function groupOf(catKey) {
+  return GROUPS.find(g => g.cats.includes(catKey)) || GROUPS[1]
+}
+
 // The affected-unit count for a delivery problem (damaged / short / wrong).
 function issueQty(it) {
   const v = it.damaged_qty ?? it.short_qty ?? it.wrong_qty
@@ -106,9 +116,26 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
   s.fill = fill(BRAND_DARK); ws.getRow(2).height = 20
 
   let r = 4
-  for (const cat of CATEGORIES) {
+  let lastGroup = null
+  // Order categories so the ARRIVED band comes first, then NOT ARRIVED.
+  const orderedCats = GROUPS.flatMap(g => CATEGORIES.filter(c => g.cats.includes(c.key)))
+  for (const cat of orderedCats) {
     const items = buckets[cat.key]
     if (!items.length) continue
+    // group band (ARRIVED / NOT ARRIVED)
+    const grp = groupOf(cat.key)
+    if (grp.key !== lastGroup) {
+      lastGroup = grp.key
+      const groupTotal = grp.cats.reduce((s, k) => s + (buckets[k]?.length || 0), 0)
+      ws.mergeCells(r, 1, r, lastCol)
+      const gb = ws.getCell(r, 1)
+      gb.value = `${grp.label}  (${groupTotal})`
+      gb.font = { name: 'Calibri', size: 14, bold: true, color: { argb: WHITE } }
+      gb.fill = fill(grp.xlsx)
+      gb.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
+      ws.getRow(r).height = 26
+      r++
+    }
     // section banner
     ws.mergeCells(r, 1, r, lastCol)
     const b = ws.getCell(r, 1)
@@ -246,6 +273,15 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
       </table>`
   }
 
+  const groupBlock = (g) => {
+    const inner = g.cats.map(k => section(CATEGORIES.find(c => c.key === k))).join('')
+    if (!inner) return ''
+    const total = g.cats.reduce((s, k) => s + (buckets[k]?.length || 0), 0)
+    return `<div style="margin-top:20px;background:${g.hex};color:#fff;padding:8px 14px;border-radius:6px;font-size:15px;font-weight:700">
+        ${g.label} <span style="opacity:.85;font-weight:400">(${total})</span>
+      </div>${inner}`
+  }
+
   const counts = CATEGORIES.map(c => `${c.label}: <strong>${buckets[c.key].length}</strong>`).join(' &nbsp;·&nbsp; ')
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
@@ -265,7 +301,7 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
         <p>Date ${esc(note.note_date || '—')} · Total lines ${lines.length} · Generated ${new Date().toLocaleString('en-GB')}</p>
         <p>${counts}</p>
       </div>
-      ${CATEGORIES.map(section).join('')}
+      ${GROUPS.map(groupBlock).join('')}
     </body></html>`
 }
 

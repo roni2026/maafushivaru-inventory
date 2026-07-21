@@ -4,7 +4,7 @@ import {
   Ship, Upload, Loader, Plus, Trash2, CheckCircle2, ChevronLeft, X,
   FileSpreadsheet, History as HistoryIcon, Search, RefreshCw, AlertTriangle,
   PackageCheck, CalendarDays, ChevronDown, ChevronRight, FlaskConical, Save,
-  Printer, Mail, FileDown, Undo2, CalendarRange, PackageX, Layers, Clock,
+  Printer, Mail, FileDown, Undo2, CalendarRange, PackageX, Layers, Clock, Edit2,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
@@ -601,7 +601,7 @@ function BoatNoteHistory() {
   }
 
   const updateInventory = async (n) => {
-    if (!confirm(`Update inventory for "${n.label || n.note_date}"? Only confirmed arrived items (not already posted) will be added. Clicking twice will not double quantity.`)) return
+    if (!confirm(`Update inventory for "${n.label || n.note_date}"? Only the not-yet-posted quantity of confirmed items is added. Clicking twice never doubles; if you increased a received qty, only the extra is added.`)) return
     setUpdatingId(n.id)
     try {
       const actor = await currentActor()
@@ -615,9 +615,10 @@ function BoatNoteHistory() {
       } : x))
       if (itemsMap[n.id]) await loadItems(n.id)
       const posted = data?.posted_now ?? 0
+      const qty = data?.qty_posted_now ?? 0
       const skipped = data?.skipped_already ?? 0
       toast.success(posted > 0
-        ? `Inventory updated · ${posted} new item(s) posted${skipped ? ` · ${skipped} already posted (skipped)` : ''}`
+        ? `Inventory updated · +${qty} unit(s) across ${posted} line(s)${skipped ? ` · ${skipped} already up to date` : ''}`
         : `Nothing new to post${skipped ? ` · ${skipped} already in inventory` : ''}`)
     } catch (err) { toast.error(err.message) } finally { setUpdatingId(null) }
   }
@@ -851,7 +852,11 @@ function NoteItemsTable({ items, onReceive, onIssue }) {
                 <Td><StatusBadge status={it.status} /></Td>
                 <Td>
                   {it.status === 'received' || it.posted_to_inventory ? (
-                    <span className="text-xs text-green-400 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> in inventory</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-green-400 inline-flex items-center gap-1" title={`${it.posted_qty ?? it.received_qty ?? ''} in inventory`}><CheckCircle2 className="w-3.5 h-3.5" /> in inventory</span>
+                      <button onClick={() => onReceive(it)} title="Adjust received qty — re-run Update Inventory to add only the extra"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-[#00AEEF] hover:bg-[#00AEEF]/10"><Edit2 className="w-4 h-4" /></button>
+                    </div>
                   ) : it.status === 'arrived' ? (
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs text-teal-300 inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" /> arrived</span>
@@ -877,6 +882,8 @@ function NoteItemsTable({ items, onReceive, onIssue }) {
 
 // ── Receive ONE item into inventory, with one or more expiry batches ─────────
 function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
+  const isAdjust = line.posted_to_inventory || line.status === 'received'
+  const alreadyPosted = Number(line.posted_qty ?? line.received_qty ?? 0)
   const [itemId, setItemId] = useState(line.item_id || '')
   const [search, setSearch] = useState('')
   const [batches, setBatches] = useState([
@@ -939,18 +946,26 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
         detail: `Confirmed arrived · linked to ${invItem?.name || 'inventory'}${earliest ? ` · expiry ${earliest}` : ''} · stock not updated yet`,
       })
 
-      toast.success(`Marked arrived · ${totalQty} ${line.unit || ''} (use Update Inventory to post stock)`)
+      const extra = Math.max(0, totalQty - alreadyPosted)
+      toast.success(isAdjust
+        ? `Received qty set to ${totalQty} ${line.unit || ''} · Update Inventory will add ${extra > 0 ? `the extra ${extra}` : 'nothing (already posted)'}`
+        : `Marked arrived · ${totalQty} ${line.unit || ''} (use Update Inventory to post stock)`)
       onDone(patch, 0)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
   }
 
   return (
-    <Modal isOpen onClose={onClose} title="Confirm item arrived" size="md"
+    <Modal isOpen onClose={onClose} title={isAdjust ? 'Adjust received quantity' : 'Confirm item arrived'} size="md"
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button variant="success" loading={busy} onClick={post}><CheckCircle2 className="w-4 h-4" /> Confirm Arrived {totalQty || ''}</Button>
+        <Button variant="success" loading={busy} onClick={post}><CheckCircle2 className="w-4 h-4" /> {isAdjust ? 'Save new qty' : 'Confirm Arrived'} {totalQty || ''}</Button>
       </>}>
+      {isAdjust && (
+        <div className="mb-3 flex items-center gap-2 bg-[#00AEEF]/10 border border-[#00AEEF]/30 rounded-lg px-3 py-2 text-xs text-[#7dd3fc]">
+          <AlertTriangle className="w-4 h-4 shrink-0" /> {alreadyPosted} already in inventory. Set the new total received — pressing Update Inventory afterwards adds only the extra, never doubles.
+        </div>
+      )}
       <div className="space-y-4">
         <div className="bg-slate-700/30 rounded-lg p-3">
           <p className="text-sm text-slate-100 font-medium">{line.product_name}</p>
