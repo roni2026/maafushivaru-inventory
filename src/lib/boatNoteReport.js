@@ -19,7 +19,7 @@ const WHITE      = 'FFFFFFFF'
 // Category order + presentation colours.
 export const CATEGORIES = [
   { key: 'received',    label: 'In Inventory', xlsx: 'FF15803D', hex: '#15803d', bg: 'FFDCFCE7' },
-  { key: 'arrived',     label: 'Arrived (not posted)', xlsx: 'FF0F766E', hex: '#0f766e', bg: 'FFCCFBF1' },
+  { key: 'arrived',     label: 'Arrived', xlsx: 'FF0F766E', hex: '#0f766e', bg: 'FFCCFBF1' },
   { key: 'damaged',     label: 'Damaged',     xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFFE4E6' },
   { key: 'wrong_item',  label: 'Wrong Item',  xlsx: 'FFEA580C', hex: '#ea580c', bg: 'FFFFEDD5' },
   { key: 'not_arrived', label: 'Not Arrived', xlsx: 'FFDC2626', hex: '#dc2626', bg: 'FFFEE2E2' },
@@ -30,7 +30,7 @@ export const CATEGORIES = [
 // Two top-level bands the user asked for: everything that ARRIVED first, then
 // everything that did NOT arrive. Each band groups the detailed categories.
 export const GROUPS = [
-  { key: 'arrived',     label: 'ARRIVED',     xlsx: 'FF15803D', hex: '#15803d', bg: 'FFBBF7D0', cats: ['received', 'damaged', 'short'] },
+  { key: 'arrived',     label: 'ARRIVED',     xlsx: 'FF15803D', hex: '#15803d', bg: 'FFBBF7D0', cats: ['received', 'arrived', 'damaged', 'short'] },
   { key: 'not_arrived', label: 'NOT ARRIVED', xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFECACA', cats: ['not_arrived', 'wrong_item', 'pending'] },
 ]
 function groupOf(catKey) {
@@ -58,15 +58,14 @@ function problemType(it) {
   return ''
 }
 
-// Categories shown in the export. "arrived" (arrived but NOT posted to
-// inventory) is intentionally excluded -- "not posted" lines must never appear
-// on the exported / emailed / printed report.
-const REPORT_CATEGORIES = CATEGORIES.filter(c => c.key !== 'arrived')
+// All status categories are shown in the export -- arrived AND not-arrived
+// lines must both appear. Only the old "Arrived (not posted)" wording was
+// dropped so the report never says "not posted"; the items themselves stay.
+const REPORT_CATEGORIES = CATEGORIES
 
-// Drop "not posted" lines (arrived but not yet posted into inventory) from any
-// export.
+// Export every line as-is; nothing is hidden from the report.
 function forExport(lines) {
-  return (lines || []).filter(l => !(l.status === 'arrived' && !l.posted_to_inventory))
+  return lines || []
 }
 
 const HEADERS = ['#', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Received', 'Problem Qty', 'Problem Type', 'Expiry', 'Supplier', 'PO', 'Note']

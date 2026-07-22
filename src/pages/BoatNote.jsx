@@ -166,12 +166,11 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
     if (!recipient) { toast.error('Enter a recipient email'); return }
     setSending(true)
     try {
-      // Never send "not posted" (arrived, not yet in inventory) lines.
-      const lines = scopedLines.filter(l => !(l.status === 'arrived' && !l.posted_to_inventory))
+      const lines = scopedLines
       const sendNote = picked.length ? { ...note, label: `${note.label || note.note_date || 'Boat Note'} · ${picked.join(', ')}` } : note
       const counts = { total: lines.length }
       const known = ['received', 'arrived', 'damaged', 'wrong_item', 'not_arrived', 'short']
-      CATEGORIES.filter(c => c.key !== 'arrived').forEach(c => {
+      CATEGORIES.forEach(c => {
         counts[c.key] = lines.filter(l =>
           c.key === 'pending' ? !known.includes(l.status) : l.status === c.key
         ).length
