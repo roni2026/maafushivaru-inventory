@@ -166,11 +166,12 @@ function SendBoatNoteReportModal({ note, getLines, onClose }) {
     if (!recipient) { toast.error('Enter a recipient email'); return }
     setSending(true)
     try {
-      const lines = scopedLines
+      // Never send "not posted" (arrived, not yet in inventory) lines.
+      const lines = scopedLines.filter(l => !(l.status === 'arrived' && !l.posted_to_inventory))
       const sendNote = picked.length ? { ...note, label: `${note.label || note.note_date || 'Boat Note'} · ${picked.join(', ')}` } : note
       const counts = { total: lines.length }
       const known = ['received', 'arrived', 'damaged', 'wrong_item', 'not_arrived', 'short']
-      CATEGORIES.forEach(c => {
+      CATEGORIES.filter(c => c.key !== 'arrived').forEach(c => {
         counts[c.key] = lines.filter(l =>
           c.key === 'pending' ? !known.includes(l.status) : l.status === c.key
         ).length
@@ -836,11 +837,15 @@ function NoteItemsTable({ items, onReceive, onIssue }) {
             <Th></Th>
           </tr></Thead>
           <Tbody>
-            {sorted.map(it => (
-              <Tr key={it.id} className={it.is_sample ? 'bg-purple-900/10' : ''}>
-                <Td className="text-slate-500 text-xs">{it.line_no}</Td>
+            {sorted.map(it => {
+              // Damaged / wrong item / short lines are highlighted in red so a
+              // delivery problem is obvious at a glance.
+              const isProblem = ['damaged', 'wrong_item', 'short'].includes(it.status)
+              return (
+              <Tr key={it.id} className={isProblem ? 'bg-red-900/30 border-l-4 border-red-500' : it.is_sample ? 'bg-purple-900/10' : ''}>
+                <Td className={`text-xs ${isProblem ? 'text-red-300' : 'text-slate-500'}`}>{it.line_no}</Td>
                 <Td className="font-mono text-xs text-[#00AEEF]">{it.part_number}</Td>
-                <Td className="text-slate-200 text-sm">
+                <Td className={`text-sm ${isProblem ? 'text-red-200 font-medium' : 'text-slate-200'}`}>
                   <span className="inline-flex items-center gap-1.5">{it.product_name}{it.is_sample && <Badge variant="purple">sample</Badge>}</span>
                   {it.note && <p className="text-xs text-amber-400/80 mt-0.5">⚠ {it.note}</p>}
                 </Td>
@@ -872,7 +877,8 @@ function NoteItemsTable({ items, onReceive, onIssue }) {
                   )}
                 </Td>
               </Tr>
-            ))}
+              )
+            })}
           </Tbody>
         </Table>
       </div>
@@ -1071,6 +1077,8 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
     const n = Number(qty)
     if (needsQty && (!n || n <= 0)) { toast.error('Enter how many are affected'); return }
     if (needsQty && n > ordered) { toast.error(`Only ${ordered} ${line.unit || ''} were ordered`); return }
+    // A wrong item must be explained -- record WHY it is wrong.
+    if (kind === 'wrong_item' && !note.trim()) { toast.error('Please write a note explaining why it is the wrong item'); return }
     setBusy(true)
     try {
       const actor = boatNote?.created_by || (await currentActor())
@@ -1149,7 +1157,7 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
         </div>
         {!needsQty && (
           <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-400">
-            {kind === 'not_arrived' ? 'Recorded as not arrived — no quantity needed.' : 'Recorded as a wrong item — no quantity needed.'}
+            {kind === 'not_arrived' ? 'Recorded as not arrived — no quantity needed.' : 'Recorded as a wrong item — no quantity needed, but please note below WHY it is wrong (e.g. wrong size / brand / product).'}
           </div>
         )}
         {needsQty && (
@@ -1175,7 +1183,9 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
           </label>
         )}
         <div>
-          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Note</label>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Note{kind === 'wrong_item' && <span className="text-red-400 normal-case"> * required — why is it wrong?</span>}
+          </label>
           <textarea rows={3} value={note} onChange={e => setNote(e.target.value)}
             placeholder={kind === 'not_arrived' ? 'e.g. supplier to redeliver Thursday' : kind === 'short' ? 'e.g. ordered 10, only 7 arrived' : 'e.g. sent 1.5L bottles instead of 500mL'}
             className="input w-full mt-1.5 text-sm" />
@@ -1585,6 +1595,18 @@ function isoWeek(dateStr) {
   return { key: `${t.getUTCFullYear()}-W${String(week).padStart(2, '0')}`, label: `Week ${week} · ${t.getUTCFullYear()}` }
 }
 const issueQtyOf = (r) => r.damaged_qty ?? r.short_qty ?? r.wrong_qty ?? null
+// The KIND of problem (Damaged / Short / Wrong Item) so the quantity is never
+// confused with a quantity issued to a department.
+const problemTypeOf = (r) => {
+  if (r.damaged_qty != null && r.damaged_qty !== '') return 'Damaged'
+  if (r.short_qty   != null && r.short_qty   !== '') return 'Short'
+  if (r.wrong_qty   != null && r.wrong_qty   !== '') return 'Wrong Item'
+  if (r.status === 'damaged')    return 'Damaged'
+  if (r.status === 'short')      return 'Short'
+  if (r.status === 'wrong_item') return 'Wrong Item'
+  if (r.status === 'not_arrived') return 'Not Arrived'
+  return ''
+}
 
 function WeeklyIssuesTab() {
   const [rows, setRows]   = useState([])
@@ -1627,11 +1649,11 @@ function WeeklyIssuesTab() {
   const toggle = (k) => setOpen(o => ({ ...o, [k]: !o[k] }))
 
   const exportCsv = () => {
-    const h = ['Week', 'Date', 'Boat Note', 'Status', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Issue Qty', 'Supplier', 'PO', 'Note']
+    const h = ['Week', 'Date', 'Boat Note', 'Status', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Problem Qty', 'Problem Type', 'Supplier', 'PO', 'Note']
     const lines = weeks.flatMap(w => w.items.map(r => [
       w.label, r.note_date || '', r.note_label || '', ISSUE_LABEL[r.status] || r.status,
       r.part_number || '', r.product_name || '', r.department || '', r.unit || '',
-      r.ordered_qty ?? '', issueQtyOf(r) ?? '', r.supplier || '', r.po_number || '', (r.note || '').replace(/\n/g, ' '),
+      r.ordered_qty ?? '', issueQtyOf(r) ?? '', problemTypeOf(r), r.supplier || '', r.po_number || '', (r.note || '').replace(/\n/g, ' '),
     ]))
     const csv = [h, ...lines].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const a = document.createElement('a')
@@ -1690,7 +1712,7 @@ function WeeklyIssuesTab() {
               <Table>
                 <Thead><tr>
                   <Th>Date</Th><Th>Status</Th><Th>Code</Th><Th>Product</Th><Th>Dept</Th>
-                  <Th>Ordered</Th><Th>Issue Qty</Th><Th>Supplier</Th><Th>PO</Th><Th>Note</Th>
+                  <Th>Ordered</Th><Th>Problem Qty</Th><Th>Problem Type</Th><Th>Supplier</Th><Th>PO</Th><Th>Note</Th>
                 </tr></Thead>
                 <Tbody>
                   {w.items.map(r => (
@@ -1702,6 +1724,7 @@ function WeeklyIssuesTab() {
                       <Td className="text-slate-400 text-xs">{r.department || '—'}</Td>
                       <Td className="text-slate-300">{r.ordered_qty} <span className="text-slate-500 text-xs">{r.unit}</span></Td>
                       <Td className="text-amber-400 font-semibold">{issueQtyOf(r) ?? '—'}</Td>
+                      <Td className="text-slate-400 text-xs">{problemTypeOf(r) || '—'}</Td>
                       <Td className="text-slate-400 text-xs max-w-[10rem] truncate">{r.supplier || '—'}</Td>
                       <Td className="font-mono text-xs text-slate-400">{r.po_number || '—'}</Td>
                       <Td className="text-slate-500 text-xs max-w-xs truncate">{r.note || '—'}</Td>

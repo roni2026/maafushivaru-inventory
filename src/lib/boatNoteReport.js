@@ -30,20 +30,46 @@ export const CATEGORIES = [
 // Two top-level bands the user asked for: everything that ARRIVED first, then
 // everything that did NOT arrive. Each band groups the detailed categories.
 export const GROUPS = [
-  { key: 'arrived',     label: 'ARRIVED',     xlsx: 'FF15803D', hex: '#15803d', bg: 'FFBBF7D0', cats: ['received', 'arrived', 'damaged', 'short'] },
+  { key: 'arrived',     label: 'ARRIVED',     xlsx: 'FF15803D', hex: '#15803d', bg: 'FFBBF7D0', cats: ['received', 'damaged', 'short'] },
   { key: 'not_arrived', label: 'NOT ARRIVED', xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFECACA', cats: ['not_arrived', 'wrong_item', 'pending'] },
 ]
 function groupOf(catKey) {
   return GROUPS.find(g => g.cats.includes(catKey)) || GROUPS[1]
 }
 
-// The affected-unit count for a delivery problem (damaged / short / wrong).
+// The affected-unit count for a delivery PROBLEM (damaged / short / wrong item).
+// This is NOT a quantity issued/handed over to a department -- it is the number
+// of units that had a problem on arrival. Shown as "Problem Qty" in the export
+// so it is never confused with issuing stock to a specific department.
 function issueQty(it) {
   const v = it.damaged_qty ?? it.short_qty ?? it.wrong_qty
   return (v === null || v === undefined || v === '') ? '' : Number(v)
 }
 
-const HEADERS = ['#', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Received', 'Issue Qty', 'Expiry', 'Supplier', 'PO', 'Note']
+// The KIND of delivery problem, so "Problem Qty" is unambiguous. Empty when the
+// line had no problem.
+function problemType(it) {
+  if (it.damaged_qty !== null && it.damaged_qty !== undefined && it.damaged_qty !== '') return 'Damaged'
+  if (it.short_qty   !== null && it.short_qty   !== undefined && it.short_qty   !== '') return 'Short'
+  if (it.wrong_qty   !== null && it.wrong_qty   !== undefined && it.wrong_qty   !== '') return 'Wrong Item'
+  if (it.status === 'damaged')    return 'Damaged'
+  if (it.status === 'short')      return 'Short'
+  if (it.status === 'wrong_item') return 'Wrong Item'
+  return ''
+}
+
+// Categories shown in the export. "arrived" (arrived but NOT posted to
+// inventory) is intentionally excluded -- "not posted" lines must never appear
+// on the exported / emailed / printed report.
+const REPORT_CATEGORIES = CATEGORIES.filter(c => c.key !== 'arrived')
+
+// Drop "not posted" lines (arrived but not yet posted into inventory) from any
+// export.
+function forExport(lines) {
+  return (lines || []).filter(l => !(l.status === 'arrived' && !l.posted_to_inventory))
+}
+
+const HEADERS = ['#', 'Code', 'Product', 'Dept', 'Unit', 'Ordered', 'Received', 'Problem Qty', 'Problem Type', 'Expiry', 'Supplier', 'PO', 'Note']
 
 function rowValues(it) {
   return [
@@ -55,6 +81,7 @@ function rowValues(it) {
     Number(it.ordered_qty) || 0,
     it.received_qty ?? '',
     issueQty(it),
+    problemType(it),
     it.expiry_date || '',
     it.supplier || '',
     it.po_number || '',
@@ -85,6 +112,7 @@ function bucketize(lines, sortBy = 'line_no', sortDir = 'asc') {
 
 // ── ExcelJS workbook ────────────────────────────────────────────────────────
 export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', sortDir = 'asc' } = {}) {
+  lines = forExport(lines)   // never show "not posted" (arrived) lines
   const { default: ExcelJS } = await import('exceljs')
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Outrigger Maafushivaru Inventory'
@@ -109,7 +137,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
 
   ws.mergeCells(2, 1, 2, lastCol)
   const s = ws.getCell(2, 1)
-  const counts = CATEGORIES.map(c => `${c.label}: ${buckets[c.key].length}`).join('   ·   ')
+  const counts = REPORT_CATEGORIES.map(c => `${c.label}: ${buckets[c.key].length}`).join('   ·   ')
   s.value = `Date ${note.note_date || '—'}   ·   Total lines ${lines.length}   ·   ${counts}   ·   Generated ${new Date().toLocaleString('en-GB')}`
   s.font = { name: 'Calibri', size: 10, color: { argb: WHITE } }
   s.alignment = { vertical: 'middle', horizontal: 'left', indent: 1 }
@@ -164,7 +192,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
         const c = row.getCell(i + 1)
         c.value = v
         c.font = { name: 'Calibri', size: 10 }
-        c.alignment = { vertical: 'middle', horizontal: i >= 5 && i <= 7 ? 'center' : 'left', wrapText: i === 2 || i === 11 }
+        c.alignment = { vertical: 'middle', horizontal: i >= 5 && i <= 7 ? 'center' : 'left', wrapText: i === 2 || i === 12 }
         c.fill = fill(idx % 2 ? 'FFF4F7FA' : WHITE)
         c.border = border
       })
@@ -175,7 +203,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
 
   ws.columns = [
     { width: 5 }, { width: 12 }, { width: 34 }, { width: 12 }, { width: 8 },
-    { width: 10 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 },
+    { width: 10 }, { width: 10 }, { width: 11 }, { width: 13 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 },
   ]
 
   // ---- Sheet 2: flat list with AutoFilter (fully sortable in Excel) ----
@@ -192,7 +220,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
   })
   hr2.height = 22
   let rr = 2
-  for (const cat of CATEGORIES) {
+  for (const cat of REPORT_CATEGORIES) {
     for (const it of buckets[cat.key]) {
       const row = ws2.getRow(rr)
       const vals = [cat.label, ...rowValues(it)]
@@ -206,7 +234,7 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
     }
   }
   ws2.autoFilter = { from: { row: 1, column: 1 }, to: { row: Math.max(1, rr - 1), column: flatHeaders.length } }
-  ws2.columns = [{ width: 12 }, { width: 5 }, { width: 12 }, { width: 34 }, { width: 12 }, { width: 8 }, { width: 10 }, { width: 10 }, { width: 10 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 }]
+  ws2.columns = [{ width: 12 }, { width: 5 }, { width: 12 }, { width: 34 }, { width: 12 }, { width: 8 }, { width: 10 }, { width: 10 }, { width: 11 }, { width: 13 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 26 }]
   ws2.views = [{ state: 'frozen', ySplit: 1 }]
 
   return wb.xlsx.writeBuffer()
@@ -238,6 +266,7 @@ export async function boatNoteExcelBase64(note, lines, opts) {
 
 // ── Print / Save-as-PDF ───────────────────────────────────────────────────
 export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = 'asc' } = {}) {
+  lines = forExport(lines)   // never show "not posted" (arrived) lines
   const buckets = bucketize(lines, sortBy, sortDir)
   const label = note.label || note.note_date || 'Boat Note'
   const esc = (v) => String(v ?? '').replace(/[&<>]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]))
@@ -255,6 +284,7 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
         <td style="text-align:center">${esc(it.ordered_qty)}</td>
         <td style="text-align:center">${esc(it.received_qty ?? '—')}</td>
         <td style="text-align:center">${esc(issueQty(it) === '' ? '—' : issueQty(it))}</td>
+        <td>${esc(problemType(it) || '—')}</td>
         <td>${esc(it.expiry_date || '—')}</td>
         <td>${esc(it.supplier)}</td>
         <td style="font-family:monospace">${esc(it.po_number || '—')}</td>
@@ -267,7 +297,7 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
       <table>
         <thead><tr>
           <th>#</th><th>Code</th><th>Product</th><th>Dept</th><th>Unit</th>
-          <th>Ord.</th><th>Rcvd</th><th>Issue Qty</th><th>Expiry</th><th>Supplier</th><th>PO</th><th>Note</th>
+          <th>Ord.</th><th>Rcvd</th><th>Problem Qty</th><th>Problem Type</th><th>Expiry</th><th>Supplier</th><th>PO</th><th>Note</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>`
@@ -282,7 +312,7 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
       </div>${inner}`
   }
 
-  const counts = CATEGORIES.map(c => `${c.label}: <strong>${buckets[c.key].length}</strong>`).join(' &nbsp;·&nbsp; ')
+  const counts = REPORT_CATEGORIES.map(c => `${c.label}: <strong>${buckets[c.key].length}</strong>`).join(' &nbsp;·&nbsp; ')
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"/>
     <title>${reportFileName(note, 'pdf')}</title>
