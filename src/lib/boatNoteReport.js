@@ -30,12 +30,25 @@ export const CATEGORIES = [
 // Two top-level bands the user asked for: everything that ARRIVED first, then
 // everything that did NOT arrive. Each band groups the detailed categories.
 export const GROUPS = [
-  { key: 'arrived',     label: 'ARRIVED',     xlsx: 'FF15803D', hex: '#15803d', bg: 'FFBBF7D0', cats: ['received', 'arrived', 'damaged', 'short'] },
-  { key: 'not_arrived', label: 'NOT ARRIVED', xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFECACA', cats: ['not_arrived', 'wrong_item', 'pending'] },
+  // A "wrong item" physically ARRIVED (it was just the wrong product), so it
+  // belongs in the ARRIVED band -- never under NOT ARRIVED.
+  { key: 'arrived',     label: 'ARRIVED',     xlsx: 'FF15803D', hex: '#15803d', bg: 'FFBBF7D0', cats: ['received', 'arrived', 'damaged', 'short', 'wrong_item'] },
+  { key: 'not_arrived', label: 'NOT ARRIVED', xlsx: 'FFB91C1C', hex: '#b91c1c', bg: 'FFFECACA', cats: ['not_arrived', 'pending'] },
 ]
 function groupOf(catKey) {
   return GROUPS.find(g => g.cats.includes(catKey)) || GROUPS[1]
 }
+
+// A line "has a problem" when it arrived but something was wrong with it
+// (damaged, short, or the wrong item). Rows like this inside the ARRIVED band
+// are highlighted in red so problems stand out at a glance.
+const PROBLEM_STATUSES = ['damaged', 'short', 'wrong_item']
+function hasProblem(it) {
+  return !!problemType(it) || PROBLEM_STATUSES.includes(it.status)
+}
+// Red used to highlight problem rows.
+const PROBLEM_RED_XLSX = 'FFDC2626'
+const PROBLEM_RED_HEX  = '#dc2626'
 
 // The affected-unit count for a delivery PROBLEM (damaged / short / wrong item).
 // This is NOT a quantity issued/handed over to a department -- it is the number
@@ -187,10 +200,14 @@ export async function buildBoatNoteWorkbook(note, lines, { sortBy = 'line_no', s
     // rows
     items.forEach((it, idx) => {
       const row = ws.getRow(r)
+      // Highlight problem rows (damaged / short / wrong item) in the ARRIVED band with red text.
+      const problem = grp.key === 'arrived' && hasProblem(it)
       rowValues(it).forEach((v, i) => {
         const c = row.getCell(i + 1)
         c.value = v
-        c.font = { name: 'Calibri', size: 10 }
+        c.font = problem
+          ? { name: 'Calibri', size: 10, bold: true, color: { argb: PROBLEM_RED_XLSX } }
+          : { name: 'Calibri', size: 10 }
         c.alignment = { vertical: 'middle', horizontal: i >= 5 && i <= 7 ? 'center' : 'left', wrapText: i === 2 || i === 12 }
         c.fill = fill(idx % 2 ? 'FFF4F7FA' : WHITE)
         c.border = border
@@ -273,8 +290,10 @@ export function buildBoatNoteHtml(note, lines, { sortBy = 'line_no', sortDir = '
   const section = (cat) => {
     const items = buckets[cat.key]
     if (!items.length) return ''
+    // Rows with a problem inside the ARRIVED band are shown in red text.
+    const inArrived = groupOf(cat.key).key === 'arrived'
     const rows = items.map((it, i) => `
-      <tr style="background:${i % 2 ? '#f8fafc' : '#fff'}">
+      <tr style="background:${i % 2 ? '#f8fafc' : '#fff'}${inArrived && hasProblem(it) ? `;color:${PROBLEM_RED_HEX};font-weight:600` : ''}">
         <td>${esc(it.line_no)}</td>
         <td style="font-family:monospace">${esc(it.part_number)}</td>
         <td><strong>${esc(it.product_name)}</strong></td>
