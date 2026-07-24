@@ -323,12 +323,16 @@ function UploadFlow({ onSaved }) {
   const [busy, setBusy]   = useState(false)
   const [rows, setRows]   = useState([])
   const [items, setItems] = useState([])
+  const [stores, setStores] = useState([])
   const [meta, setMeta]   = useState({ label: '', note_date: today(), source_file: '', received_by: 'Roni' })
+  const [pendingNew, setPendingNew] = useState([]) // unmatched rows awaiting auto-add category
   const fileRef = useRef(null)
 
   useEffect(() => {
     selectAll(() => supabase.from('items').select('id,name,part_number').eq('active', true))
       .then(({ data }) => setItems(data || [])).catch(() => {})
+    selectAll(() => supabase.from('stores').select('id,name,category').order('category').order('name'))
+      .then(({ data }) => setStores(data || [])).catch(() => {})
   }, [])
   const byCode = useMemo(() => {
     const m = new Map(); for (const it of items) m.set(cleanCode(it.part_number), it); return m
@@ -369,53 +373,130 @@ function UploadFlow({ onSaved }) {
   const allDepts = useMemo(() => [...new Set(rows.map(r => r.department).filter(Boolean))].sort(), [rows])
   const { sorted, thProps } = useSort(rows, null, 'asc')
 
+  // Pick default store for a category (Food / Beverage / General).
+  const storeForCategory = (cat) => {
+    const list = stores.filter(s => s.category === cat)
+    return list[0] || stores[0] || null
+  }
+
+  // Auto-create inventory items for unmatched boat-note lines. Only category
+  // (General / Food / Beverage) is asked — everything else comes from the note.
+  const autoAddUnmatched = async (unmatched, categoryByKey) => {
+    const created = []
+    for (const r of unmatched) {
+      const key = r.id || `${r.part_number}|${r.product_name}`
+      const cat = categoryByKey[key] || 'General'
+      const store = storeForCategory(cat)
+      if (!store) continue
+      const pn = String(r.part_number || '').trim() || `BN-${Date.now().toString(36).slice(-6)}`
+      const payload = {
+        part_number: pn,
+        name: String(r.product_name || pn).trim(),
+        store_id: store.id,
+        unit: (r.unit || 'EA').toString().trim() || 'EA',
+        current_stock: 0,
+        min_stock: 0,
+        supplier: r.supplier || null,
+        origin: classifyOrigin(r.product_name),
+        active: true,
+        notes: `Auto-added from boat note${meta.source_file ? ` · ${meta.source_file}` : ''}`,
+      }
+      const { data, error } = await supabase.from('items').insert(payload).select('id,name,part_number').single()
+      if (error) {
+        // Part number collision — try to link existing
+        if (/duplicate|unique/i.test(error.message || '')) {
+          const { data: existing } = await supabase.from('items').select('id,name,part_number').eq('part_number', pn).maybeSingle()
+          if (existing) created.push({ rowId: r.id, item: existing })
+        }
+        continue
+      }
+      created.push({ rowId: r.id, item: data })
+    }
+    return created
+  }
+
+  const proceedSave = async (workingRows) => {
+    const safeDate = (meta.note_date && /^\d{4}-\d{2}-\d{2}$/.test(meta.note_date)) ? meta.note_date : today()
+    let dayName = ''
+    try { dayName = new Date(safeDate).toLocaleDateString('en-US', { weekday: 'long' }) } catch { dayName = '' }
+    const depts = [...new Set(workingRows.map(r => r.department).filter(Boolean))].sort()
+    const { data: note, error: noteErr } = await supabase.from('boat_notes').insert({
+      note_date: safeDate, label: meta.label || `Boat note ${safeDate}`,
+      delivery_day: dayName, status: 'posted', source_file: meta.source_file,
+      departments: depts, total_items: workingRows.length, posted_items: 0, created_by: meta.received_by,
+    }).select().single()
+    if (noteErr) throw noteErr
+
+    const buildItemRows = (withSample) => workingRows.map(r => {
+      const base = {
+        boat_note_id: note.id, line_no: r.line_no, supplier: r.supplier, po_number: r.po_number,
+        part_number: r.part_number, product_name: r.product_name, unit: r.unit,
+        ordered_qty: Number(r.ordered_qty) || 0, received_qty: null,
+        expiry_date: r.expiry_date || null, department: r.department || null,
+        item_id: r.item_id, matched: r.matched, status: 'pending',
+      }
+      if (withSample) base.is_sample = !!r.is_sample
+      return base
+    })
+    let res = await chunkedWrite('boat_note_items', buildItemRows(true), { mode: 'insert' })
+    if (res.failed && (res.errors || []).some(e => /is_sample|column/i.test(e || ''))) {
+      res = await chunkedWrite('boat_note_items', buildItemRows(false), { mode: 'insert' })
+    }
+    if (res.failed) toast(`Saved note, but ${res.failed} line(s) failed to record.`, { icon: '⚠️' })
+    else toast.success('Boat note saved to history')
+
+    logBoatNoteEvent(note.id, 'uploaded', {
+      actor: meta.received_by,
+      detail: `Uploaded ${workingRows.length} line(s)${depts.length ? ` · ${depts.join(', ')}` : ''}`,
+      snapshot: {
+        note_date: safeDate, label: note.label, departments: depts,
+        items: workingRows.map(r => ({
+          line_no: r.line_no, part_number: r.part_number, product_name: r.product_name,
+          unit: r.unit, ordered_qty: Number(r.ordered_qty) || 0, department: r.department || null,
+          supplier: r.supplier || null, po_number: r.po_number || null, is_sample: !!r.is_sample,
+        })),
+      },
+    })
+    setPendingNew([])
+    onSaved?.()
+  }
+
   const saveToHistory = async () => {
     if (!rows.length) { toast.error('Nothing to save'); return }
+    const unmatched = rows.filter(r => !r.matched || !r.item_id)
+    if (unmatched.length) {
+      // Ask only for category (General / Food / Beverage); rest comes from boat note.
+      const defaults = {}
+      unmatched.forEach(r => { defaults[r.id] = 'General' })
+      setPendingNew(unmatched.map(r => ({ ...r, _cat: 'General' })))
+      return
+    }
+    setBusy(true)
+    try { await proceedSave(rows) } catch (e) { toast.error(e.message) }
+    setBusy(false)
+  }
+
+  const confirmAutoAddAndSave = async (skipAdd = false) => {
     setBusy(true)
     try {
-      const safeDate = (meta.note_date && /^\d{4}-\d{2}-\d{2}$/.test(meta.note_date)) ? meta.note_date : today()
-      let dayName = ''
-      try { dayName = new Date(safeDate).toLocaleDateString('en-US', { weekday: 'long' }) } catch { dayName = '' }
-      const { data: note, error: noteErr } = await supabase.from('boat_notes').insert({
-        note_date: safeDate, label: meta.label || `Boat note ${safeDate}`,
-        delivery_day: dayName, status: 'posted', source_file: meta.source_file,
-        departments: allDepts, total_items: rows.length, posted_items: 0, created_by: meta.received_by,
-      }).select().single()
-      if (noteErr) throw noteErr
-
-      const buildItemRows = (withSample) => rows.map(r => {
-        const base = {
-          boat_note_id: note.id, line_no: r.line_no, supplier: r.supplier, po_number: r.po_number,
-          part_number: r.part_number, product_name: r.product_name, unit: r.unit,
-          ordered_qty: Number(r.ordered_qty) || 0, received_qty: null,
-          expiry_date: r.expiry_date || null, department: r.department || null,
-          item_id: r.item_id, matched: r.matched, status: 'pending',
-        }
-        if (withSample) base.is_sample = !!r.is_sample
-        return base
-      })
-      let res = await chunkedWrite('boat_note_items', buildItemRows(true), { mode: 'insert' })
-      if (res.failed && (res.errors || []).some(e => /is_sample|column/i.test(e || ''))) {
-        res = await chunkedWrite('boat_note_items', buildItemRows(false), { mode: 'insert' })
+      let working = [...rows]
+      if (!skipAdd && pendingNew.length) {
+        const catMap = {}
+        pendingNew.forEach(r => { catMap[r.id] = r._cat || 'General' })
+        const created = await autoAddUnmatched(pendingNew, catMap)
+        const byRow = new Map(created.map(c => [c.rowId, c.item]))
+        working = working.map(r => {
+          const it = byRow.get(r.id)
+          if (!it) return r
+          return { ...r, item_id: it.id, matched: true }
+        })
+        setRows(working)
+        // refresh items cache
+        const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number').eq('active', true))
+        setItems(data || [])
+        toast.success(`Added ${created.length} item(s) to inventory`)
       }
-      if (res.failed) toast(`Saved note, but ${res.failed} line(s) failed to record.`, { icon: '⚠️' })
-      else toast.success('Boat note saved to history')
-
-      // Record the weekly upload in the note's persistent history, with a
-      // snapshot of the ORIGINAL lines so we can always see what was there.
-      logBoatNoteEvent(note.id, 'uploaded', {
-        actor: meta.received_by,
-        detail: `Uploaded ${rows.length} line(s)${allDepts.length ? ` · ${allDepts.join(', ')}` : ''}`,
-        snapshot: {
-          note_date: safeDate, label: note.label, departments: allDepts,
-          items: rows.map(r => ({
-            line_no: r.line_no, part_number: r.part_number, product_name: r.product_name,
-            unit: r.unit, ordered_qty: Number(r.ordered_qty) || 0, department: r.department || null,
-            supplier: r.supplier || null, po_number: r.po_number || null, is_sample: !!r.is_sample,
-          })),
-        },
-      })
-      onSaved?.()
+      await proceedSave(working)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
   }
@@ -513,6 +594,39 @@ function UploadFlow({ onSaved }) {
           </Tbody>
         </Table>
       </div>
+
+      {pendingNew.length > 0 && (
+        <Modal isOpen onClose={() => !busy && setPendingNew([])} title="Add missing items to inventory?" size="md"
+          footer={<>
+            <Button variant="ghost" onClick={() => confirmAutoAddAndSave(true)} disabled={busy}>Skip — save without adding</Button>
+            <Button variant="success" loading={busy} onClick={() => confirmAutoAddAndSave(false)}>
+              <Plus className="w-4 h-4" /> Auto-add {pendingNew.length} item{pendingNew.length !== 1 ? 's' : ''} & save
+            </Button>
+          </>}>
+          <div className="space-y-3">
+            <p className="text-sm text-slate-300">
+              {pendingNew.length} line{pendingNew.length !== 1 ? 's are' : ' is'} not in inventory. Pick <strong>General / Food / Beverage</strong> only —
+              name, code, unit and supplier are taken from the boat note.
+            </p>
+            <div className="max-h-72 overflow-y-auto space-y-2">
+              {pendingNew.map((r, idx) => (
+                <div key={r.id} className="flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-slate-100 font-medium truncate">{r.product_name || '—'}</p>
+                    <p className="text-xs text-slate-500 font-mono">#{r.part_number || '—'} · {r.unit || 'EA'} · {r.supplier || 'no supplier'}</p>
+                  </div>
+                  <select className="input text-xs py-1.5 w-28" value={r._cat || 'General'}
+                    onChange={e => setPendingNew(list => list.map((x, i) => i === idx ? { ...x, _cat: e.target.value } : x))}>
+                    <option value="General">General</option>
+                    <option value="Food">Food</option>
+                    <option value="Beverage">Beverage</option>
+                  </select>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -894,6 +1008,7 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
   const [batches, setBatches] = useState([
     { id: rid(), expiry_date: line.expiry_date || '', quantity: line.received_qty ?? line.ordered_qty ?? '' },
   ])
+  const [recvNote, setRecvNote] = useState(line.note || '')
   const [busy, setBusy] = useState(false)
 
   const invItem = useMemo(() => inventory.find(i => i.id === itemId) || null, [inventory, itemId])
@@ -928,6 +1043,12 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
       const { error: uErr } = await supabase.from('items').update(upd).eq('id', itemId)
       if (uErr) throw uErr
 
+      const orderedN = Number(line.ordered_qty) || 0
+      const extraN = Math.max(0, totalQty - orderedN)
+      const noteBits = []
+      if (dated.length > 1) noteBits.push(`Batches: ${dated.map(b => `${b.quantity}@${b.expiry_date}`).join(', ')}`)
+      if (extraN > 0) noteBits.push(`Increased +${extraN}${recvNote.trim() ? `: ${recvNote.trim()}` : ''}`)
+      else if (recvNote.trim()) noteBits.push(recvNote.trim())
       const patch = {
         received_qty: totalQty,
         expiry_date: earliest,
@@ -936,10 +1057,7 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
         item_id: itemId,
         received_by: actor,
         received_at: new Date().toISOString(),
-        // store multi-batch detail in note field if more than one expiry
-        note: dated.length > 1
-          ? `Batches: ${dated.map(b => `${b.quantity}@${b.expiry_date}`).join(', ')}`
-          : (line.note || null),
+        note: noteBits.length ? noteBits.join(' · ') : null,
       }
       const { error: lErr } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
       if (lErr) throw lErr
@@ -1034,7 +1152,19 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
             Total arrived: <span className="text-slate-200 font-semibold">{totalQty || 0}</span> {line.unit}
             {batches.length > 1 ? ` across ${batches.filter(b => Number(b.quantity) > 0).length} batches` : ''}.
             Leave the date blank for items with no expiry.
+            {totalQty > (Number(line.ordered_qty) || 0) ? (
+              <span className="block text-emerald-300 mt-1">Increased by {totalQty - (Number(line.ordered_qty) || 0)} above ordered — add a note below.</span>
+            ) : null}
           </p>
+        </div>
+
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            Note{totalQty > (Number(line.ordered_qty) || 0) ? <span className="text-slate-500 normal-case"> (recommended for increased qty)</span> : <span className="text-slate-500 normal-case"> (optional)</span>}
+          </label>
+          <textarea rows={2} value={recvNote} onChange={e => setRecvNote(e.target.value)}
+            placeholder={totalQty > (Number(line.ordered_qty) || 0) ? 'e.g. supplier sent extra cartons' : 'Optional note for this arrival…'}
+            className="input w-full mt-1.5 text-sm" />
         </div>
       </div>
     </Modal>
@@ -1043,27 +1173,30 @@ function ReceiveItemModal({ note, line, inventory, onClose, onDone }) {
 
 // ── Flag a line as NOT ARRIVED or WRONG ITEM, with a note ────────────────────
 function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone }) {
-  const initKind = ['wrong_item', 'damaged', 'not_arrived', 'short'].includes(line.status) ? line.status : 'not_arrived'
+  const initKind = ['wrong_item', 'damaged', 'not_arrived', 'short', 'increased'].includes(line.status) ? line.status
+    : (Number(line.received_qty) > Number(line.ordered_qty) ? 'increased' : 'not_arrived')
   const [kind, setKind] = useState(initKind)
   const [note, setNote] = useState(line.note || '')
-  const [qty,  setQty]  = useState(String(line.damaged_qty ?? line.short_qty ?? line.wrong_qty ?? ''))
+  const [qty,  setQty]  = useState(String(line.damaged_qty ?? line.short_qty ?? line.wrong_qty ?? (line.status === 'increased' ? Math.max(0, Number(line.received_qty||0) - Number(line.ordered_qty||0)) : '') ))
   const [logReturn, setLogReturn] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  const LABELS = { not_arrived: 'not arrived', wrong_item: 'wrong item', damaged: 'damaged', short: 'short' }
-  // Only DAMAGED and SHORT ask "how many is the problem" (e.g. 3 cases damaged);
-  // the rest of the delivery is then received into inventory automatically.
-  // NOT ARRIVED and WRONG ITEM are recorded straight away with no quantity.
-  const needsQty = kind === 'damaged' || kind === 'short'
+  const LABELS = { not_arrived: 'not arrived', wrong_item: 'wrong item', damaged: 'damaged', short: 'short', increased: 'increased', note: 'note' }
+  // DAMAGED / SHORT / INCREASED ask for a quantity.
+  // NOT ARRIVED and WRONG ITEM are recorded straight away (wrong uses ordered qty).
+  // GENERAL NOTE only updates the note field without changing status.
+  const needsQty = kind === 'damaged' || kind === 'short' || kind === 'increased'
   const qtyLabel = kind === 'damaged' ? 'How many are damaged? (e.g. 3 cases)'
-                 : kind === 'short' ? 'How many are short?' : 'Quantity'
+                 : kind === 'short' ? 'How many are short?'
+                 : kind === 'increased' ? 'How many EXTRA arrived above ordered?'
+                 : 'Quantity'
   const canReturn = kind === 'wrong_item' || kind === 'damaged'
 
   const ordered = Number(line.ordered_qty) || 0
   const affected = Number(qty) || 0
   // For damaged/short the remainder (ordered − affected) is the good stock that
-  // still gets received into inventory.
-  const goodQty = needsQty ? Math.max(0, ordered - affected) : 0
+  // still gets received into inventory. Increased does not use goodQty.
+  const goodQty = (kind === 'damaged' || kind === 'short') ? Math.max(0, ordered - affected) : 0
   const invItem = useMemo(() => inventory.find(i => i.id === line.item_id) || null, [inventory, line.item_id])
 
   const btn = (k, label, active) =>
@@ -1074,30 +1207,70 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
 
   const save = async () => {
     const n = Number(qty)
+    if (kind === 'note') {
+      if (!note.trim()) { toast.error('Write a note first'); return }
+      setBusy(true)
+      try {
+        const actor = boatNote?.created_by || (await currentActor())
+        const patch = { note: note.trim() }
+        const { error } = await supabase.from('boat_note_items').update(patch).eq('id', line.id)
+        if (error) throw error
+        if (boatNote?.id) {
+          logBoatNoteEvent(boatNote.id, 'note_updated', {
+            boatNoteItemId: line.id, actor,
+            partNumber: line.part_number, productName: line.product_name, department: line.department,
+            detail: note.trim(),
+          })
+        }
+        toast.success('Note saved')
+        onDone(patch, 0)
+      } catch (e) { toast.error(e.message) }
+      setBusy(false)
+      return
+    }
     if (needsQty && (!n || n <= 0)) { toast.error('Enter how many are affected'); return }
-    if (needsQty && n > ordered) { toast.error(`Only ${ordered} ${line.unit || ''} were ordered`); return }
+    if ((kind === 'damaged' || kind === 'short') && n > ordered) { toast.error(`Only ${ordered} ${line.unit || ''} were ordered`); return }
     // A wrong item must be explained -- record WHY it is wrong.
     if (kind === 'wrong_item' && !note.trim()) { toast.error('Please write a note explaining why it is the wrong item'); return }
+    // Notes encouraged for every problem type.
+    if (!note.trim() && kind !== 'wrong_item') {
+      // optional for others — continue
+    }
     setBusy(true)
     try {
       const actor = boatNote?.created_by || (await currentActor())
       let receivedGood = 0
+      const wrongUnits = kind === 'wrong_item' ? (ordered || null) : null
 
       const patch = {
-        status: kind,
+        status: kind === 'increased' ? (line.status === 'received' ? 'received' : 'arrived') : kind,
         note: note.trim() || null,
         damaged_qty: kind === 'damaged' ? n : null,
-        wrong_qty:   kind === 'wrong_item' ? n : null,
+        wrong_qty:   kind === 'wrong_item' ? wrongUnits : null,
         short_qty:   kind === 'short' ? n : null,
       }
 
       // For damaged / short: record the good remainder as arrived qty.
       // Inventory is only updated later via Update Inventory (idempotent).
-      if (needsQty && goodQty > 0) {
+      if ((kind === 'damaged' || kind === 'short') && goodQty > 0) {
         receivedGood = goodQty
         patch.received_qty = goodQty
         patch.received_by = actor
         patch.received_at = new Date().toISOString()
+        if (line.item_id) {
+          await supabase.from('items').update({ active: true }).eq('id', line.item_id).catch(() => {})
+        }
+      }
+
+      // Increased: set received_qty = ordered + extra (keeps arrived/received status).
+      if (kind === 'increased') {
+        const newRecv = ordered + n
+        patch.received_qty = newRecv
+        patch.received_by = actor
+        patch.received_at = new Date().toISOString()
+        patch.note = note.trim()
+          ? `Increased +${n}: ${note.trim()}`
+          : `Increased +${n} ${line.unit || ''} above ordered ${ordered}`
         if (line.item_id) {
           await supabase.from('items').update({ active: true }).eq('id', line.item_id).catch(() => {})
         }
@@ -1111,27 +1284,32 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
           boat_note_item_id: line.id, item_id: line.item_id || null,
           part_number: line.part_number || null, product_name: line.product_name || null,
           supplier: line.supplier || null, po_number: line.po_number || null,
-          unit: line.unit || 'EA', qty: (needsQty ? n : line.ordered_qty) || 0,
-          reason: kind, status: 'awaiting_return', created_by: actor,
+          unit: line.unit || 'EA', qty: (kind === 'damaged' || kind === 'short' ? n : line.ordered_qty) || 0,
+          reason: kind === 'increased' ? 'wrong_item' : kind, status: 'awaiting_return', created_by: actor,
           replacement_part_number: line.part_number || null,
           replacement_product_name: line.product_name || null,
-          replacement_qty: (needsQty ? n : line.ordered_qty) || 0,
+          replacement_qty: (kind === 'damaged' || kind === 'short' ? n : line.ordered_qty) || 0,
         }).catch(() => {})
       }
 
       // Persistent boat-note history entry.
+      const eventType = kind === 'increased' ? 'increased' : kind
       if (boatNote?.id) {
-        logBoatNoteEvent(boatNote.id, kind, {
+        logBoatNoteEvent(boatNote.id, eventType, {
           boatNoteItemId: line.id, actor,
           partNumber: line.part_number, productName: line.product_name, department: line.department,
-          qty: needsQty ? n : null,
-          detail: needsQty
+          qty: needsQty ? n : (kind === 'wrong_item' ? wrongUnits : null),
+          detail: kind === 'increased'
+            ? `increased +${n} ${line.unit || ''} (total ${ordered + n})${note.trim() ? ` · ${note.trim()}` : ''}`
+            : needsQty
             ? `${LABELS[kind]} ${n} ${line.unit || ''}${receivedGood ? ` · ${receivedGood} good to post later` : ''}${note.trim() ? ` · ${note.trim()}` : ''}`
             : `${LABELS[kind]}${note.trim() ? ` · ${note.trim()}` : ''}`,
         })
       }
 
-      toast.success(`Marked as ${LABELS[kind]}${receivedGood ? ` · ${receivedGood} good pending inventory update` : ''}${logReturn && canReturn ? ' + return logged' : ''}`)
+      toast.success(kind === 'increased'
+        ? `Recorded increase +${n} ${line.unit || ''} · total received ${ordered + n}`
+        : `Marked as ${LABELS[kind]}${receivedGood ? ` · ${receivedGood} good pending inventory update` : ''}${logReturn && canReturn ? ' + return logged' : ''}`)
       onDone(patch, receivedGood ? 1 : 0)
     } catch (e) { toast.error(e.message) }
     setBusy(false)
@@ -1153,10 +1331,24 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
           {btn('short',       'Short',       'bg-amber-600/20 border-amber-500 text-amber-300')}
           {btn('wrong_item',  'Wrong item',  'bg-orange-600/20 border-orange-500 text-orange-300')}
           {btn('damaged',     'Damaged',     'bg-red-600/20 border-red-500 text-red-300')}
+          {btn('increased',   'Increased',   'bg-emerald-600/20 border-emerald-500 text-emerald-300')}
+          {btn('note',        'General note','bg-sky-600/20 border-sky-500 text-sky-300')}
         </div>
-        {!needsQty && (
+        {!needsQty && kind !== 'note' && (
           <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-400">
-            {kind === 'not_arrived' ? 'Recorded as not arrived — no quantity needed.' : 'Recorded as a wrong item — no quantity needed, but please note below WHY it is wrong (e.g. wrong size / brand / product).'}
+            {kind === 'not_arrived'
+              ? 'Recorded as not arrived — no quantity needed. Add a note if useful.'
+              : 'Recorded as a wrong item (stays under ARRIVED, not Not Arrived). Please note WHY it is wrong.'}
+          </div>
+        )}
+        {kind === 'note' && (
+          <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-400">
+            Saves a general note on this line without changing its status.
+          </div>
+        )}
+        {kind === 'increased' && (
+          <div className="bg-emerald-900/15 border border-emerald-700/30 rounded-lg p-2.5 text-xs text-emerald-200">
+            Use when more arrived than ordered. Enter the EXTRA quantity — received total becomes ordered + extra. Then run Update Inventory to post the extra stock.
           </div>
         )}
         {needsQty && (
@@ -1183,10 +1375,18 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
         )}
         <div>
           <label className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
-            Note{kind === 'wrong_item' && <span className="text-red-400 normal-case"> * required — why is it wrong?</span>}
+            Note{(kind === 'wrong_item' || kind === 'note') && <span className="text-red-400 normal-case"> * required</span>}
+            {kind !== 'wrong_item' && kind !== 'note' && <span className="text-slate-500 normal-case"> (recommended)</span>}
           </label>
           <textarea rows={3} value={note} onChange={e => setNote(e.target.value)}
-            placeholder={kind === 'not_arrived' ? 'e.g. supplier to redeliver Thursday' : kind === 'short' ? 'e.g. ordered 10, only 7 arrived' : 'e.g. sent 1.5L bottles instead of 500mL'}
+            placeholder={
+              kind === 'not_arrived' ? 'e.g. supplier to redeliver Thursday' :
+              kind === 'short' ? 'e.g. ordered 10, only 7 arrived' :
+              kind === 'damaged' ? 'e.g. crushed cases / leaking bottles' :
+              kind === 'increased' ? 'e.g. supplier sent 2 extra cartons' :
+              kind === 'note' ? 'General note about this line…' :
+              'e.g. sent 1.5L bottles instead of 500mL'
+            }
             className="input w-full mt-1.5 text-sm" />
         </div>
       </div>
@@ -1195,8 +1395,8 @@ function IssueItemModal({ note: boatNote, line, inventory = [], onClose, onDone 
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// NOT ARRIVED — every line flagged not-arrived / wrong item, across all notes,
-// filterable by store/department so you can see exactly what is outstanding.
+// NOT ARRIVED — only lines flagged not-arrived. Wrong items physically arrived
+// (wrong product) so they stay on the boat note / ARRIVED band, never here.
 // ════════════════════════════════════════════════════════════════════════════
 function NotArrivedTab() {
   const [rows, setRows]     = useState([])
@@ -1211,7 +1411,7 @@ function NotArrivedTab() {
     const { data } = await selectAll(() =>
       supabase.from('boat_note_items')
         .select('*, boat_notes(note_date,label,delivery_day)')
-        .in('status', ['not_arrived', 'wrong_item']))
+        .eq('status', 'not_arrived'))
     let list = (data || []).map(r => ({
       ...r,
       note_date:  r.boat_notes?.note_date || null,
@@ -1262,7 +1462,7 @@ function NotArrivedTab() {
     <div className="space-y-4">
       <div className="bg-red-900/15 border border-red-700/30 rounded-lg p-4 text-sm text-red-200">
         <p className="font-semibold flex items-center gap-2 mb-1"><AlertTriangle className="w-4 h-4" /> Not arrived — by boat note date</p>
-        <p>Every boat-note line marked <strong>not arrived</strong> or <strong>wrong item</strong>, grouped under the boat note date just like the boat note list. Confirmed arrived items stay on the boat note until you run <strong>Update Inventory</strong>.</p>
+        <p>Every boat-note line marked <strong>not arrived</strong>, grouped under the boat note date. <strong>Wrong item</strong> lines stay on the boat note under ARRIVED (they physically arrived). Confirmed arrived items stay on the boat note until you run <strong>Update Inventory</strong>.</p>
       </div>
 
       <div className="card-sm flex items-center gap-3 flex-wrap">
@@ -1315,7 +1515,7 @@ function NotArrivedTab() {
                       <p className="text-xs text-slate-500 truncate">{[...group.labels].join(' · ') || 'Boat note'}</p>
                     </div>
                   </div>
-                  <Badge variant="red">{group.items.length} not arrived</Badge>
+                  <Badge variant="red">{group.items.length} missing</Badge>
                 </button>
                 {open && (
                   <div className="border-t border-slate-700 overflow-x-auto">

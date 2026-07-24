@@ -23,7 +23,7 @@ export function boatEventLabel(type) {
     item_updated: 'Item updated',
     item_removed: 'Item removed',
     resolved:     'Resolved',
-    note_updated: 'Note updated',
+    note_updated: 'Note updated', arrived: 'Arrived', increased: 'Increased',
   }
   return map[type] || type
 }
@@ -33,7 +33,7 @@ export function boatEventTone(type) {
   const map = {
     uploaded: 'teal', received: 'green', not_arrived: 'red', wrong_item: 'orange',
     damaged: 'red', short: 'yellow', item_updated: 'blue', item_removed: 'gray',
-    resolved: 'green', note_updated: 'blue',
+    resolved: 'green', note_updated: 'blue', arrived: 'teal', increased: 'green',
   }
   return map[type] || 'gray'
 }
