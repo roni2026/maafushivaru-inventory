@@ -60,6 +60,22 @@ function roundToPack(qty, pack) {
   if (p <= 1) return Math.max(0, Math.ceil(qty))
   return Math.max(0, Math.ceil(Math.ceil(qty) / p) * p)
 }
+
+// ── Store-based manual ordering ───────────────────────────────────────────────
+const STORES = ['Beverage Store', 'Dry Store 1', 'Dry Store 2', 'Dry Store 3', 'Freezer 1', 'Freezer 2', 'General Order']
+
+// Beverage Store item sequence from Beverage_Order.xlsx (part numbers, leading zeros stripped)
+const BEVERAGE_ORDER = [
+  '13485','13486','14348','14349','26823','14207','26824','19978','18045','18042',
+  '19979','18040','16505','15231','13633','13993','20297','14939','14932','14937',
+  '14924','14936','14938','14934','14935','14933','14925','14931','19534','20245',
+  '14455','14450','14157','14156','19916','14175','14155','14378','14377','14951',
+  '13766','15057','16607','15052','15053','13653','13654','13652','13770','13761',
+  '13771','13762','13765','15054','13767','13768','13769','13763','13760','14164',
+  '22084','14158','14161','14154','14159','14162','14163','14160','14787','14593',
+  '14583','14200','14736','14335','14999','13629','15674','15036',
+]
+
 const MAIN_CATEGORIES = ['Food', 'General', 'Beverage']
 // An item counts as active unless it has been explicitly deactivated. This
 // tolerates databases where the `active` column is missing or NULL (which a
@@ -80,6 +96,10 @@ export default function Orders() {
   const [saving,    setSaving]   = useState(false)
   const [resortName,setResortName]=useState('Outrigger Maafushivaru Resort')
   const [showCSV,   setShowCSV]  = useState(false)
+
+  // ── By-Store manual order mode ─────────────────────────────────────────────
+  const [byStoreMode,   setByStoreMode]   = useState(false)
+  const [selectedStore, setSelectedStore] = useState('Beverage Store')
 
   // ── Order-quantity controls ────────────────────────────────────────────────
   const [multiplier,   setMultiplier]   = useState(1)   // ×1..×5 on weekly average
@@ -333,6 +353,55 @@ export default function Orders() {
     setLoading(false)
   }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, multiplier, backupWeeks, subtractStock, genCats])
 
+
+  // ── Generate By Store ──────────────────────────────────────────────────────
+  // Builds the order list for the selected store without any auto-calculation.
+  // Beverage Store uses the exact Excel sequence; other stores sort alphabetically.
+  const generateByStore = useCallback(async (store, itemsList) => {
+    if (!itemsList || itemsList.length === 0) {
+      toast.error('No inventory items loaded'); return
+    }
+    const codeOf = (s) => String(s || '').replace(/^0+/, '')
+    let list = []
+    if (store === 'Beverage Store') {
+      const byCode = new Map(itemsList.map(i => [codeOf(i.part_number), i]))
+      const seqSet = new Set(BEVERAGE_ORDER)
+      list = BEVERAGE_ORDER.map((c, idx) => {
+        const it = byCode.get(c); if (!it) return null
+        return makeStoreRow(it, idx + 1, store)
+      }).filter(Boolean)
+      const extras = itemsList.filter(i => {
+        const sn = (i.stores?.name || '').toLowerCase()
+        return sn.includes('beverage') && !seqSet.has(codeOf(i.part_number))
+      })
+      extras.forEach((it, i) => list.push(makeStoreRow(it, list.length + i + 1, store)))
+    } else if (store === 'General Order') {
+      list = [...itemsList].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map((it,i) => makeStoreRow(it, i+1, store))
+    } else {
+      const kw = store.toLowerCase()
+      list = itemsList
+        .filter(i => (i.stores?.name||'').toLowerCase() === kw || (i.stores?.name||'').toLowerCase().includes(store.split(' ')[0].toLowerCase()))
+        .sort((a,b) => (a.name||'').localeCompare(b.name||''))
+        .map((it,i) => makeStoreRow(it, i+1, store))
+    }
+    setRows(list)
+    setDelivery(nextDelivery())
+  }, [])
+
+  function makeStoreRow(it, sl, store) {
+    return {
+      id: it.id, sl, part_number: it.part_number, name: it.name,
+      store: it.stores?.name || store, category: it.stores?.category || '',
+      unit: it.unit || 'EA', current_stock: Number(it.current_stock) || 0, min_stock: Number(it.min_stock) || 0,
+      pack: 1, supplier: it.supplier || '',
+      thisWeek: 0, lastWeek: 0, avgWeekly: 0, suggested: 0,
+      ordered: 0, selected: false, _edited: false,
+      origin: it.origin || 'foreign', deliveryDay: '', _inBoatNote: false, _fromBoatNote: false,
+      _fromPending: false, _pendingNote: '', _manuallyAdded: false, _notArrived: false,
+      _byStore: true,
+    }
+  }
+
   // ── Add undelivered to current order ──────────────────────
   const addPendingToOrder = () => {
     setRows(prev => {
@@ -505,10 +574,13 @@ export default function Orders() {
     if (!delivery) return
     setSaving(true)
     try {
+      const storeName = byStoreMode ? selectedStore : ''
       const { data: order } = await supabase.from('order_history').insert({
         delivery_date: delivery.date.toISOString().split('T')[0],
         delivery_day:  delivery.date.toLocaleDateString('en-US', { weekday:'long' }),
-        status: 'pending', created_by: 'System', notes: `Order for ${delivery.label}`,
+        status: 'pending', created_by: 'System',
+        notes: byStoreMode ? `${selectedStore} · ${delivery.label}` : `Order for ${delivery.label}`,
+        store_name: storeName || null,
       }).select().single()
       await supabase.from('order_history_items').insert(
         toOrder.map(r => ({ order_id: order.id, item_id: r.id?.startsWith?.('pending') ? null : r.id, part_number: r.part_number, item_name: r.name, store_name: r.store, unit: r.unit, ordered_qty: r.ordered, received_qty: 0 }))
@@ -521,7 +593,7 @@ export default function Orders() {
   // ── History ────────────────────────────────────────────────
   const loadHistory = async () => {
     setHistLoad(true)
-    const { data } = await supabase.from('order_history').select('*').order('created_at', { ascending: false }).limit(30)
+    const { data } = await supabase.from('order_history').select('*').order('delivery_date', { ascending: false }).order('created_at', { ascending: false }).limit(60)
     setHistory(data || []); setHistLoad(false)
   }
   const loadExpandedItems = async (id) => {
@@ -577,6 +649,7 @@ export default function Orders() {
   //  Thursday). Picking a day instantly narrows the list to what can actually
   //  be delivered that day — no regenerate needed.
   const visibleRows = useMemo(() => {
+    if (byStoreMode) return rows // No filtering in By Store mode
     // 'week' (whole-week order) and 'Monday'/'Thursday' (day-targeted) views.
     let list = (deliveryDay === 'Monday' || deliveryDay === 'Thursday')
       ? rows.filter(r => canDeliverOn(r.origin, deliveryDay))
@@ -586,7 +659,7 @@ export default function Orders() {
     if (needFilter === 'selected')   list = list.filter(r => r.selected)
     if (needFilter === 'unselected') list = list.filter(r => !r.selected)
     return list
-  }, [rows, deliveryDay, catFilter, subFilter, needFilter])
+  }, [rows, deliveryDay, catFilter, subFilter, needFilter, byStoreMode])
   const { sorted: sortedRows, thProps } = useSort(visibleRows, null, 'asc')
   // Float selected (needed) rows to the top so they're easy to see/scan.
   const displayRows = useMemo(() =>
@@ -605,7 +678,7 @@ export default function Orders() {
 
   // Only SELECTED rows with a quantity make it into the order (faded/unselected
   // = not needed, so they're excluded from export & save).
-  const orderRows        = visibleRows.filter(r => r.selected && r.ordered > 0)
+  const orderRows        = byStoreMode ? visibleRows.filter(r => r.ordered > 0) : visibleRows.filter(r => r.selected && r.ordered > 0)
   const toOrder          = orderRows
   const showPendingAlert = pendingItems.length > 0 && !pendingDismissed && rows.length > 0
   const pendingSources   = [...new Set(pendingItems.map(i => `${i.orderDay} · ${i.orderDate}`))]
@@ -638,7 +711,9 @@ export default function Orders() {
             </>
           )}
           {tab === 'generate'
-            ? <Button onClick={generate} loading={loading}><RefreshCw className="w-4 h-4" /> Generate</Button>
+            ? <Button onClick={byStoreMode ? () => generateByStore(selectedStore, allItems) : generate} loading={loading}>
+                <RefreshCw className="w-4 h-4" /> {byStoreMode ? 'Load Store Items' : 'Generate'}
+              </Button>
             : <Button onClick={() => setTab('generate')}>← Generate New</Button>}
         </div>
       </div>
@@ -660,21 +735,33 @@ export default function Orders() {
           <div className="card-sm space-y-3">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               {/* By Pattern / By Usage */}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs text-slate-400 uppercase tracking-wide">Generate</span>
                 <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
                   {[
-                    { key:'pattern', label:'By Pattern', hint:'general order list' },
-                    { key:'usage',   label:'By Usage',   hint:'from usage history' },
+                    { key:'pattern', label:'By Pattern', hint:'general order list from boat-note history' },
+                    { key:'usage',   label:'By Usage',   hint:'from issuance usage history' },
                   ].map(m => (
-                    <button key={m.key} onClick={() => setOrderMode(m.key)} title={m.hint}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${orderMode === m.key ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                    <button key={m.key}
+                      onClick={() => { setOrderMode(m.key); setByStoreMode(false) }}
+                      title={m.hint}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${!byStoreMode && orderMode === m.key ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
                       {m.label}
                     </button>
                   ))}
+                  <button
+                    onClick={async () => {
+                      setByStoreMode(true)
+                      await loadAllItems()
+                      generateByStore(selectedStore, allItems)
+                    }}
+                    title="Manual entry per store — items in fixed sequence"
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${byStoreMode ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
+                    By Store
+                  </button>
                 </div>
                 <span className="text-xs text-slate-500 hidden sm:inline">
-                  {orderMode === 'pattern' ? 'standard list from boat-note ordering pattern' : 'calculated from issuance usage history'}
+                  {byStoreMode ? 'manual entry per store — all quantities start at 0' : orderMode === 'pattern' ? 'standard list from boat-note ordering pattern' : 'calculated from issuance usage history'}
                 </span>
               </div>
               {/* Delivery day */}
@@ -691,7 +778,33 @@ export default function Orders() {
               </div>
             </div>
 
-            {/* Categories to include when generating */}
+
+            {/* Store selector — shown only in By Store mode */}
+            {byStoreMode && (
+              <div className="flex items-center gap-3 flex-wrap border-t border-slate-700/50 pt-3">
+                <span className="text-xs text-slate-400 uppercase tracking-wide">Store</span>
+                <div className="flex gap-2 flex-wrap">
+                  {STORES.map(s => (
+                    <button key={s}
+                      onClick={async () => {
+                        setSelectedStore(s)
+                        setRows([])
+                        if (allItems.length > 0) generateByStore(s, allItems)
+                        else {
+                          await loadAllItems()
+                          generateByStore(s, allItems)
+                        }
+                      }}
+                      className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-colors ${selectedStore === s ? 'bg-teal-600 border-teal-600 text-white' : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-teal-600'}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-xs text-slate-500 ml-auto">{rows.length} items · {rows.filter(r=>r.ordered>0).length} to order</span>
+              </div>
+            )}
+            {/* Categories to include when generating — hidden in By Store mode */}
+            {!byStoreMode && (
             <div className="flex items-center gap-3 flex-wrap border-t border-slate-700/50 pt-3">
               <span className="text-xs text-slate-400 uppercase tracking-wide">Categories</span>
               {MAIN_CATEGORIES.map(c => (
@@ -702,6 +815,7 @@ export default function Orders() {
               ))}
               <span className="text-[11px] text-slate-500">Only ticked categories are included when you Generate.</span>
             </div>
+            )}
 
             {/* Order quantity controls: multiplier · backup weeks · subtract stock */}
             <div className="flex items-center gap-4 flex-wrap border-t border-slate-700/50 pt-3">
@@ -854,16 +968,17 @@ export default function Orders() {
                 </div>
                 <Table>
                   <Thead><tr>
-                    <Th>✓</Th>
+                    {byStoreMode && <Th className="w-8">#</Th>}
+                    {!byStoreMode && <Th>✓</Th>}
                     <Th {...thProps('part_number')}>Part #</Th>
                     <Th {...thProps('name')}>Item Name</Th>
-                    <Th {...thProps('store')}>Sub-Category</Th>
-                    <Th {...thProps('origin')}>Origin · Day</Th>
+                    {!byStoreMode && <Th {...thProps('store')}>Sub-Category</Th>}
+                    {!byStoreMode && <Th {...thProps('origin')}>Origin · Day</Th>}
                     <Th {...thProps('unit')}>Unit</Th>
-                    <Th {...thProps('pack')}>Pack</Th>
+                    {!byStoreMode && <Th {...thProps('pack')}>Pack</Th>}
                     <Th {...thProps('current_stock')}>In Stock</Th>
-                    <Th {...thProps('avgWeekly')}>Avg/Wk</Th>
-                    <Th {...thProps('suggested')}>Suggested</Th>
+                    {!byStoreMode && <Th {...thProps('avgWeekly')}>Avg/Wk</Th>}
+                    {!byStoreMode && <Th {...thProps('suggested')}>Suggested</Th>}
                     <Th {...thProps('ordered')}>Order Qty</Th>
                     <Th></Th>
                   </tr></Thead>
@@ -871,45 +986,55 @@ export default function Orders() {
                     {displayRows.map(row => (
                       <Tr key={row.id}
                         className={[
-                          !row.selected ? 'opacity-40' : '',
+                          !byStoreMode && !row.selected ? 'opacity-40' : '',
+                          byStoreMode && row.ordered > 0 ? 'bg-teal-900/10 border-l-2 border-l-teal-600' : '',
                           row._notArrived ? 'bg-red-900/15' : '',
                           !row._notArrived && row._fromPending ? 'bg-orange-900/10' : '',
                           !row._notArrived && row._manuallyAdded && !row._fromPending ? 'bg-blue-900/10' : '',
                         ].join(' ')}>
-                        <Td>
-                          <input type="checkbox" checked={!!row.selected} onChange={() => toggleSelect(row.id)}
-                            title={row.selected ? 'Needed — included in order' : 'Not needed — excluded'}
-                            className="accent-teal-500 w-4 h-4" />
-                        </Td>
-                        <Td className="font-mono text-xs text-slate-300">{row.part_number}</Td>
+                        {byStoreMode && <Td className="text-xs text-slate-500 tabular-nums">{row.sl}</Td>}
+                        {!byStoreMode && (
+                          <Td>
+                            <input type="checkbox" checked={!!row.selected} onChange={() => toggleSelect(row.id)}
+                              title={row.selected ? 'Needed — included in order' : 'Not needed — excluded'}
+                              className="accent-teal-500 w-4 h-4" />
+                          </Td>
+                        )}
+                        <Td className="font-mono text-xs text-slate-300">{String(row.part_number||'').replace(/^0+/,'')}</Td>
                         <Td className="max-w-xs">
                           <div className="flex items-center gap-1.5">
                             {row._notArrived && <Badge variant={row._naStatus === 'short' ? 'yellow' : 'red'}>{row._naStatus === 'short' ? 'short' : 'not arrived'}</Badge>}
-                            <p className={`text-sm font-medium truncate ${row._notArrived ? 'text-red-200' : row._fromPending ? 'text-orange-200' : row._manuallyAdded ? 'text-blue-200' : 'text-slate-100'}`}>{row.name}</p>
+                            <p className={`text-sm font-medium truncate ${byStoreMode && row.ordered > 0 ? 'text-teal-300' : row._notArrived ? 'text-red-200' : row._fromPending ? 'text-orange-200' : row._manuallyAdded ? 'text-blue-200' : 'text-slate-100'}`}>{row.name}</p>
                           </div>
-                          {row.supplier && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{row.supplier}</p>}
+                          {row.supplier && !byStoreMode && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{row.supplier}</p>}
                           {row._pendingNote && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{row._pendingNote}</p>}
                         </Td>
-                        <Td className="text-xs text-slate-400">{row.store}</Td>
+                        {!byStoreMode && <Td className="text-xs text-slate-400">{row.store}</Td>}
+                        {!byStoreMode && (
+                          <Td>
+                            <Badge variant={row.origin === 'local' ? 'green' : 'blue'}>
+                              {deliveryLabelFor(row.origin)}
+                            </Badge>
+                          </Td>
+                        )}
                         <Td>
-                          <Badge variant={row.origin === 'local' ? 'green' : 'blue'}>
-                            {deliveryLabelFor(row.origin)}
-                          </Badge>
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${byStoreMode ? 'bg-slate-700 text-teal-300' : 'text-slate-400'}`}>{row.unit}</span>
                         </Td>
-                        <Td className="text-xs text-slate-400">{row.unit}</Td>
-                        <Td>
-                          <input type="number" min="1" step="1" value={row.pack || 1} onChange={e => setPack(row.id, e.target.value)}
-                            title="Pack size — order rounds up to whole packs"
-                            className="w-14 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
-                        </Td>
+                        {!byStoreMode && (
+                          <Td>
+                            <input type="number" min="1" step="1" value={row.pack || 1} onChange={e => setPack(row.id, e.target.value)}
+                              title="Pack size — order rounds up to whole packs"
+                              className="w-14 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
+                          </Td>
+                        )}
                         <Td className={Number(row.current_stock) <= Number(row.min_stock) ? 'text-red-400 font-semibold' : 'text-slate-300'}>{row.current_stock}</Td>
-                        <Td className="text-slate-300">{row.avgWeekly || '—'}</Td>
-                        <Td><Badge variant={row._notArrived ? 'red' : row._fromPending ? 'orange' : row._manuallyAdded ? 'blue' : 'teal'}>{row.suggested}</Badge></Td>
+                        {!byStoreMode && <Td className="text-slate-300">{row.avgWeekly || '—'}</Td>}
+                        {!byStoreMode && <Td><Badge variant={row._notArrived ? 'red' : row._fromPending ? 'orange' : row._manuallyAdded ? 'blue' : 'teal'}>{row.suggested}</Badge></Td>}
                         <Td>
                           <div className="flex items-center gap-1">
                             <button onClick={() => adjustQty(row.id, -1)} className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300"><Minus className="w-3 h-3" /></button>
                             <input type="number" min="0" value={row.ordered} onChange={e => setQty(row.id, e.target.value)}
-                              className="w-16 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
+                              className={`w-16 border rounded-lg px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF] ${byStoreMode && row.ordered > 0 ? 'bg-teal-900/20 border-teal-600 text-teal-200' : 'bg-slate-700 border-slate-600 text-slate-100'}`} />
                             <button onClick={() => adjustQty(row.id, 1)} className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300"><Plus className="w-3 h-3" /></button>
                           </div>
                         </Td>
@@ -938,79 +1063,112 @@ export default function Orders() {
               <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-20" />
               <p className="font-medium">No saved orders yet</p>
             </div>
-          ) : history.map(order => {
-            const oItems = expandedItems[order.id] || []
-            const isExp  = expanded === order.id
-            const undeliveredCount = oItems.filter(i => Number(i.received_qty) < Number(i.ordered_qty)).length
-            return (
-              <div key={order.id} className="card border border-slate-700/40">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <button className="flex items-center gap-3 text-left flex-1" onClick={() => loadExpandedItems(order.id)}>
-                    {isExp ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-slate-100">Order for {order.delivery_day} · {order.delivery_date}</p>
-                        <Badge variant={STATUS_BADGE[order.status] || 'gray'}>{order.status}</Badge>
-                        {isExp && undeliveredCount > 0 && order.status !== 'received' && (
-                          <span className="text-xs text-orange-400 flex items-center gap-1"><PackageX className="w-3 h-3" />{undeliveredCount} not received</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-400 mt-0.5">Saved {new Date(order.created_at).toLocaleDateString()}</p>
+          ) : (() => {
+            // Group orders by delivery_date, newest first
+            const dateGroups = {}
+            history.forEach(o => {
+              const d = o.delivery_date || 'Unknown'
+              if (!dateGroups[d]) dateGroups[d] = []
+              dateGroups[d].push(o)
+            })
+            const sortedDates = Object.keys(dateGroups).sort((a,b) => b.localeCompare(a))
+            return sortedDates.map(date => {
+              const dateOrders = dateGroups[date]
+              const dateLabel = date !== 'Unknown'
+                ? new Date(date).toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'short', year:'numeric' })
+                : 'Unknown Date'
+              const totalItems = dateOrders.reduce((s,o) => s + (expandedItems[o.id]?.length || 0), 0)
+              return (
+                <div key={date} className="card border border-slate-700/40">
+                  {/* Date header */}
+                  <div className="flex items-center gap-3 pb-3 mb-3 border-b border-slate-700/40">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#00AEEF] shrink-0" />
+                    <div className="flex-1">
+                      <p className="font-bold text-slate-100 text-base">{dateLabel}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{dateOrders.length} order{dateOrders.length !== 1 ? 's' : ''}{totalItems > 0 ? ` · ${totalItems} items` : ''}</p>
                     </div>
-                  </button>
-                  <div className="flex gap-2 flex-wrap">
-                    {/* Add item to this saved order */}
-                    <button onClick={() => openAddToSavedOrder(order.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-400 border border-blue-700/30 bg-blue-900/10 hover:bg-blue-900/30 rounded-lg transition-colors">
-                      <PlusCircle className="w-3.5 h-3.5" /> Add Item
-                    </button>
-                    {order.status !== 'received' && order.status !== 'cancelled' && (
-                      <Button onClick={() => { loadExpandedItems(order.id); setTimeout(() => markReceived(order.id), 600) }}
-                        loading={markingId === order.id} variant="secondary">
-                        ✓ Mark All Received
-                      </Button>
-                    )}
+                  </div>
+                  {/* Store orders for this date */}
+                  <div className="space-y-2">
+                    {dateOrders.map(order => {
+                      const oItems = expandedItems[order.id] || []
+                      const isExp  = expanded === order.id
+                      const undeliveredCount = oItems.filter(i => Number(i.received_qty) < Number(i.ordered_qty)).length
+                      const storeName = order.store_name || (order.notes||'').split(' · ')[0] || `${order.delivery_day} Order`
+                      return (
+                        <div key={order.id} className="border border-slate-700/30 rounded-xl overflow-hidden">
+                          <div className="flex items-center justify-between flex-wrap gap-3 px-4 py-3 bg-slate-800/40">
+                            <button className="flex items-center gap-3 text-left flex-1" onClick={() => loadExpandedItems(order.id)}>
+                              {isExp ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="font-semibold text-slate-100">{storeName}</p>
+                                  <Badge variant={STATUS_BADGE[order.status] || 'gray'}>{order.status}</Badge>
+                                  {oItems.length > 0 && <span className="text-xs text-slate-400">{oItems.length} items</span>}
+                                  {isExp && undeliveredCount > 0 && order.status !== 'received' && (
+                                    <span className="text-xs text-orange-400 flex items-center gap-1"><PackageX className="w-3 h-3" />{undeliveredCount} missing</span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5">Saved {new Date(order.created_at).toLocaleDateString()}</p>
+                              </div>
+                            </button>
+                            <div className="flex gap-2 flex-wrap">
+                              <button onClick={() => openAddToSavedOrder(order.id)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-400 border border-blue-700/30 bg-blue-900/10 hover:bg-blue-900/30 rounded-lg transition-colors">
+                                <PlusCircle className="w-3.5 h-3.5" /> Add Item
+                              </button>
+                              {order.status !== 'received' && order.status !== 'cancelled' && (
+                                <Button onClick={() => { loadExpandedItems(order.id); setTimeout(() => markReceived(order.id), 600) }}
+                                  loading={markingId === order.id} variant="secondary">
+                                  ✓ Mark All Received
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          {isExp && oItems.length > 0 && (
+                            <div className="border-t border-slate-700/40">
+                              <Table>
+                                <Thead><tr><Th>SL</Th><Th>Part #</Th><Th>Item</Th><Th>Store</Th><Th>Ordered</Th><Th>Received</Th><Th>Status</Th></tr></Thead>
+                                <Tbody>
+                                  {oItems.map((oi, idx) => {
+                                    const shortfall   = Number(oi.ordered_qty) - Number(oi.received_qty)
+                                    const isReceived  = shortfall <= 0
+                                    return (
+                                      <Tr key={oi.id} className={isReceived ? 'opacity-60' : ''}>
+                                        <Td className="text-xs text-slate-500 tabular-nums w-8">{idx+1}</Td>
+                                        <Td className="font-mono text-xs text-slate-300">{String(oi.part_number||'').replace(/^0+/,'')}</Td>
+                                        <Td className="font-medium text-slate-100 max-w-xs truncate">{oi.item_name}</Td>
+                                        <Td className="text-slate-400 text-xs">{oi.store_name}</Td>
+                                        <Td className="text-teal-400 font-semibold">{oi.ordered_qty} <span className="text-slate-500 text-xs font-normal">{oi.unit}</span></Td>
+                                        <Td>
+                                          {order.status !== 'received' ? (
+                                            <input type="number" min="0" max={oi.ordered_qty} defaultValue={oi.received_qty}
+                                              className="w-20 input text-xs py-1 text-center"
+                                              onBlur={e => { const v = Number(e.target.value); if (v !== Number(oi.received_qty)) markPartialReceived(order.id, oi.id, v) }} />
+                                          ) : (
+                                            <span className="text-green-400 font-semibold">{oi.received_qty} <span className="text-slate-500 text-xs font-normal">{oi.unit}</span></span>
+                                          )}
+                                        </Td>
+                                        <Td>
+                                          {isReceived ? <Badge variant="green">Received</Badge>
+                                            : shortfall === Number(oi.ordered_qty) ? <Badge variant="yellow">Pending</Badge>
+                                            : <Badge variant="orange">Partial ({shortfall} missing)</Badge>}
+                                        </Td>
+                                      </Tr>
+                                    )
+                                  })}
+                                </Tbody>
+                              </Table>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
                 </div>
-
-                {isExp && oItems.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-700/40">
-                    <Table>
-                      <Thead><tr><Th>Part #</Th><Th>Item</Th><Th>Store</Th><Th>Ordered</Th><Th>Received</Th><Th>Status</Th></tr></Thead>
-                      <Tbody>
-                        {oItems.map(oi => {
-                          const shortfall   = Number(oi.ordered_qty) - Number(oi.received_qty)
-                          const isReceived  = shortfall <= 0
-                          return (
-                            <Tr key={oi.id} className={isReceived ? 'opacity-60' : ''}>
-                              <Td className="font-mono text-xs text-slate-300">{oi.part_number}</Td>
-                              <Td className="font-medium text-slate-100 max-w-xs truncate">{oi.item_name}</Td>
-                              <Td className="text-slate-400 text-xs">{oi.store_name}</Td>
-                              <Td className="text-teal-400 font-semibold">{oi.ordered_qty} <span className="text-slate-500 text-xs font-normal">{oi.unit}</span></Td>
-                              <Td>
-                                {order.status !== 'received' ? (
-                                  <input type="number" min="0" max={oi.ordered_qty} defaultValue={oi.received_qty}
-                                    className="w-20 input text-xs py-1 text-center"
-                                    onBlur={e => { const v = Number(e.target.value); if (v !== Number(oi.received_qty)) markPartialReceived(order.id, oi.id, v) }} />
-                                ) : (
-                                  <span className="text-green-400 font-semibold">{oi.received_qty} <span className="text-slate-500 text-xs font-normal">{oi.unit}</span></span>
-                                )}
-                              </Td>
-                              <Td>
-                                {isReceived ? <Badge variant="green">Received</Badge>
-                                  : shortfall === Number(oi.ordered_qty) ? <Badge variant="yellow">Pending</Badge>
-                                  : <Badge variant="orange">Partial ({shortfall} missing)</Badge>}
-                              </Td>
-                            </Tr>
-                          )
-                        })}
-                      </Tbody>
-                    </Table>
-                  </div>
-                )}
-              </div>
-            )
-          })}
+              )
+            })
+          })()}
         </div>
       )}
 
