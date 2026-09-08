@@ -1,70 +1,23 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { supabase, selectAll } from '../lib/supabase'
 import {
-  ShoppingCart, Download, RefreshCw, Minus, Plus, Save,
-  ChevronDown, ChevronRight, AlertTriangle, PackageX, CheckCircle2,
-  Search, Upload, X, PlusCircle
+  ShoppingCart, Download, Save, Minus, Plus, ChevronDown, ChevronRight,
+  Search, X, PlusCircle, PackageX, FileSpreadsheet, FileText, Mail, Calendar,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import Button from '../components/ui/Button'
 import Badge from '../components/ui/Badge'
 import Table, { Thead, Tbody, Th, Td, Tr } from '../components/ui/Table'
 import Modal from '../components/ui/Modal'
-import Input, { Textarea } from '../components/ui/Input'
-import CSVImportModal from '../components/CSVImportModal'
-import { CSV_CONFIGS } from '../lib/csvTemplates'
+import Input from '../components/ui/Input'
 import { exportOrderExcel } from '../lib/excelExport'
-import { classifyOrigin, deliveryDayFor, canDeliverOn, deliveryLabelFor } from '../lib/boatnote'
-import { useSort } from '../hooks/useSort'
-// Learned order pattern — pre-computed average weekly STORE order quantities
-// derived from a large batch of historical boat notes. Used as a fallback so the
-// "By Pattern" list is useful even before boat notes are posted to the database.
-import ORDER_PATTERN from '../lib/orderPattern.json'
 
-const PATTERN_BY_CODE = new Map(
-  (ORDER_PATTERN?.items || []).map(p => [String(p.code || '').replace(/^0+/, ''), p])
-)
+// ── Constants ─────────────────────────────────────────────────────────────────
+const STORES = [
+  'Beverage Store', 'Dry Store 1', 'Dry Store 2', 'Dry Store 3',
+  'Freezer 1', 'Freezer 2', 'General Order',
+]
 
-// ── Helpers ───────────────────────────────────────────────────
-function nextDelivery() {
-  const today = new Date(); const day = today.getDay()
-  const targets = [1, 4]; let minDiff = 8
-  for (const t of targets) {
-    let diff = (t - day + 7) % 7; if (diff === 0) diff = 7
-    if (diff < minDiff) minDiff = diff
-  }
-  const d = new Date(today); d.setDate(d.getDate() + minDiff)
-  return { date: d, label: d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) }
-}
-// Next occurrence of a specific weekday (Monday / Thursday) for a targeted order.
-function nextDeliveryFor(dayName) {
-  if (!dayName || dayName === 'auto' || dayName === 'week') return nextDelivery()
-  const map = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 }
-  const target = map[dayName] ?? 1
-  const today = new Date(); let diff = (target - today.getDay() + 7) % 7; if (diff === 0) diff = 7
-  const d = new Date(today); d.setDate(d.getDate() + diff)
-  return { date: d, label: d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) }
-}
-function weekRange(weeksBack = 0) {
-  const now = new Date()
-  const toDate = new Date(now); toDate.setDate(toDate.getDate() - weeksBack * 7)
-  const frDate = new Date(toDate); frDate.setDate(frDate.getDate() - 7)
-  return { from: frDate.toISOString().split('T')[0], to: toDate.toISOString().split('T')[0] }
-}
-
-const STATUS_BADGE = { pending:'yellow', partial:'orange', received:'green', cancelled:'red' }
-
-// Round an order quantity UP to a whole number of packs (e.g. pack of 6/10/12).
-function roundToPack(qty, pack) {
-  const p = Number(pack) || 1
-  if (p <= 1) return Math.max(0, Math.ceil(qty))
-  return Math.max(0, Math.ceil(Math.ceil(qty) / p) * p)
-}
-
-// ── Store-based manual ordering ───────────────────────────────────────────────
-const STORES = ['Beverage Store', 'Dry Store 1', 'Dry Store 2', 'Dry Store 3', 'Freezer 1', 'Freezer 2', 'General Order']
-
-// Beverage Store item sequence from Beverage_Order.xlsx (part numbers, leading zeros stripped)
 const BEVERAGE_ORDER = [
   '13485','13486','14348','14349','26823','14207','26824','19978','18045','18042',
   '19979','18040','16505','15231','13633','13993','20297','14939','14932','14937',
@@ -76,394 +29,443 @@ const BEVERAGE_ORDER = [
   '14583','14200','14736','14335','14999','13629','15674','15036',
 ]
 
-const MAIN_CATEGORIES = ['Food', 'General', 'Beverage']
-// An item counts as active unless it has been explicitly deactivated. This
-// tolerates databases where the `active` column is missing or NULL (which a
-// strict `.eq('active', true)` filter would wrongly treat as "no items").
-const isActiveItem = (i) => i && i.active !== false
+const STATUS_BADGE = { pending: 'yellow', partial: 'orange', received: 'green', cancelled: 'red' }
 
+function codeOf(s) { return String(s || '').replace(/^0+/, '') }
+
+function defaultDeliveryDate() {
+  const today = new Date()
+  const day = today.getDay()
+  let minDiff = 8
+  for (const t of [1, 4]) {
+    let diff = (t - day + 7) % 7
+    if (diff === 0) diff = 7
+    if (diff < minDiff) minDiff = diff
+  }
+  const d = new Date(today)
+  d.setDate(d.getDate() + minDiff)
+  return d.toISOString().split('T')[0]
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function Orders() {
-  const [tab,       setTab]      = useState('generate')
-  const [orderMode, setOrderMode]= useState('pattern')  // 'pattern' | 'usage'
-  const [deliveryDay, setDeliveryDay] = useState('week') // 'week' | 'Monday' | 'Thursday'
-  const [storeOnly, setStoreOnly]= useState(true)   // STORE-only, boat-note driven
-  const [boatStats, setBoatStats]= useState(null)   // { weeks, items: Map<code,{qty,n}> }
-  const [rows,      setRows]     = useState([])
-  const [delivery,  setDelivery] = useState(null)
-  const [loading,   setLoading]  = useState(false)
-  const [exportingPdf,  setExportingPdf]  = useState(false)
-  const [exportingXlsx, setExportingXlsx] = useState(false)
-  const [saving,    setSaving]   = useState(false)
-  const [resortName,setResortName]=useState('Outrigger Maafushivaru Resort')
-  const [showCSV,   setShowCSV]  = useState(false)
+  const [tab, setTab]                       = useState('order')
+  const [selectedStore, setSelectedStore]   = useState('Beverage Store')
+  const [rows, setRows]                     = useState([])
+  const [deliveryDate, setDeliveryDate]     = useState(defaultDeliveryDate)
+  const [search, setSearch]                 = useState('')
+  const [loading, setLoading]               = useState(false)
+  const [saving, setSaving]                 = useState(false)
+  const [exportingPdf, setExportingPdf]     = useState(false)
+  const [exportingXlsx, setExportingXlsx]   = useState(false)
+  const [resortName, setResortName]         = useState('Outrigger Maafushivaru Resort')
+  const [allItems, setAllItems]             = useState([])
 
-  // ── By-Store manual order mode ─────────────────────────────────────────────
-  const [byStoreMode,   setByStoreMode]   = useState(false)
-  const [selectedStore, setSelectedStore] = useState('Beverage Store')
+  // History
+  const [history, setHistory]               = useState([])
+  const [histLoad, setHistLoad]             = useState(false)
+  const [expanded, setExpanded]             = useState(null)
+  const [expandedItems, setExpandedItems]   = useState({})
+  const [markingId, setMarkingId]           = useState(null)
+  const [exportingHistPdf, setExportingHistPdf]   = useState(null)
+  const [exportingHistXlsx, setExportingHistXlsx] = useState(null)
+  const [emailingOrder, setEmailingOrder]   = useState(null)
 
-  // ── Order-quantity controls ────────────────────────────────────────────────
-  const [multiplier,   setMultiplier]   = useState(1)   // ×1..×5 on weekly average
-  const [backupWeeks,  setBackupWeeks]  = useState(0)   // extra weeks of safety stock
-  const [subtractStock,setSubtractStock]= useState(true)// net need vs gross target
+  // Add item to saved order
+  const [showAddToOrder, setShowAddToOrder] = useState(null)
+  const [savedItemSearch, setSavedItemSearch] = useState('')
+  const [savedItem, setSavedItem]           = useState(null)
+  const [savedQty, setSavedQty]             = useState('')
+  const [addingToOrder, setAddingToOrder]   = useState(false)
 
-  // ── List filters (category / sub-category / needed) ────────────────────────
-  const [catFilter,  setCatFilter]  = useState('')   // '' | Food | Beverage | General
-  const [subFilter,  setSubFilter]  = useState('')   // store (sub-category) name
-  // Tick-selectable categories that get included when generating an order.
-  const [genCats,    setGenCats]    = useState({ Food: true, General: true, Beverage: true })
-  const toggleGenCat = (c) => setGenCats(s => ({ ...s, [c]: !s[c] }))
-  const [needFilter, setNeedFilter] = useState('all')// all | selected | unselected
+  useEffect(() => {
+    supabase.from('settings').select('key,value').then(({ data }) => {
+      const v = (data || []).find(s => s.key === 'resort_name')?.value
+      if (v) setResortName(v)
+    })
+  }, [])
 
-  // ── Pending (undelivered) from last orders ─────────────────
-  const [pendingItems,    setPendingItems]    = useState([])
-  const [pendingDismissed,setPendingDismissed]= useState(false)
+  // ── Load all items (cached) ───────────────────────────────────────────────
+  const loadAllItems = useCallback(async () => {
+    if (allItems.length) return allItems
+    const { data } = await selectAll(() =>
+      supabase.from('items')
+        .select('id,name,part_number,unit,current_stock,active,stores(name)')
+        .order('name')
+    )
+    const active = (data || []).filter(i => i && i.active !== false)
+    const final  = active.length > 0 ? active : (data || [])
+    setAllItems(final)
+    return final
+  }, [allItems])
 
-  // ── Manual add item to current order ──────────────────────
-  const [showAddItem,   setShowAddItem]   = useState(false)
-  const [allItems,      setAllItems]      = useState([])
-  const [itemSearch,    setItemSearch]    = useState('')
-  const [selectedItem,  setSelectedItem]  = useState(null)
-  const [manualQty,     setManualQty]     = useState('')
-  const [manualNote,    setManualNote]    = useState('')
-
-  // ── Order history ──────────────────────────────────────────
-  const [history,       setHistory]       = useState([])
-  const [histLoad,      setHistLoad]      = useState(false)
-  const [expanded,      setExpanded]      = useState(null)
-  const [expandedItems, setExpandedItems] = useState({})
-  const [markingId,     setMarkingId]     = useState(null)
-
-  // ── Add item to saved order (history) ───────────────────
-  const [showAddToOrder, setShowAddToOrder]   = useState(null) // orderId
-  const [savedItemSearch,setSavedItemSearch]  = useState('')
-  const [savedItem,      setSavedItem]        = useState(null)
-  const [savedQty,       setSavedQty]         = useState('')
-  const [savedNote,      setSavedNote]        = useState('')
-  const [addingToOrder,  setAddingToOrder]    = useState(false)
-
-  // ── Load all items for manual add ─────────────────────────
-  const loadAllItems = async () => {
-    if (allItems.length) return
-    const { data } = await selectAll(() => supabase.from('items').select('id,name,part_number,unit,current_stock,active,stores(name)').order('name'))
-    let list = (data || []).filter(isActiveItem)
-    if (list.length === 0 && (data || []).length > 0) list = data
-    setAllItems(list)
+  // ── Build ordered row list for a store ───────────────────────────────────
+  function makeRow(it, sl) {
+    return {
+      id: it.id, sl,
+      part_number: it.part_number,
+      name: it.name,
+      store: it.stores?.name || '',
+      unit: it.unit || 'EA',
+      current_stock: Number(it.current_stock) || 0,
+      ordered: 0,
+      pack: 1,
+      avgWeekly: 0,
+      suggested: 0,
+    }
   }
 
-  // ── Check undelivered from previous orders ─────────────────
-  const checkUndeliveredItems = useCallback(async () => {
-    const { data: oldOrders } = (await supabase.from('order_history')
-      .select('id,delivery_date,delivery_day,status')
-      .in('status', ['pending','partial'])
-      .order('created_at', { ascending: false }).limit(3)) || {}
-    if (!oldOrders?.length) { setPendingItems([]); return }
-    const undelivered = []
-    for (const order of oldOrders) {
-      const { data: oItems } = (await supabase.from('order_history_items').select('*').eq('order_id', order.id)) || {}
-      ;(oItems || []).forEach(i => {
-        const shortfall = Number(i.ordered_qty) - Number(i.received_qty)
-        if (shortfall > 0) undelivered.push({ ...i, shortfall, orderDate: order.delivery_date, orderDay: order.delivery_day || 'Previous', orderId: order.id, orderStatus: order.status })
-      })
+  function buildStoreRows(store, items) {
+    if (store === 'Beverage Store') {
+      const byCode = new Map(items.map(i => [codeOf(i.part_number), i]))
+      const seqSet = new Set(BEVERAGE_ORDER)
+      const inSeq = BEVERAGE_ORDER
+        .map((c, idx) => { const it = byCode.get(c); return it ? makeRow(it, idx + 1) : null })
+        .filter(Boolean)
+      const extras = items
+        .filter(i => (i.stores?.name || '').toLowerCase().includes('beverage') && !seqSet.has(codeOf(i.part_number)))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map((it, i) => makeRow(it, inSeq.length + i + 1))
+      return [...inSeq, ...extras]
     }
-    setPendingItems(undelivered)
-    setPendingDismissed(false)
-  }, [])
-
-  // -- Already Ordered (Boat Note) -----------------------------------------
-  // Pulls from the shared `pending_ordered_items` view: everything on a
-  // boat note that is still 'pending' or 'partially_delivered' and hasn't
-  // been posted to inventory yet. Same data source Android's ordering
-  // screen reads, so both apps warn about the exact same items.
-  const checkPendingBoatNoteItems = useCallback(async () => {
-    try {
-      const { data } = await supabase.from('pending_ordered_items').select('*')
-      setPendingBoatNoteItems(data || [])
-      setPendingBNDismissed(false)
-    } catch { setPendingBoatNoteItems([]) }
-  }, [])
-
-  // ── Generate order ─────────────────────────────────────────
-  const generate = useCallback(async () => {
-    setLoading(true); setPendingItems([]); setPendingDismissed(false)
-    try {
-      const { data: settings } = (await supabase.from('settings').select('key,value')) || {}
-      const smap = (settings || []).reduce((a, s) => ({ ...a, [s.key]: s.value }), {})
-      if (smap.resort_name) setResortName(smap.resort_name)
-      // Supplier → origin (local/foreign) map so the order sheet shows where each
-      // item comes from, driven by the Suppliers tab designation.
-      const { data: sups } = (await supabase.from('suppliers').select('name,origin')) || {}
-      const supOrigin = new Map((sups || []).filter(s => s.origin).map(s => [String(s.name || '').toUpperCase(), s.origin]))
-      // Fetch items. Try WITH the store join first; if that yields nothing
-      // (e.g. the items→stores relationship can't be embedded on this DB),
-      // retry a plain select so the order can still be generated.
-      let allItems = ((await selectAll(() => supabase.from('items').select('*, stores(name,category)'))) || {}).data
-      if (!allItems || allItems.length === 0) {
-        allItems = (((await selectAll(() => supabase.from('items').select('*'))) || {}).data) || []
-      }
-      // Active unless explicitly deactivated. But if that would hide EVERY item
-      // (e.g. every row has active=false / NULL on this DB), fall back to the
-      // full list so the sheet is never empty when items actually exist.
-      let items = allItems.filter(isActiveItem)
-      if (items.length === 0 && allItems.length > 0) items = allItems
-      // Honour the ticked categories: only items in a selected category are
-      // included. Items with no resolvable category are kept (can't classify).
-      const activeCats = MAIN_CATEGORIES.filter(c => genCats[c])
-      if (activeCats.length && activeCats.length < MAIN_CATEGORIES.length) {
-        items = items.filter(it => {
-          const cat = it.stores?.category
-          return !cat || activeCats.includes(cat)
-        })
-      }
-      console.info('[orders] generate — items fetched:', allItems.length, '· usable:', items.length)
-      if (items.length === 0) {
-        toast.error('No items found. Add items in Inventory first.')
-        setRows([]); setLoading(false); return
-      }
-
-      // ── Boat-note demand: avg weekly ordered qty per item code, from the STORE
-      //    department of every posted boat note (this is what we actually re-order).
-      //    These tables may not exist yet on a fresh database — guard every read.
-      const { data: bnItems } = (await selectAll(() =>
-        supabase.from('boat_note_items').select('part_number,ordered_qty,department,boat_note_id'))) || {}
-      const { data: bnotes } = (await supabase.from('boat_notes').select('id,note_date')) || {}
-      const noteDate = new Map((bnotes || []).map(n => [n.id, n.note_date]))
-      const code = (s) => String(s || '').replace(/^0+/, '')
-      const storeBn = (bnItems || []).filter(b => (b.department || '').toUpperCase() === 'STORE')
-      const bnByCode = new Map()
-      let minD = null, maxD = null
-      for (const b of storeBn) {
-        const c = code(b.part_number); if (!c) continue
-        const e = bnByCode.get(c) || { qty: 0, n: 0 }
-        e.qty += Number(b.ordered_qty) || 0; e.n += 1; bnByCode.set(c, e)
-        const d = noteDate.get(b.boat_note_id); if (d) { if (!minD || d < minD) minD = d; if (!maxD || d > maxD) maxD = d }
-      }
-      const bnWeeks = (minD && maxD) ? Math.max(1, (new Date(maxD) - new Date(minD)) / 6048e5) : 1
-      setBoatStats({ weeks: Math.round(bnWeeks * 10) / 10, count: bnByCode.size })
-
-      // ── Issuance demand (2-week average) — used as a fallback / cross-check ──
-      const tw = weekRange(0); const lw = weekRange(1)
-      const { data: thisIss } = (await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', tw.from).lte('date', tw.to))) || {}
-      const { data: lastIss } = (await selectAll(() => supabase.from('issuances').select('item_id,quantity_issued').gte('date', lw.from).lte('date', lw.to))) || {}
-      const sum = (list, id) => (list || []).filter(i => i.item_id === id).reduce((s, i) => s + Number(i.quantity_issued), 0)
-
-      const orderRows = (items || []).map(item => {
-        const issAvg = (sum(thisIss, item.id) + sum(lastIss, item.id)) / 2
-        const bn = bnByCode.get(code(item.part_number))
-        // Posted boat-note history wins; otherwise fall back to the learned
-        // pattern computed from historical boat notes (lib/orderPattern.json).
-        const patt = PATTERN_BY_CODE.get(code(item.part_number))
-        const bnAvg = bn ? bn.qty / bnWeeks : (patt ? Number(patt.avg_weekly) || 0 : 0)
-        // ── Generation mode ──────────────────────────────────────────────
-        //  • BY PATTERN → the general/standard order list: typical ordered
-        //    quantity from boat-note ordering history (what we normally buy).
-        //  • BY USAGE   → driven by issuance usage history (what was actually
-        //    consumed), falling back to the boat-note pattern only if there is
-        //    no usage signal at all.
-        const avgWeekly = orderMode === 'usage'
-          ? (issAvg > 0 ? issAvg : bnAvg)
-          : (bnAvg > 0 ? bnAvg : issAvg)
-        // Whole-week target = weekly average × multiplier × (1 + backup weeks).
-        // Multiplier scales the weekly sum (a day's usage ≈ week ÷ ~5-6 since we
-        // rarely issue on the supply day); backup weeks add safety cover. The
-        // result is rounded UP to a whole number of packs.
-        const pack = Number(item.pack_size) || 1
-        const target = avgWeekly * multiplier * (1 + backupWeeks)
-        const net = subtractStock ? target - Number(item.current_stock || 0) : target
-        const suggested = roundToPack(Math.max(0, net), pack)
-        // Origin: supplier designation (Suppliers tab) wins, then item origin,
-        // then a keyword classification of the product name.
-        const origin = supOrigin.get(String(item.supplier || '').toUpperCase()) || item.origin || classifyOrigin(item.name)
-        return {
-          id: item.id, part_number: item.part_number, name: item.name,
-          store: item.stores?.name || '', category: item.stores?.category || '',
-          unit: item.unit, current_stock: item.current_stock, min_stock: item.min_stock,
-          pack, supplier: item.supplier || '',
-          thisWeek: Math.round(issAvg * 10) / 10, lastWeek: 0,
-          avgWeekly: Math.round(avgWeekly * 10) / 10, suggested, ordered: suggested,
-          selected: suggested > 0, _edited: false,
-          origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: !!bn || !!patt, _fromBoatNote: bnAvg > 0,
-          _fromPending: false, _pendingNote: '', _manuallyAdded: false, _notArrived: false,
-        }
+    if (store === 'General Order') {
+      return [...items]
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+        .map((it, i) => makeRow(it, i + 1))
+    }
+    const kw = store.split(' ')[0].toLowerCase()
+    return items
+      .filter(i => {
+        const sn = (i.stores?.name || '').toLowerCase()
+        return sn === store.toLowerCase() || sn.includes(kw)
       })
-      // PATTERN mode shows the full general list; USAGE mode shows only what
-      // actually needs reordering based on consumption.
-      .filter(r => orderMode === 'pattern' ? true : (r.suggested > 0 || r.current_stock <= r.min_stock))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+      .map((it, i) => makeRow(it, i + 1))
+  }
 
-      // STORE-only = items that appear in the STORE department of past boat notes
-      // (or the learned pattern). Honour the toggle, but never return an empty
-      // sheet when we actually have items: fall back to the full list if
-      // STORE-only is on yet matches nothing (e.g. no boat notes posted yet).
-      const storeRows = orderRows.filter(r => r._inBoatNote)
-      let finalRows = storeOnly ? storeRows : orderRows
-      if (storeOnly && finalRows.length === 0 && orderRows.length > 0) {
-        finalRows = orderRows
-        toast('No boat-note history yet — showing the full item list.', { icon: 'ℹ️' })
-      }
-      finalRows = [...finalRows].sort((a, b) =>
-        (a.origin || '').localeCompare(b.origin || '') || (a.name || '').localeCompare(b.name || ''))
-
-      // ── Not-arrived / short items ALWAYS come first in next week's order ──────
-      // Every boat-note line flagged not_arrived or short is carried to the top
-      // of the sheet so it is re-ordered first. They remain removable like any
-      // other row.
-      const { data: naItems } = (await selectAll(() =>
-        supabase.from('boat_note_items')
-          .select('*, boat_notes(note_date,label)')
-          .in('status', ['not_arrived', 'short']))) || {}
-      const naByCode = new Map()
-      for (const b of (naItems || [])) {
-        const c = code(b.part_number) || `x-${b.id}`
-        const qty = b.status === 'short'
-          ? (Number(b.short_qty) || Math.max(0, (Number(b.ordered_qty) || 0) - (Number(b.received_qty) || 0)))
-          : (Number(b.ordered_qty) || 0)
-        const d = b.boat_notes?.note_date || ''
-        const prev = naByCode.get(c)
-        if (!prev || d > prev._date) naByCode.set(c, { ...b, _qty: qty, _date: d })
-      }
-      const naRows = [...naByCode.values()].filter(b => b._qty > 0).map(b => {
-        const item = (items || []).find(it => code(it.part_number) === code(b.part_number))
-        const origin = supOrigin.get(String(b.supplier || item?.supplier || '').toUpperCase())
-          || item?.origin || classifyOrigin(b.product_name || item?.name || '')
-        return {
-          id: item?.id || `na-${b.id}`, part_number: b.part_number,
-          name: b.product_name || item?.name || b.part_number,
-          store: item?.stores?.name || b.department || '', category: item?.stores?.category || '',
-          unit: b.unit || item?.unit || 'EA', current_stock: item?.current_stock || 0, min_stock: item?.min_stock || 0,
-          pack: Number(item?.pack_size) || 1, supplier: b.supplier || item?.supplier || '',
-          thisWeek: 0, lastWeek: 0, avgWeekly: 0,
-          suggested: b._qty, ordered: b._qty, selected: true, _edited: false,
-          origin, deliveryDay: deliveryDayFor(origin), _inBoatNote: true, _fromBoatNote: false,
-          _fromPending: false, _manuallyAdded: false, _notArrived: true, _naStatus: b.status,
-          _pendingNote: `${b.status === 'short' ? 'Came short' : 'Did not arrive'}${b._date ? ` on ${b._date}` : ''}`,
-        }
-      })
-      if (naRows.length) {
-        const naCodes = new Set(naRows.map(r => code(r.part_number)))
-        finalRows = [...naRows, ...finalRows.filter(r => !naCodes.has(code(r.part_number)))]
-      }
-
-      setRows(finalRows); setDelivery(nextDeliveryFor(deliveryDay))
-      await checkUndeliveredItems()
-      await checkPendingBoatNoteItems()
+  // ── Load store ────────────────────────────────────────────────────────────
+  const loadStoreItems = useCallback(async (store) => {
+    setLoading(true)
+    setRows([])
+    setSearch('')
+    try {
+      const items = await loadAllItems()
+      setRows(buildStoreRows(store, items))
     } catch (err) {
-      console.error('Order generation failed:', err)
-      toast.error('Order generation failed: ' + (err?.message || 'unexpected error'))
-      setRows([])
+      toast.error('Failed to load items: ' + err.message)
     }
     setLoading(false)
-  }, [checkUndeliveredItems, storeOnly, orderMode, deliveryDay, multiplier, backupWeeks, subtractStock, genCats])
+  }, [loadAllItems]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => { loadStoreItems(selectedStore) }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Generate By Store ──────────────────────────────────────────────────────
-  // Builds the order list for the selected store without any auto-calculation.
-  // Beverage Store uses the exact Excel sequence; other stores sort alphabetically.
-  const generateByStore = useCallback(async (store, itemsList) => {
-    if (!itemsList || itemsList.length === 0) {
-      toast.error('No inventory items loaded'); return
-    }
-    const codeOf = (s) => String(s || '').replace(/^0+/, '')
-    let list = []
-    if (store === 'Beverage Store') {
-      const byCode = new Map(itemsList.map(i => [codeOf(i.part_number), i]))
-      const seqSet = new Set(BEVERAGE_ORDER)
-      list = BEVERAGE_ORDER.map((c, idx) => {
-        const it = byCode.get(c); if (!it) return null
-        return makeStoreRow(it, idx + 1, store)
-      }).filter(Boolean)
-      const extras = itemsList.filter(i => {
-        const sn = (i.stores?.name || '').toLowerCase()
-        return sn.includes('beverage') && !seqSet.has(codeOf(i.part_number))
+  const selectStore = async (store) => {
+    setSelectedStore(store)
+    await loadStoreItems(store)
+  }
+
+  // ── Qty helpers ───────────────────────────────────────────────────────────
+  const setQty    = (id, val) => { const n = parseFloat(val); if (!isNaN(n) && n >= 0) setRows(p => p.map(r => r.id === id ? { ...r, ordered: n } : r)) }
+  const adjustQty = (id, d)   => setRows(p => p.map(r => r.id === id ? { ...r, ordered: Math.max(0, (r.ordered || 0) + d) } : r))
+  const removeRow = (id)       => setRows(p => p.filter(r => r.id !== id))
+
+  const visibleRows = useMemo(() => {
+    if (!search.trim()) return rows
+    const q = search.toLowerCase()
+    return rows.filter(r => r.name.toLowerCase().includes(q) || codeOf(r.part_number).includes(q))
+  }, [rows, search])
+
+  const orderRows = rows.filter(r => r.ordered > 0)
+
+  // ── Save order ────────────────────────────────────────────────────────────
+  const saveOrder = async () => {
+    if (!orderRows.length) { toast.error('Enter a quantity for at least one item'); return }
+    setSaving(true)
+    try {
+      const delivLabel = new Date(deliveryDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+      const { data: order, error } = await supabase.from('order_history').insert({
+        delivery_date: deliveryDate,
+        delivery_day:  new Date(deliveryDate).toLocaleDateString('en-US', { weekday: 'long' }),
+        status:       'pending',
+        created_by:   'System',
+        notes:        `${selectedStore} · ${delivLabel}`,
+        store_name:   selectedStore,
+      }).select().single()
+      if (error) throw error
+      const { error: iErr } = await supabase.from('order_history_items').insert(
+        orderRows.map(r => ({
+          order_id:    order.id,
+          item_id:     r.id,
+          part_number: r.part_number,
+          item_name:   r.name,
+          store_name:  r.store,
+          unit:        r.unit,
+          ordered_qty: r.ordered,
+          received_qty: 0,
+        }))
+      )
+      if (iErr) throw iErr
+      toast.success(`${selectedStore} order saved — ${orderRows.length} items`)
+      setRows(p => p.map(r => ({ ...r, ordered: 0 })))
+    } catch (err) { toast.error(err.message) }
+    setSaving(false)
+  }
+
+  // ── Export current order PDF ──────────────────────────────────────────────
+  const exportPDF = async () => {
+    if (!orderRows.length) { toast.error('No items to export'); return }
+    setExportingPdf(true)
+    try {
+      const { default: jsPDF }     = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+      const cyan = [0, 174, 239]
+      const delivLabel = new Date(deliveryDate).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      doc.setFillColor(...cyan); doc.rect(0, 0, 210, 28, 'F')
+      doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
+      doc.text(resortName, 14, 12)
+      doc.setFontSize(11); doc.setFont('helvetica', 'normal')
+      doc.text(`${selectedStore} — ${delivLabel}`, 14, 21)
+      autoTable(doc, {
+        startY: 36,
+        head: [['SL', 'Part #', 'Item Name', 'Unit', 'In Stock', 'Order Qty']],
+        body: orderRows.map(r => [r.sl, codeOf(r.part_number), r.name, r.unit, r.current_stock, r.ordered]),
+        headStyles: { fillColor: cyan, fontSize: 9, textColor: 255 },
+        styles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 22, font: 'courier' }, 5: { halign: 'center', fontStyle: 'bold' } },
       })
-      extras.forEach((it, i) => list.push(makeStoreRow(it, list.length + i + 1, store)))
-    } else if (store === 'General Order') {
-      list = [...itemsList].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map((it,i) => makeStoreRow(it, i+1, store))
-    } else {
-      const kw = store.toLowerCase()
-      list = itemsList
-        .filter(i => (i.stores?.name||'').toLowerCase() === kw || (i.stores?.name||'').toLowerCase().includes(store.split(' ')[0].toLowerCase()))
-        .sort((a,b) => (a.name||'').localeCompare(b.name||''))
-        .map((it,i) => makeStoreRow(it, i+1, store))
-    }
-    setRows(list)
-    setDelivery(nextDelivery())
-  }, [])
-
-  function makeStoreRow(it, sl, store) {
-    return {
-      id: it.id, sl, part_number: it.part_number, name: it.name,
-      store: it.stores?.name || store, category: it.stores?.category || '',
-      unit: it.unit || 'EA', current_stock: Number(it.current_stock) || 0, min_stock: Number(it.min_stock) || 0,
-      pack: 1, supplier: it.supplier || '',
-      thisWeek: 0, lastWeek: 0, avgWeekly: 0, suggested: 0,
-      ordered: 0, selected: false, _edited: false,
-      origin: it.origin || 'foreign', deliveryDay: '', _inBoatNote: false, _fromBoatNote: false,
-      _fromPending: false, _pendingNote: '', _manuallyAdded: false, _notArrived: false,
-      _byStore: true,
-    }
+      const total = orderRows.reduce((s, r) => s + Number(r.ordered), 0)
+      const y = doc.lastAutoTable.finalY + 6
+      doc.setFontSize(9); doc.setTextColor(100)
+      doc.text(`Total: ${orderRows.length} items · ${total} units`, 14, y)
+      doc.save(`${selectedStore.replace(/\s+/g, '_')}_${deliveryDate}.pdf`)
+      toast.success('PDF exported')
+    } catch (err) { toast.error('Export failed: ' + err.message) }
+    setExportingPdf(false)
   }
 
-  // ── Add undelivered to current order ──────────────────────
-  const addPendingToOrder = () => {
-    setRows(prev => {
-      const updated = [...prev]; let added = 0; let merged = 0
-      for (const pending of pendingItems) {
-        const existingIdx = updated.findIndex(r => r.id === pending.item_id)
-        if (existingIdx >= 0) {
-          updated[existingIdx] = { ...updated[existingIdx], ordered: Number(updated[existingIdx].ordered) + Number(pending.shortfall), _fromPending: true, _pendingNote: `Incl. ${pending.shortfall} ${pending.unit} undelivered from ${pending.orderDay}` }
-          merged++
-        } else {
-          updated.push({ id: pending.item_id || `pending-${pending.id}`, part_number: pending.part_number, name: pending.item_name, store: pending.store_name || '', unit: pending.unit, current_stock: 0, min_stock: 0, thisWeek: 0, lastWeek: 0, avgWeekly: 0, suggested: pending.shortfall, ordered: pending.shortfall, _fromPending: true, _pendingNote: `Undelivered from ${pending.orderDay} (${pending.orderDate})`, _manuallyAdded: false })
-          added++
+  // ── Export current order Excel ────────────────────────────────────────────
+  const exportExcel = async () => {
+    if (!orderRows.length) { toast.error('No items to export'); return }
+    setExportingXlsx(true)
+    try {
+      const delivLabel = new Date(deliveryDate).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      await exportOrderExcel(
+        { [selectedStore]: orderRows },
+        {
+          resortName,
+          deliveryLabel: `${selectedStore} · ${delivLabel}`,
+          filename: `${selectedStore.replace(/\s+/g, '_')}_${deliveryDate}.xlsx`,
         }
+      )
+      toast.success('Excel exported')
+    } catch (err) { toast.error('Export failed: ' + err.message) }
+    setExportingXlsx(false)
+  }
+
+  // ── History ───────────────────────────────────────────────────────────────
+  const loadHistory = async () => {
+    setHistLoad(true)
+    const { data } = await supabase.from('order_history')
+      .select('*')
+      .order('delivery_date', { ascending: false })
+      .order('created_at',    { ascending: false })
+      .limit(100)
+    setHistory(data || [])
+    setHistLoad(false)
+  }
+
+  const loadExpandedItems = async (id) => {
+    if (expandedItems[id]) { setExpanded(p => p === id ? null : id); return }
+    const { data } = await supabase.from('order_history_items').select('*').eq('order_id', id)
+    setExpandedItems(p => ({ ...p, [id]: data || [] }))
+    setExpanded(id)
+  }
+
+  const markReceived = async (orderId) => {
+    const oItems = expandedItems[orderId] || []
+    if (!confirm('Mark all items as fully received? Stock will be updated.')) return
+    setMarkingId(orderId)
+    for (const oi of oItems) {
+      if (!oi.item_id || !oi.ordered_qty) continue
+      await supabase.rpc('upsert_item_batch', {
+        p_batch_id: null, p_item_id: oi.item_id, p_expiry_date: null,
+        p_quantity: Number(oi.ordered_qty), p_note: 'Order received',
+      }).catch(() => {})
+      await supabase.from('order_history_items').update({ received_qty: oi.ordered_qty }).eq('id', oi.id)
+    }
+    await supabase.from('order_history').update({ status: 'received' }).eq('id', orderId)
+    setHistory(p => p.map(o => o.id === orderId ? { ...o, status: 'received' } : o))
+    const updated = (expandedItems[orderId] || []).map(i => ({ ...i, received_qty: i.ordered_qty }))
+    setExpandedItems(p => ({ ...p, [orderId]: updated }))
+    toast.success('Order received — stock updated!')
+    setMarkingId(null)
+  }
+
+  const markPartialReceived = async (orderId, itemId, receivedQty) => {
+    const prevItem = (expandedItems[orderId] || []).find(i => i.id === itemId)
+    const delta    = Number(receivedQty) - Number(prevItem?.received_qty || 0)
+    if (prevItem?.item_id && delta > 0) {
+      await supabase.rpc('upsert_item_batch', {
+        p_batch_id: null, p_item_id: prevItem.item_id, p_expiry_date: null,
+        p_quantity: delta, p_note: 'Order received (partial)',
+      }).catch(() => {})
+    }
+    await supabase.from('order_history_items').update({ received_qty: receivedQty }).eq('id', itemId)
+    const updated = (expandedItems[orderId] || []).map(i => i.id === itemId ? { ...i, received_qty: receivedQty } : i)
+    setExpandedItems(p => ({ ...p, [orderId]: updated }))
+    const allRec  = updated.every(i => Number(i.received_qty) >= Number(i.ordered_qty))
+    const someRec = updated.some(i => Number(i.received_qty) > 0)
+    const status  = allRec ? 'received' : someRec ? 'partial' : 'pending'
+    await supabase.from('order_history').update({ status }).eq('id', orderId)
+    setHistory(p => p.map(o => o.id === orderId ? { ...o, status } : o))
+  }
+
+  // ── Export history order PDF ──────────────────────────────────────────────
+  const exportHistoryPDF = async (order) => {
+    const oItems = expandedItems[order.id]
+    if (!oItems?.length) { toast.error('Expand the order first to load items'); return }
+    setExportingHistPdf(order.id)
+    try {
+      const { default: jsPDF }     = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+      const doc       = new jsPDF({ unit: 'mm', format: 'a4' })
+      const cyan      = [0, 174, 239]
+      const storeName = order.store_name || (order.notes || '').split(' · ')[0] || 'Order'
+      const delivLabel = order.delivery_date
+        ? new Date(order.delivery_date).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        : ''
+      doc.setFillColor(...cyan); doc.rect(0, 0, 210, 28, 'F')
+      doc.setTextColor(255, 255, 255); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
+      doc.text(resortName, 14, 12)
+      doc.setFontSize(11); doc.setFont('helvetica', 'normal')
+      doc.text(`${storeName} — ${delivLabel}`, 14, 21)
+      autoTable(doc, {
+        startY: 36,
+        head: [['SL', 'Part #', 'Item Name', 'Unit', 'Ordered', 'Received', 'Status']],
+        body: oItems.map((oi, idx) => {
+          const sf  = Number(oi.ordered_qty) - Number(oi.received_qty)
+          const st  = sf <= 0 ? 'Received' : Number(oi.received_qty) > 0 ? `Partial (${sf} short)` : 'Pending'
+          return [idx + 1, codeOf(oi.part_number), oi.item_name, oi.unit, oi.ordered_qty, oi.received_qty, st]
+        }),
+        headStyles: { fillColor: cyan, fontSize: 9, textColor: 255 },
+        styles: { fontSize: 9 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        columnStyles: { 0: { cellWidth: 12 }, 1: { cellWidth: 22, font: 'courier' }, 4: { halign: 'center', fontStyle: 'bold' }, 5: { halign: 'center' } },
+      })
+      const total = oItems.reduce((s, i) => s + Number(i.ordered_qty), 0)
+      const y = doc.lastAutoTable.finalY + 6
+      doc.setFontSize(9); doc.setTextColor(100)
+      doc.text(`Total: ${oItems.length} items · ${total} units · Status: ${order.status}`, 14, y)
+      doc.save(`${storeName.replace(/\s+/g, '_')}_${order.delivery_date || 'order'}.pdf`)
+      toast.success('PDF exported')
+    } catch (err) { toast.error('Export failed: ' + err.message) }
+    setExportingHistPdf(null)
+  }
+
+  // ── Export history order Excel ────────────────────────────────────────────
+  const exportHistoryExcel = async (order) => {
+    const oItems = expandedItems[order.id]
+    if (!oItems?.length) { toast.error('Expand the order first to load items'); return }
+    setExportingHistXlsx(order.id)
+    try {
+      const storeName  = order.store_name || (order.notes || '').split(' · ')[0] || 'Order'
+      const delivLabel = order.delivery_date
+        ? new Date(order.delivery_date).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        : ''
+      const mappedRows = oItems.map((oi, idx) => ({
+        sl: idx + 1, part_number: oi.part_number, name: oi.item_name,
+        unit: oi.unit, store: oi.store_name, current_stock: 0,
+        pack: 1, avgWeekly: 0, suggested: 0,
+        ordered: oi.ordered_qty, received: oi.received_qty,
+      }))
+      await exportOrderExcel(
+        { [storeName]: mappedRows },
+        {
+          resortName,
+          deliveryLabel: `${storeName} · ${delivLabel}`,
+          filename: `${storeName.replace(/\s+/g, '_')}_${order.delivery_date || 'order'}.xlsx`,
+        }
+      )
+      toast.success('Excel exported')
+    } catch (err) { toast.error('Export failed: ' + err.message) }
+    setExportingHistXlsx(null)
+  }
+
+  // ── Email history order ───────────────────────────────────────────────────
+  const emailOrder = async (order) => {
+    const oItems = expandedItems[order.id]
+    if (!oItems?.length) { toast.error('Expand the order first to load items'); return }
+    setEmailingOrder(order.id)
+    try {
+      const { data: settings } = await supabase.from('settings').select('key,value')
+      const s   = (settings || []).reduce((a, r) => ({ ...a, [r.key]: r.value }), {})
+      const key = s.brevo_api_key
+      const to  = s.email_recipient || s.recipient_email
+      if (!key || !to) {
+        toast.error('Configure Brevo API key and recipient email in Settings first')
+        setEmailingOrder(null); return
       }
-      toast.success(`Carried over ${pendingItems.length} undelivered item${pendingItems.length !== 1 ? 's' : ''} — ${added} added, ${merged} merged`)
-      return updated
-    })
-    setPendingItems([])
+      const storeName  = order.store_name || (order.notes || '').split(' · ')[0] || 'Order'
+      const delivLabel = order.delivery_date
+        ? new Date(order.delivery_date).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+        : ''
+      const rows = oItems.map((oi, idx) =>
+        `<tr style="background:${idx % 2 ? '#f8fafc' : '#ffffff'}">
+           <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;color:#64748b">${idx + 1}</td>
+           <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;font-family:monospace;font-size:12px;color:#0ea5e9">${codeOf(oi.part_number)}</td>
+           <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;color:#1e293b">${oi.item_name}</td>
+           <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;text-align:center;font-size:12px;color:#64748b">${oi.unit}</td>
+           <td style="padding:7px 12px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;color:#0d9488">${oi.ordered_qty}</td>
+         </tr>`
+      ).join('')
+      const html = `<div style="font-family:sans-serif;max-width:720px;margin:0 auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e2e8f0">
+        <div style="background:#00AEEF;padding:20px 24px">
+          <h2 style="color:#fff;margin:0;font-size:20px">${resortName}</h2>
+          <p style="color:#e0f7ff;margin:6px 0 0;font-size:14px">${storeName} — ${delivLabel}</p>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead>
+            <tr style="background:#f1f5f9">
+              <th style="padding:9px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em">SL</th>
+              <th style="padding:9px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Part #</th>
+              <th style="padding:9px 12px;text-align:left;font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Item Name</th>
+              <th style="padding:9px 12px;text-align:center;font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Unit</th>
+              <th style="padding:9px 12px;text-align:center;font-size:12px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Order Qty</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <div style="padding:14px 16px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:13px;color:#64748b">
+          <strong>${oItems.length}</strong> items &nbsp;·&nbsp; <strong>${oItems.reduce((s, i) => s + Number(i.ordered_qty), 0)}</strong> total units
+        </div>
+      </div>`
+      const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: { email: s.email_sender || s.sender_email || 'orders@maafushivaru.com', name: resortName },
+          to: [{ email: to }],
+          subject: `${storeName} Order — ${delivLabel}`,
+          htmlContent: html,
+        }),
+      })
+      if (!resp.ok) throw new Error(`Brevo error ${resp.status}`)
+      toast.success(`Order emailed to ${to}`)
+    } catch (err) { toast.error('Email failed: ' + err.message) }
+    setEmailingOrder(null)
   }
 
-  // ── Open manual-add modal ──────────────────────────────────
-  const openAddItem = async () => {
-    await loadAllItems()
-    setSelectedItem(null); setItemSearch(''); setManualQty(''); setManualNote('')
-    setShowAddItem(true)
-  }
-
-  // ── Add item manually to current order rows ────────────────
-  const confirmAddItem = () => {
-    if (!selectedItem)  { toast.error('Select an item'); return }
-    if (!manualQty || Number(manualQty) <= 0) { toast.error('Enter quantity'); return }
-    setRows(prev => {
-      const existingIdx = prev.findIndex(r => r.id === selectedItem.id)
-      if (existingIdx >= 0) {
-        const updated = [...prev]
-        updated[existingIdx] = { ...updated[existingIdx], ordered: Number(updated[existingIdx].ordered) + Number(manualQty), _manuallyAdded: true, _pendingNote: `+${manualQty} manually added${manualNote ? ': ' + manualNote : ''}` }
-        toast.success(`Added ${manualQty} ${selectedItem.unit} to existing row for ${selectedItem.name}`)
-        return updated
-      }
-      toast.success(`${selectedItem.name} added to order`)
-      return [...prev, {
-        id: selectedItem.id, part_number: selectedItem.part_number, name: selectedItem.name,
-        store: selectedItem.stores?.name || '', unit: selectedItem.unit,
-        current_stock: selectedItem.current_stock, min_stock: 0,
-        thisWeek: 0, lastWeek: 0, avgWeekly: 0,
-        suggested: Number(manualQty), ordered: Number(manualQty),
-        _fromPending: false, _manuallyAdded: true,
-        _pendingNote: manualNote ? `Manual: ${manualNote}` : 'Manually added',
-      }]
-    })
-    setShowAddItem(false)
-  }
-
-  // ── Add item to a SAVED order in history ──────────────────
+  // ── Add item to saved order ───────────────────────────────────────────────
   const openAddToSavedOrder = async (orderId) => {
-    await loadAllItems()
-    setSavedItem(null); setSavedItemSearch(''); setSavedQty(''); setSavedNote('')
+    if (!allItems.length) await loadAllItems()
+    setSavedItem(null); setSavedItemSearch(''); setSavedQty('')
     setShowAddToOrder(orderId)
   }
 
   const confirmAddToSavedOrder = async () => {
-    if (!savedItem)  { toast.error('Select an item'); return }
+    if (!savedItem) { toast.error('Select an item'); return }
     if (!savedQty || Number(savedQty) <= 0) { toast.error('Enter quantity'); return }
     setAddingToOrder(true)
     const { error } = await supabase.from('order_history_items').insert({
@@ -474,572 +476,204 @@ export default function Orders() {
       store_name:  savedItem.stores?.name || '',
       unit:        savedItem.unit,
       ordered_qty: Number(savedQty),
-      received_qty:0,
+      received_qty: 0,
     })
     if (error) { toast.error(error.message); setAddingToOrder(false); return }
-    // Refresh that order's items
     const { data } = await supabase.from('order_history_items').select('*').eq('order_id', showAddToOrder)
     setExpandedItems(p => ({ ...p, [showAddToOrder]: data || [] }))
     toast.success(`${savedItem.name} added to order`)
     setShowAddToOrder(null); setAddingToOrder(false)
   }
 
-  // ── Quantity helpers ───────────────────────────────────────
-  const adjustQty = (id, delta) => setRows(prev => prev.map(r => r.id === id ? { ...r, ordered: Math.max(0, (Number(r.ordered) || 0) + delta * (Number(r.pack) || 1)), _edited: true } : r))
-  const setQty    = (id, val) => { const n = parseFloat(val); if (!isNaN(n) && n >= 0) setRows(prev => prev.map(r => r.id === id ? { ...r, ordered: n, _edited: true } : r)) }
-  const setPack   = (id, val) => { const p = Math.max(1, parseInt(val, 10) || 1); setRows(prev => prev.map(r => r.id === id ? { ...r, pack: p, ordered: roundToPack(Number(r.ordered) || 0, p) } : r)) }
-  const removeRow = (id) => { setRows(prev => prev.filter(r => r.id !== id)); toast.success('Item removed from order') }
-
-  // ── Row selection (only selected rows go into the order) ────────────────────
-  const toggleSelect    = (id) => setRows(prev => prev.map(r => r.id === id ? { ...r, selected: !r.selected } : r))
-  const selectAll       = () => setRows(prev => prev.map(r => ({ ...r, selected: true })))
-  const clearSelection  = () => setRows(prev => prev.map(r => ({ ...r, selected: false })))
-  // "Low stock / needs more" — items at or below min stock, or with a suggested qty.
-  const selectLowStock  = () => setRows(prev => prev.map(r =>
-    (Number(r.current_stock) <= Number(r.min_stock) || r.suggested > 0) ? { ...r, selected: true } : r))
-
-  // ── Live re-apply of multiplier / backup weeks / subtract-stock ─────────────
-  // Recomputes suggested + order qty for rows the user hasn't manually edited,
-  // so changing the controls updates the list instantly (manual edits kept).
-  useEffect(() => {
-    setRows(prev => prev.map(r => {
-      if (r._manuallyAdded || r._fromPending || r._edited) return r
-      const pack = Number(r.pack) || 1
-      const target = (Number(r.avgWeekly) || 0) * multiplier * (1 + backupWeeks)
-      const net = subtractStock ? target - Number(r.current_stock || 0) : target
-      const suggested = roundToPack(Math.max(0, net), pack)
-      return { ...r, suggested, ordered: suggested, selected: suggested > 0 ? true : r.selected }
-    }))
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [multiplier, backupWeeks, subtractStock])
-
-  // ── Export PDF ─────────────────────────────────────────────
-  const exportPDF = async () => {
-    if (!orderRows.length || !delivery) { toast.error('No selected items to export'); return }
-    setExportingPdf(true)
-    try {
-      const { default: jsPDF }     = await import('jspdf')
-      const { default: autoTable } = await import('jspdf-autotable')
-      const doc = new jsPDF({ unit:'mm', format:'a4' })
-      const cyan = [0, 174, 239]
-      const delivDay  = delivery.date.toLocaleDateString('en-US', { weekday:'long' })
-      const delivDate = delivery.date.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
-      doc.setFillColor(...cyan); doc.rect(0, 0, 210, 28, 'F')
-      doc.setTextColor(255,255,255); doc.setFontSize(18); doc.setFont('helvetica','bold')
-      doc.text(resortName, 14, 12)
-      doc.setFontSize(13); doc.setFont('helvetica','normal')
-      doc.text(`Order for ${delivDay} – ${delivDate}`, 14, 21)
-      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
-      let y = 36
-      for (const [store, items] of Object.entries(grouped)) {
-        doc.setTextColor(0); doc.setFontSize(11); doc.setFont('helvetica','bold')
-        doc.text(store || 'Unassigned', 14, y)
-        autoTable(doc, {
-          startY: y + 3,
-          head: [['Part #','Item','Unit','Pack','In Stock','Avg/Wk','Suggested','Order Qty','Notes']],
-          body: items.map(i => [i.part_number, i.name, i.unit, i.pack || 1, i.current_stock, i.avgWeekly, i.suggested, i.ordered, i._pendingNote || (i._manuallyAdded ? 'Manual' : '')]),
-          headStyles: { fillColor: cyan, fontSize: 8 }, styles: { fontSize: 8 },
-          alternateRowStyles: { fillColor: [248,250,252] }, columnStyles: { 8: { cellWidth: 32, fontSize: 7 } },
-        })
-        y = doc.lastAutoTable.finalY + 8
-      }
-      doc.save(`Order_${delivDay}_${delivery.date.toISOString().split('T')[0]}.pdf`)
-      toast.success('PDF exported')
-    } catch (err) { toast.error('Export failed: ' + err.message) }
-    setExportingPdf(false)
-  }
-
-  // ── Export styled Excel ────────────────────────────────────────────────────
-  const exportExcel = async () => {
-    if (!orderRows.length || !delivery) { toast.error('No selected items to export'); return }
-    setExportingXlsx(true)
-    try {
-      const grouped = orderRows.reduce((acc, r) => { (acc[r.store] = acc[r.store] || []).push(r); return acc }, {})
-      const delivDay  = delivery.date.toLocaleDateString('en-US', { weekday:'long' })
-      const delivDate = delivery.date.toLocaleDateString('en-US', { day:'numeric', month:'long', year:'numeric' })
-      await exportOrderExcel(grouped, {
-        resortName,
-        deliveryLabel: `${delivDay} · ${delivDate}`,
-        filename: `Order_${delivDay}_${delivery.date.toISOString().split('T')[0]}.xlsx`,
-      })
-      toast.success('Excel exported')
-    } catch (err) { toast.error('Export failed: ' + err.message) }
-    setExportingXlsx(false)
-  }
-
-  // ── Save order ─────────────────────────────────────────────
-  const saveOrder = async () => {
-    const toOrder = visibleRows.filter(r => r.ordered > 0)
-    if (!toOrder.length) { toast.error('No items to save'); return }
-    if (!delivery) return
-    setSaving(true)
-    try {
-      const storeName = byStoreMode ? selectedStore : ''
-      const { data: order } = await supabase.from('order_history').insert({
-        delivery_date: delivery.date.toISOString().split('T')[0],
-        delivery_day:  delivery.date.toLocaleDateString('en-US', { weekday:'long' }),
-        status: 'pending', created_by: 'System',
-        notes: byStoreMode ? `${selectedStore} · ${delivery.label}` : `Order for ${delivery.label}`,
-        store_name: storeName || null,
-      }).select().single()
-      await supabase.from('order_history_items').insert(
-        toOrder.map(r => ({ order_id: order.id, item_id: r.id?.startsWith?.('pending') ? null : r.id, part_number: r.part_number, item_name: r.name, store_name: r.store, unit: r.unit, ordered_qty: r.ordered, received_qty: 0 }))
-      )
-      toast.success(`Order saved — ${toOrder.length} items`)
-    } catch (err) { toast.error(err.message) }
-    setSaving(false)
-  }
-
-  // ── History ────────────────────────────────────────────────
-  const loadHistory = async () => {
-    setHistLoad(true)
-    const { data } = await supabase.from('order_history').select('*').order('delivery_date', { ascending: false }).order('created_at', { ascending: false }).limit(60)
-    setHistory(data || []); setHistLoad(false)
-  }
-  const loadExpandedItems = async (id) => {
-    if (expandedItems[id]) { setExpanded(expanded === id ? null : id); return }
-    const { data } = await supabase.from('order_history_items').select('*').eq('order_id', id)
-    setExpandedItems(p => ({ ...p, [id]: data || [] })); setExpanded(id)
-  }
-  const markReceived = async (orderId) => {
-    const oItems = expandedItems[orderId] || []
-    if (!confirm('Mark all as fully received? Stock will be updated.')) return
-    setMarkingId(orderId)
-    for (const oi of oItems) {
-      if (!oi.item_id || !oi.ordered_qty) continue
-      // Stock is owned by Batch Expiry -- receiving here creates a batch via
-      // the shared RPC (no expiry known from this flow, so it's a no-expiry
-      // batch) instead of writing current_stock directly. The DB trigger
-      // recalculates current_stock = SUM(remaining_quantity) automatically.
-      await supabase.rpc('upsert_item_batch', {
-        p_batch_id: null, p_item_id: oi.item_id, p_expiry_date: null, p_quantity: Number(oi.ordered_qty),
-        p_note: 'Order received (no expiry recorded)',
-      }).catch(() => {})
-      await supabase.from('order_history_items').update({ received_qty: oi.ordered_qty }).eq('id', oi.id)
-    }
-    await supabase.from('order_history').update({ status: 'received' }).eq('id', orderId)
-    setHistory(prev => prev.map(o => o.id === orderId ? { ...o, status: 'received' } : o))
-    toast.success('Order received — stock updated!'); setMarkingId(null)
-  }
-  const markPartialReceived = async (orderId, itemId, receivedQty) => {
-    const prevItems = expandedItems[orderId] || []
-    const prevItem = prevItems.find(i => i.id === itemId)
-    const delta = Number(receivedQty) - Number(prevItem?.received_qty || 0)
-    if (prevItem?.item_id && delta > 0) {
-      // Only the newly-received delta becomes a batch, so re-editing the
-      // received quantity never double-adds stock for the same line.
-      await supabase.rpc('upsert_item_batch', {
-        p_batch_id: null, p_item_id: prevItem.item_id, p_expiry_date: null, p_quantity: delta,
-        p_note: 'Order received (partial, no expiry recorded)',
-      }).catch(() => {})
-    }
-    await supabase.from('order_history_items').update({ received_qty: receivedQty }).eq('id', itemId)
-    const updatedItems = (expandedItems[orderId] || []).map(i => i.id === itemId ? { ...i, received_qty: receivedQty } : i)
-    setExpandedItems(p => ({ ...p, [orderId]: updatedItems }))
-    const allReceived  = updatedItems.every(i => Number(i.received_qty) >= Number(i.ordered_qty))
-    const someReceived = updatedItems.some(i => Number(i.received_qty) > 0)
-    const newStatus = allReceived ? 'received' : someReceived ? 'partial' : 'pending'
-    await supabase.from('order_history').update({ status: newStatus }).eq('id', orderId)
-    setHistory(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))
-  }
-  const switchToHistory = () => { setTab('history'); loadHistory() }
-
-  // ── Delivery-day filter (live) ───────────────────────────────────────────
-  //  Foreign items only arrive Monday; local items can arrive both days (mainly
-  //  Thursday). Picking a day instantly narrows the list to what can actually
-  //  be delivered that day — no regenerate needed.
-  const visibleRows = useMemo(() => {
-    if (byStoreMode) return rows // No filtering in By Store mode
-    // 'week' (whole-week order) and 'Monday'/'Thursday' (day-targeted) views.
-    let list = (deliveryDay === 'Monday' || deliveryDay === 'Thursday')
-      ? rows.filter(r => canDeliverOn(r.origin, deliveryDay))
-      : rows
-    if (catFilter) list = list.filter(r => (r.category || '') === catFilter)
-    if (subFilter) list = list.filter(r => (r.store || '') === subFilter)
-    if (needFilter === 'selected')   list = list.filter(r => r.selected)
-    if (needFilter === 'unselected') list = list.filter(r => !r.selected)
-    return list
-  }, [rows, deliveryDay, catFilter, subFilter, needFilter, byStoreMode])
-  const { sorted: sortedRows, thProps } = useSort(visibleRows, null, 'asc')
-  // Float selected (needed) rows to the top so they're easy to see/scan.
-  const displayRows = useMemo(() =>
-    [...sortedRows].sort((a, b) => (b.selected ? 1 : 0) - (a.selected ? 1 : 0)), [sortedRows])
-
-  // Sub-category (store) options grouped by main category, derived from the data.
-  const subOptions = useMemo(() => {
-    const all = [...new Set(rows
-      .filter(r => !catFilter || (r.category || '') === catFilter)
-      .map(r => r.store).filter(Boolean))]
-    return all.sort()
-  }, [rows, catFilter])
-
-  // Switch the targeted delivery day live (also re-dates the order header).
-  const pickDeliveryDay = (day) => { setDeliveryDay(day); setDelivery(nextDeliveryFor(day)) }
-
-  // Only SELECTED rows with a quantity make it into the order (faded/unselected
-  // = not needed, so they're excluded from export & save).
-  const orderRows        = byStoreMode ? visibleRows.filter(r => r.ordered > 0) : visibleRows.filter(r => r.selected && r.ordered > 0)
-  const toOrder          = orderRows
-  const showPendingAlert = pendingItems.length > 0 && !pendingDismissed && rows.length > 0
-  const pendingSources   = [...new Set(pendingItems.map(i => `${i.orderDay} · ${i.orderDate}`))]
-
-  // Item search helpers (shared for both add modals)
-  const filteredAllItems = allItems.filter(i =>
-    !itemSearch || i.name.toLowerCase().includes(itemSearch.toLowerCase()) || i.part_number.toLowerCase().includes(itemSearch.toLowerCase())
-  ).slice(0, 8)
   const filteredSavedItems = allItems.filter(i =>
-    !savedItemSearch || i.name.toLowerCase().includes(savedItemSearch.toLowerCase()) || i.part_number.toLowerCase().includes(savedItemSearch.toLowerCase())
+    !savedItemSearch ||
+    i.name.toLowerCase().includes(savedItemSearch.toLowerCase()) ||
+    (i.part_number || '').toLowerCase().includes(savedItemSearch.toLowerCase())
   ).slice(0, 8)
 
-  // ── JSX ────────────────────────────────────────────────────
+  // ── History date grouping ─────────────────────────────────────────────────
+  const dateGroups = useMemo(() => {
+    const groups = {}
+    history.forEach(o => {
+      const d = o.delivery_date || 'Unknown'
+      if (!groups[d]) groups[d] = []
+      groups[d].push(o)
+    })
+    return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a))
+  }, [history])
+
+  // ── JSX ───────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="page-title">Order Sheet</h1>
-          {delivery && tab === 'generate' && <p className="page-sub">Next delivery: <strong className="text-[#00AEEF]">{delivery.label}</strong></p>}
+          {tab === 'order' && (
+            <p className="page-sub">
+              {selectedStore} &nbsp;·&nbsp;
+              {new Date(deliveryDate).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' })}
+            </p>
+          )}
         </div>
         <div className="flex gap-2 flex-wrap">
-          {tab === 'generate' && rows.length > 0 && (
+          {tab === 'order' && orderRows.length > 0 && (
             <>
-              <button onClick={() => setShowCSV(true)} className="btn-secondary btn-sm"><Upload className="w-4 h-4" /> Import CSV</button>
-              <Button variant="secondary" onClick={openAddItem}><PlusCircle className="w-4 h-4" /> Add Item</Button>
-              <Button variant="secondary" onClick={exportExcel} loading={exportingXlsx}><Download className="w-4 h-4" /> Download Excel</Button>
-              <Button variant="secondary" onClick={exportPDF} loading={exportingPdf}><Download className="w-4 h-4" /> Download PDF</Button>
-              <Button variant="secondary" onClick={saveOrder} loading={saving}><Save className="w-4 h-4" /> Save Order</Button>
+              <Button variant="secondary" onClick={exportExcel} loading={exportingXlsx}><FileSpreadsheet className="w-4 h-4" /> Excel</Button>
+              <Button variant="secondary" onClick={exportPDF}   loading={exportingPdf}><FileText className="w-4 h-4" /> PDF</Button>
+              <Button onClick={saveOrder} loading={saving}><Save className="w-4 h-4" /> Save Order</Button>
             </>
           )}
-          {tab === 'generate'
-            ? <Button onClick={byStoreMode ? () => generateByStore(selectedStore, allItems) : generate} loading={loading}>
-                <RefreshCw className="w-4 h-4" /> {byStoreMode ? 'Load Store Items' : 'Generate'}
-              </Button>
-            : <Button onClick={() => setTab('generate')}>← Generate New</Button>}
+          {tab === 'history' && <Button onClick={() => setTab('order')}>← New Order</Button>}
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex border-b border-slate-700">
-        {[{ key:'generate', label:'Generate Order' }, { key:'history', label:'Order History' }].map(({ key, label }) => (
-          <button key={key} onClick={() => key === 'history' ? switchToHistory() : setTab(key)}
+        {[{ key: 'order', label: 'Create Order' }, { key: 'history', label: 'Order History' }].map(({ key, label }) => (
+          <button key={key}
+            onClick={() => { setTab(key); if (key === 'history') loadHistory() }}
             className={`px-5 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${tab === key ? 'border-[#00AEEF] text-[#00AEEF]' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
             {label}
           </button>
         ))}
       </div>
 
-      {/* ── Generate tab ───────────────────────────────────── */}
-      {tab === 'generate' && (
+      {/* ══ Create Order tab ══════════════════════════════════════════════════ */}
+      {tab === 'order' && (
         <>
-          {/* Generation mode + scope + delivery-day controls */}
-          <div className="card-sm space-y-3">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              {/* By Pattern / By Usage */}
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Generate</span>
-                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
-                  {[
-                    { key:'pattern', label:'By Pattern', hint:'general order list from boat-note history' },
-                    { key:'usage',   label:'By Usage',   hint:'from issuance usage history' },
-                  ].map(m => (
-                    <button key={m.key}
-                      onClick={() => { setOrderMode(m.key); setByStoreMode(false) }}
-                      title={m.hint}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${!byStoreMode && orderMode === m.key ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-                      {m.label}
-                    </button>
-                  ))}
-                  <button
-                    onClick={async () => {
-                      setByStoreMode(true)
-                      await loadAllItems()
-                      generateByStore(selectedStore, allItems)
-                    }}
-                    title="Manual entry per store — items in fixed sequence"
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${byStoreMode ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-                    By Store
+          {/* Controls card */}
+          <div className="card-sm space-y-4">
+            {/* Store selector */}
+            <div>
+              <p className="text-xs text-slate-400 uppercase tracking-wide mb-2.5">Select Store</p>
+              <div className="flex gap-2 flex-wrap">
+                {STORES.map(s => (
+                  <button key={s} onClick={() => selectStore(s)}
+                    className={`px-4 py-2 rounded-full text-sm font-semibold border transition-all ${
+                      selectedStore === s
+                        ? 'bg-teal-600 border-teal-600 text-white shadow-lg shadow-teal-900/30'
+                        : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-teal-600 hover:text-teal-300'
+                    }`}>
+                    {s}
                   </button>
-                </div>
-                <span className="text-xs text-slate-500 hidden sm:inline">
-                  {byStoreMode ? 'manual entry per store — all quantities start at 0' : orderMode === 'pattern' ? 'standard list from boat-note ordering pattern' : 'calculated from issuance usage history'}
-                </span>
-              </div>
-              {/* Delivery day */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Delivery</span>
-                <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
-                  {['week','Monday','Thursday'].map(d => (
-                    <button key={d} onClick={() => pickDeliveryDay(d)}
-                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${deliveryDay === d ? 'bg-teal-600 text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-                      {d === 'week' ? 'Whole Week' : d}
-                    </button>
-                  ))}
-                </div>
+                ))}
               </div>
             </div>
-
-
-            {/* Store selector — shown only in By Store mode */}
-            {byStoreMode && (
-              <div className="flex items-center gap-3 flex-wrap border-t border-slate-700/50 pt-3">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Store</span>
-                <div className="flex gap-2 flex-wrap">
-                  {STORES.map(s => (
-                    <button key={s}
-                      onClick={async () => {
-                        setSelectedStore(s)
-                        setRows([])
-                        if (allItems.length > 0) generateByStore(s, allItems)
-                        else {
-                          await loadAllItems()
-                          generateByStore(s, allItems)
-                        }
-                      }}
-                      className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-colors ${selectedStore === s ? 'bg-teal-600 border-teal-600 text-white' : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-teal-600'}`}>
-                      {s}
-                    </button>
-                  ))}
-                </div>
-                <span className="text-xs text-slate-500 ml-auto">{rows.length} items · {rows.filter(r=>r.ordered>0).length} to order</span>
-              </div>
-            )}
-            {/* Categories to include when generating — hidden in By Store mode */}
-            {!byStoreMode && (
+            {/* Delivery date */}
             <div className="flex items-center gap-3 flex-wrap border-t border-slate-700/50 pt-3">
-              <span className="text-xs text-slate-400 uppercase tracking-wide">Categories</span>
-              {MAIN_CATEGORIES.map(c => (
-                <label key={c} className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                  <input type="checkbox" checked={!!genCats[c]} onChange={() => toggleGenCat(c)} className="accent-teal-500 w-4 h-4" />
-                  {c}
-                </label>
-              ))}
-              <span className="text-[11px] text-slate-500">Only ticked categories are included when you Generate.</span>
-            </div>
-            )}
-
-            {/* Order quantity controls: multiplier · backup weeks · subtract stock */}
-            <div className="flex items-center gap-4 flex-wrap border-t border-slate-700/50 pt-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Multiply order</span>
-                <select value={multiplier} onChange={e => setMultiplier(Number(e.target.value))} className="input text-sm w-auto py-1.5">
-                  {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>×{n}</option>)}
-                </select>
-                <span className="text-xs text-slate-500 hidden sm:inline">× weekly average (e.g. ×5 ≈ a week from daily usage)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400 uppercase tracking-wide">Backup weeks</span>
-                <select value={backupWeeks} onChange={e => setBackupWeeks(Number(e.target.value))} className="input text-sm w-auto py-1.5">
-                  <option value={0}>This week only</option>
-                  <option value={1}>+1 week backup</option>
-                  <option value={2}>+2 weeks backup</option>
-                  <option value={3}>+3 weeks backup</option>
-                </select>
-              </div>
-              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={subtractStock} onChange={e => setSubtractStock(e.target.checked)} className="accent-teal-500 w-4 h-4" />
-                Subtract current stock
-              </label>
-              <span className="text-[11px] text-slate-500">Order rounds up to whole packs · edit any qty / pack below.</span>
-            </div>
-
-            <div className="flex items-center justify-between gap-3 flex-wrap border-t border-slate-700/50 pt-3">
-              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
-                <input type="checkbox" checked={storeOnly} onChange={e => setStoreOnly(e.target.checked)} className="accent-teal-500 w-4 h-4" />
-                <strong>STORE items only</strong> <span className="text-slate-500">— ordered from boat-note history</span>
-              </label>
-              <div className="flex items-center gap-2 text-xs">
-                {boatStats && <span className="text-slate-400">{boatStats.count} store items · ~{boatStats.weeks}w history</span>}
-                <Badge variant="blue">Foreign → Mon only</Badge>
-                <Badge variant="green">Local → Thu (also Mon)</Badge>
-              </div>
+              <Calendar className="w-4 h-4 text-slate-400 shrink-0" />
+              <span className="text-xs text-slate-400 uppercase tracking-wide">Delivery Date</span>
+              <input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)}
+                className="input text-sm py-1.5 w-auto" />
+              <span className="text-xs text-slate-500 hidden sm:inline">
+                {new Date(deliveryDate).toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              </span>
             </div>
           </div>
-          {!rows.length && !loading && (
-            <div className="card text-center py-20 text-slate-500">
-              <ShoppingCart className="w-14 h-14 mx-auto mb-4 opacity-20" />
-              <p className="font-medium text-lg">No order generated yet</p>
-              <p className="text-sm mt-1">Click <strong>"Generate"</strong> to auto-calculate from usage history.</p>
+
+          {/* Loading spinner */}
+          {loading && (
+            <div className="flex justify-center py-20">
+              <div className="w-12 h-12 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" />
             </div>
           )}
-          {loading && <div className="flex justify-center py-20"><div className="w-12 h-12 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>}
 
-          {rows.length > 0 && !loading && (
+          {!loading && rows.length === 0 && (
+            <div className="card text-center py-20 text-slate-500">
+              <ShoppingCart className="w-14 h-14 mx-auto mb-4 opacity-20" />
+              <p className="font-medium text-lg">No items found</p>
+              <p className="text-sm mt-1">Make sure items are assigned to stores in Inventory.</p>
+            </div>
+          )}
+
+          {!loading && rows.length > 0 && (
             <>
-              {/* Undelivered items alert */}
-              {showPendingAlert && (
-                <div className="card border border-orange-600/50 bg-orange-900/15">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-orange-900/40 rounded-xl flex items-center justify-center shrink-0">
-                      <PackageX className="w-5 h-5 text-orange-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-orange-300 text-base">{pendingItems.length} item{pendingItems.length !== 1 ? 's' : ''} from previous orders didn't arrive</p>
-                      <p className="text-sm text-orange-200/70 mt-0.5">From: {pendingSources.join(' · ')}</p>
-                      <div className="mt-3 space-y-1.5 max-h-40 overflow-y-auto">
-                        {pendingItems.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-4 text-sm">
-                            <span className="text-slate-200 truncate">{item.item_name}</span>
-                            <span className="text-orange-300 font-bold shrink-0">shortfall {item.shortfall} {item.unit}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex gap-2 mt-4 flex-wrap">
-                        <Button onClick={addPendingToOrder}><CheckCircle2 className="w-4 h-4" /> Add {pendingItems.length} Undelivered to This Order</Button>
-                        <Button variant="secondary" onClick={() => setPendingDismissed(true)}>Skip</Button>
-                      </div>
-                    </div>
+              {/* Stats + search bar */}
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="card-sm py-2 px-4 text-center min-w-[4rem]">
+                    <p className="text-xl font-bold text-[#00AEEF]">{rows.length}</p>
+                    <p className="text-slate-400 text-xs mt-0.5">Items</p>
+                  </div>
+                  <div className="card-sm py-2 px-4 text-center min-w-[4rem]">
+                    <p className="text-xl font-bold text-teal-400">{orderRows.length}</p>
+                    <p className="text-slate-400 text-xs mt-0.5">To Order</p>
+                  </div>
+                  <div className="card-sm py-2 px-4 text-center min-w-[4rem]">
+                    <p className="text-xl font-bold text-teal-300">{orderRows.reduce((s, r) => s + Number(r.ordered), 0)}</p>
+                    <p className="text-slate-400 text-xs mt-0.5">Units</p>
                   </div>
                 </div>
-              )}
-
-              {/* Already Ordered (Boat Note) alert -- avoids double-ordering
-                  items that are sitting on an un-delivered boat note. Shows
-                  Ordered Quantity, Boat Note Number, Order Date, Expected
-                  Arrival and Pending Since, exactly per spec. */}
-              {pendingBoatNoteItems.length > 0 && !pendingBNDismissed && rows.length > 0 && (
-                <div className="card border border-blue-600/50 bg-blue-900/15">
-                  <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 bg-blue-900/40 rounded-xl flex items-center justify-center shrink-0">
-                      <PackageX className="w-5 h-5 text-blue-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-blue-300 text-base">
-                        {pendingBoatNoteItems.length} item{pendingBoatNoteItems.length !== 1 ? 's' : ''} already ordered but not yet delivered
-                      </p>
-                      <p className="text-sm text-blue-200/70 mt-0.5">Check before adding these to a new order -- they're already on a pending boat note.</p>
-                      <div className="mt-3 space-y-1.5 max-h-48 overflow-y-auto">
-                        {pendingBoatNoteItems.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-4 text-sm flex-wrap">
-                            <span className="text-slate-200 truncate">{item.product_name || item.part_number}</span>
-                            <Badge variant="blue">Already Ordered</Badge>
-                            <span className="text-blue-300 font-semibold shrink-0">{item.ordered_quantity} pending</span>
-                            <span className="text-slate-400 text-xs shrink-0">#{item.note_number}</span>
-                            <span className="text-slate-400 text-xs shrink-0">Ordered {item.order_date}</span>
-                            {item.expected_arrival && <span className="text-slate-400 text-xs shrink-0">ETA {item.expected_arrival}</span>}
-                            <span className="text-slate-500 text-xs shrink-0">Pending since {new Date(item.pending_since).toLocaleDateString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex gap-2 mt-4 flex-wrap">
-                        <Button variant="secondary" onClick={() => setPendingBNDismissed(true)}>Dismiss</Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Stats */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div className="card-sm text-center"><p className="text-2xl font-bold text-[#00AEEF]">{visibleRows.length}</p><p className="text-slate-400 text-sm mt-1">Items</p></div>
-                <div className="card-sm text-center"><p className="text-2xl font-bold text-[#00AEEF]">{toOrder.reduce((s, r) => s + r.ordered, 0)}</p><p className="text-slate-400 text-sm mt-1">Total Units</p></div>
-                <div className="card-sm text-center"><p className="text-sm font-medium text-green-400">{visibleRows.filter(r => r._manuallyAdded).length} manually added</p><p className="text-slate-400 text-xs mt-1">items</p></div>
-                <div className="card-sm text-center">
-                  <p className="font-medium text-slate-100">{delivery?.date.toLocaleDateString('en-US', { weekday:'long' })}</p>
-                  <p className="text-slate-400 text-xs mt-1">{delivery?.date.toLocaleDateString('en-US', { day:'numeric', month:'short', year:'numeric' })}</p>
+                <div className="relative flex-1 max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input className="input pl-9 text-sm" placeholder="Search items or part #…"
+                    value={search} onChange={e => setSearch(e.target.value)} />
+                  {search && (
+                    <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
               {/* Order table */}
-              <div className="card">
-                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                  <p className="text-xs text-slate-400">
-                    Order = Avg/Wk × {multiplier} × {1 + backupWeeks}wk{subtractStock ? ' − Stock' : ''}, rounded to packs.
-                    {' '}<span className="text-slate-200">Highlighted = needed (in order)</span>, <span className="opacity-50">faded = not needed</span>.
-                  </p>
-                  <Button onClick={openAddItem} variant="secondary"><PlusCircle className="w-4 h-4" /> Add Item Manually</Button>
-                </div>
-                {/* Selection toolbar */}
-                <div className="flex items-center gap-2 flex-wrap mb-3">
-                  <span className="text-xs text-slate-400 uppercase tracking-wide">Select</span>
-                  <button onClick={selectAll} className="btn-secondary btn-sm">Select All</button>
-                  <button onClick={selectLowStock} className="btn-secondary btn-sm">Select Low Stock</button>
-                  <button onClick={clearSelection} className="btn-ghost btn-sm">Clear</button>
-                  <span className="mx-1 text-slate-600">·</span>
-                  <span className="text-xs text-slate-400 uppercase tracking-wide">Show</span>
-                  <div className="flex gap-1 bg-slate-800 border border-slate-700 rounded-lg p-1">
-                    {[{k:'all',l:'All'},{k:'selected',l:'Needed'},{k:'unselected',l:'Not needed'}].map(o => (
-                      <button key={o.k} onClick={() => setNeedFilter(o.k)}
-                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${needFilter === o.k ? 'bg-[#00AEEF] text-white' : 'text-slate-400 hover:text-slate-100'}`}>
-                        {o.l}
-                      </button>
-                    ))}
-                  </div>
-                  <span className="ml-auto text-xs text-slate-400"><strong className="text-teal-300">{orderRows.length}</strong> selected · {orderRows.reduce((s,r)=>s+Number(r.ordered||0),0)} units</span>
-                </div>
+              <div className="card overflow-hidden p-0">
                 <Table>
-                  <Thead><tr>
-                    {byStoreMode && <Th className="w-8">#</Th>}
-                    {!byStoreMode && <Th>✓</Th>}
-                    <Th {...thProps('part_number')}>Part #</Th>
-                    <Th {...thProps('name')}>Item Name</Th>
-                    {!byStoreMode && <Th {...thProps('store')}>Sub-Category</Th>}
-                    {!byStoreMode && <Th {...thProps('origin')}>Origin · Day</Th>}
-                    <Th {...thProps('unit')}>Unit</Th>
-                    {!byStoreMode && <Th {...thProps('pack')}>Pack</Th>}
-                    <Th {...thProps('current_stock')}>In Stock</Th>
-                    {!byStoreMode && <Th {...thProps('avgWeekly')}>Avg/Wk</Th>}
-                    {!byStoreMode && <Th {...thProps('suggested')}>Suggested</Th>}
-                    <Th {...thProps('ordered')}>Order Qty</Th>
-                    <Th></Th>
-                  </tr></Thead>
+                  <Thead>
+                    <tr>
+                      <Th className="w-10 text-center">#</Th>
+                      <Th>Part #</Th>
+                      <Th>Item Name</Th>
+                      <Th className="text-center">Unit</Th>
+                      <Th className="text-center">In Stock</Th>
+                      <Th>Order Qty</Th>
+                      <Th className="w-8"></Th>
+                    </tr>
+                  </Thead>
                   <Tbody>
-                    {displayRows.map(row => (
+                    {visibleRows.map(row => (
                       <Tr key={row.id}
-                        className={[
-                          !byStoreMode && !row.selected ? 'opacity-40' : '',
-                          byStoreMode && row.ordered > 0 ? 'bg-teal-900/10 border-l-2 border-l-teal-600' : '',
-                          row._notArrived ? 'bg-red-900/15' : '',
-                          !row._notArrived && row._fromPending ? 'bg-orange-900/10' : '',
-                          !row._notArrived && row._manuallyAdded && !row._fromPending ? 'bg-blue-900/10' : '',
-                        ].join(' ')}>
-                        {byStoreMode && <Td className="text-xs text-slate-500 tabular-nums">{row.sl}</Td>}
-                        {!byStoreMode && (
-                          <Td>
-                            <input type="checkbox" checked={!!row.selected} onChange={() => toggleSelect(row.id)}
-                              title={row.selected ? 'Needed — included in order' : 'Not needed — excluded'}
-                              className="accent-teal-500 w-4 h-4" />
-                          </Td>
-                        )}
-                        <Td className="font-mono text-xs text-slate-300">{String(row.part_number||'').replace(/^0+/,'')}</Td>
-                        <Td className="max-w-xs">
+                        className={row.ordered > 0 ? 'bg-teal-900/10 border-l-2 border-l-teal-600' : ''}>
+                        <Td className="text-xs text-slate-500 tabular-nums text-center">{row.sl}</Td>
+                        <Td className="font-mono text-xs text-slate-400">{codeOf(row.part_number)}</Td>
+                        <Td>
+                          <p className={`text-sm font-medium truncate max-w-xs ${row.ordered > 0 ? 'text-teal-200' : 'text-slate-100'}`}>
+                            {row.name}
+                          </p>
+                        </Td>
+                        <Td className="text-center">
+                          <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-700 text-teal-300 whitespace-nowrap">
+                            {row.unit}
+                          </span>
+                        </Td>
+                        <Td className={`text-center font-semibold ${Number(row.current_stock) <= 0 ? 'text-red-400' : 'text-slate-300'}`}>
+                          {row.current_stock}
+                        </Td>
+                        <Td>
                           <div className="flex items-center gap-1.5">
-                            {row._notArrived && <Badge variant={row._naStatus === 'short' ? 'yellow' : 'red'}>{row._naStatus === 'short' ? 'short' : 'not arrived'}</Badge>}
-                            <p className={`text-sm font-medium truncate ${byStoreMode && row.ordered > 0 ? 'text-teal-300' : row._notArrived ? 'text-red-200' : row._fromPending ? 'text-orange-200' : row._manuallyAdded ? 'text-blue-200' : 'text-slate-100'}`}>{row.name}</p>
-                          </div>
-                          {row.supplier && !byStoreMode && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{row.supplier}</p>}
-                          {row._pendingNote && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{row._pendingNote}</p>}
-                        </Td>
-                        {!byStoreMode && <Td className="text-xs text-slate-400">{row.store}</Td>}
-                        {!byStoreMode && (
-                          <Td>
-                            <Badge variant={row.origin === 'local' ? 'green' : 'blue'}>
-                              {deliveryLabelFor(row.origin)}
-                            </Badge>
-                          </Td>
-                        )}
-                        <Td>
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${byStoreMode ? 'bg-slate-700 text-teal-300' : 'text-slate-400'}`}>{row.unit}</span>
-                        </Td>
-                        {!byStoreMode && (
-                          <Td>
-                            <input type="number" min="1" step="1" value={row.pack || 1} onChange={e => setPack(row.id, e.target.value)}
-                              title="Pack size — order rounds up to whole packs"
-                              className="w-14 bg-slate-700 border border-slate-600 rounded-lg px-2 py-1 text-center text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF]" />
-                          </Td>
-                        )}
-                        <Td className={Number(row.current_stock) <= Number(row.min_stock) ? 'text-red-400 font-semibold' : 'text-slate-300'}>{row.current_stock}</Td>
-                        {!byStoreMode && <Td className="text-slate-300">{row.avgWeekly || '—'}</Td>}
-                        {!byStoreMode && <Td><Badge variant={row._notArrived ? 'red' : row._fromPending ? 'orange' : row._manuallyAdded ? 'blue' : 'teal'}>{row.suggested}</Badge></Td>}
-                        <Td>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => adjustQty(row.id, -1)} className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300"><Minus className="w-3 h-3" /></button>
-                            <input type="number" min="0" value={row.ordered} onChange={e => setQty(row.id, e.target.value)}
-                              className={`w-16 border rounded-lg px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-[#00AEEF] ${byStoreMode && row.ordered > 0 ? 'bg-teal-900/20 border-teal-600 text-teal-200' : 'bg-slate-700 border-slate-600 text-slate-100'}`} />
-                            <button onClick={() => adjustQty(row.id, 1)} className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300"><Plus className="w-3 h-3" /></button>
+                            <button onClick={() => adjustQty(row.id, -1)}
+                              className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 transition-colors">
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <input type="number" min="0" value={row.ordered}
+                              onChange={e => setQty(row.id, e.target.value)}
+                              className={`w-16 border rounded-lg px-2 py-1.5 text-center text-sm font-medium focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors ${
+                                row.ordered > 0
+                                  ? 'bg-teal-900/25 border-teal-600 text-teal-200'
+                                  : 'bg-slate-700 border-slate-600 text-slate-100'
+                              }`} />
+                            <button onClick={() => adjustQty(row.id, 1)}
+                              className="w-7 h-7 flex items-center justify-center bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 transition-colors">
+                              <Plus className="w-3 h-3" />
+                            </button>
+                            <span className="text-xs text-slate-500 w-8 shrink-0 truncate">{row.unit}</span>
                           </div>
                         </Td>
                         <Td>
-                          <button onClick={() => removeRow(row.id)} className="p-1 text-slate-600 hover:text-red-400 rounded-lg transition-colors" title="Remove from order">
+                          <button onClick={() => removeRow(row.id)}
+                            className="p-1 text-slate-600 hover:text-red-400 rounded-lg transition-colors"
+                            title="Remove from list">
                             <X className="w-4 h-4" />
                           </button>
                         </Td>
@@ -1048,187 +682,201 @@ export default function Orders() {
                   </Tbody>
                 </Table>
               </div>
+
+              {/* Sticky save bar — only when items have qty */}
+              {orderRows.length > 0 && (
+                <div className="flex items-center justify-between gap-4 p-4 card border border-teal-700/30 bg-teal-900/10">
+                  <p className="text-sm text-teal-300 font-medium">
+                    <strong>{orderRows.length}</strong> items · <strong>{orderRows.reduce((s, r) => s + Number(r.ordered), 0)}</strong> units ready to save
+                  </p>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button variant="secondary" onClick={exportExcel} loading={exportingXlsx}><FileSpreadsheet className="w-4 h-4" /> Excel</Button>
+                    <Button variant="secondary" onClick={exportPDF}   loading={exportingPdf}><FileText className="w-4 h-4" /> PDF</Button>
+                    <Button onClick={saveOrder} loading={saving}><Save className="w-4 h-4" /> Save Order</Button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </>
       )}
 
-      {/* ── History tab ─────────────────────────────────────── */}
+      {/* ══ History tab ═══════════════════════════════════════════════════════ */}
       {tab === 'history' && (
         <div className="space-y-3">
           {histLoad ? (
-            <div className="flex justify-center py-16"><div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" /></div>
+            <div className="flex justify-center py-16">
+              <div className="w-10 h-10 border-4 border-[#00AEEF] border-t-transparent rounded-full animate-spin" />
+            </div>
           ) : history.length === 0 ? (
             <div className="card text-center py-16 text-slate-500">
               <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-20" />
               <p className="font-medium">No saved orders yet</p>
+              <p className="text-sm mt-1">Create and save an order to see it here.</p>
             </div>
-          ) : (() => {
-            // Group orders by delivery_date, newest first
-            const dateGroups = {}
-            history.forEach(o => {
-              const d = o.delivery_date || 'Unknown'
-              if (!dateGroups[d]) dateGroups[d] = []
-              dateGroups[d].push(o)
-            })
-            const sortedDates = Object.keys(dateGroups).sort((a,b) => b.localeCompare(a))
-            return sortedDates.map(date => {
-              const dateOrders = dateGroups[date]
-              const dateLabel = date !== 'Unknown'
-                ? new Date(date).toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'short', year:'numeric' })
-                : 'Unknown Date'
-              const totalItems = dateOrders.reduce((s,o) => s + (expandedItems[o.id]?.length || 0), 0)
-              return (
-                <div key={date} className="card border border-slate-700/40">
-                  {/* Date header */}
-                  <div className="flex items-center gap-3 pb-3 mb-3 border-b border-slate-700/40">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#00AEEF] shrink-0" />
-                    <div className="flex-1">
-                      <p className="font-bold text-slate-100 text-base">{dateLabel}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{dateOrders.length} order{dateOrders.length !== 1 ? 's' : ''}{totalItems > 0 ? ` · ${totalItems} items` : ''}</p>
-                    </div>
-                  </div>
-                  {/* Store orders for this date */}
-                  <div className="space-y-2">
-                    {dateOrders.map(order => {
-                      const oItems = expandedItems[order.id] || []
-                      const isExp  = expanded === order.id
-                      const undeliveredCount = oItems.filter(i => Number(i.received_qty) < Number(i.ordered_qty)).length
-                      const storeName = order.store_name || (order.notes||'').split(' · ')[0] || `${order.delivery_day} Order`
-                      return (
-                        <div key={order.id} className="border border-slate-700/30 rounded-xl overflow-hidden">
-                          <div className="flex items-center justify-between flex-wrap gap-3 px-4 py-3 bg-slate-800/40">
-                            <button className="flex items-center gap-3 text-left flex-1" onClick={() => loadExpandedItems(order.id)}>
-                              {isExp ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <p className="font-semibold text-slate-100">{storeName}</p>
-                                  <Badge variant={STATUS_BADGE[order.status] || 'gray'}>{order.status}</Badge>
-                                  {oItems.length > 0 && <span className="text-xs text-slate-400">{oItems.length} items</span>}
-                                  {isExp && undeliveredCount > 0 && order.status !== 'received' && (
-                                    <span className="text-xs text-orange-400 flex items-center gap-1"><PackageX className="w-3 h-3" />{undeliveredCount} missing</span>
-                                  )}
-                                </div>
-                                <p className="text-xs text-slate-500 mt-0.5">Saved {new Date(order.created_at).toLocaleDateString()}</p>
-                              </div>
-                            </button>
-                            <div className="flex gap-2 flex-wrap">
-                              <button onClick={() => openAddToSavedOrder(order.id)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-400 border border-blue-700/30 bg-blue-900/10 hover:bg-blue-900/30 rounded-lg transition-colors">
-                                <PlusCircle className="w-3.5 h-3.5" /> Add Item
-                              </button>
-                              {order.status !== 'received' && order.status !== 'cancelled' && (
-                                <Button onClick={() => { loadExpandedItems(order.id); setTimeout(() => markReceived(order.id), 600) }}
-                                  loading={markingId === order.id} variant="secondary">
-                                  ✓ Mark All Received
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                          {isExp && oItems.length > 0 && (
-                            <div className="border-t border-slate-700/40">
-                              <Table>
-                                <Thead><tr><Th>SL</Th><Th>Part #</Th><Th>Item</Th><Th>Store</Th><Th>Ordered</Th><Th>Received</Th><Th>Status</Th></tr></Thead>
-                                <Tbody>
-                                  {oItems.map((oi, idx) => {
-                                    const shortfall   = Number(oi.ordered_qty) - Number(oi.received_qty)
-                                    const isReceived  = shortfall <= 0
-                                    return (
-                                      <Tr key={oi.id} className={isReceived ? 'opacity-60' : ''}>
-                                        <Td className="text-xs text-slate-500 tabular-nums w-8">{idx+1}</Td>
-                                        <Td className="font-mono text-xs text-slate-300">{String(oi.part_number||'').replace(/^0+/,'')}</Td>
-                                        <Td className="font-medium text-slate-100 max-w-xs truncate">{oi.item_name}</Td>
-                                        <Td className="text-slate-400 text-xs">{oi.store_name}</Td>
-                                        <Td className="text-teal-400 font-semibold">{oi.ordered_qty} <span className="text-slate-500 text-xs font-normal">{oi.unit}</span></Td>
-                                        <Td>
-                                          {order.status !== 'received' ? (
-                                            <input type="number" min="0" max={oi.ordered_qty} defaultValue={oi.received_qty}
-                                              className="w-20 input text-xs py-1 text-center"
-                                              onBlur={e => { const v = Number(e.target.value); if (v !== Number(oi.received_qty)) markPartialReceived(order.id, oi.id, v) }} />
-                                          ) : (
-                                            <span className="text-green-400 font-semibold">{oi.received_qty} <span className="text-slate-500 text-xs font-normal">{oi.unit}</span></span>
-                                          )}
-                                        </Td>
-                                        <Td>
-                                          {isReceived ? <Badge variant="green">Received</Badge>
-                                            : shortfall === Number(oi.ordered_qty) ? <Badge variant="yellow">Pending</Badge>
-                                            : <Badge variant="orange">Partial ({shortfall} missing)</Badge>}
-                                        </Td>
-                                      </Tr>
-                                    )
-                                  })}
-                                </Tbody>
-                              </Table>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
+          ) : dateGroups.map(([date, dateOrders]) => {
+            const dateLabel = date !== 'Unknown'
+              ? new Date(date).toLocaleDateString('en-GB', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })
+              : 'Unknown Date'
+            return (
+              <div key={date} className="card border border-slate-700/40">
+                {/* Date header */}
+                <div className="flex items-center gap-3 pb-3 mb-3 border-b border-slate-700/40">
+                  <div className="w-2.5 h-2.5 rounded-full bg-[#00AEEF] shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-100 text-base">{dateLabel}</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {dateOrders.length} order{dateOrders.length !== 1 ? 's' : ''}
+                    </p>
                   </div>
                 </div>
-              )
-            })
-          })()}
+
+                {/* Orders for this date */}
+                <div className="space-y-2">
+                  {dateOrders.map(order => {
+                    const oItems  = expandedItems[order.id] || []
+                    const isExp   = expanded === order.id
+                    const storeName = order.store_name || (order.notes || '').split(' · ')[0] || `${order.delivery_day || ''} Order`
+                    const undelivered = oItems.filter(i => Number(i.received_qty) < Number(i.ordered_qty)).length
+                    return (
+                      <div key={order.id} className="border border-slate-700/30 rounded-xl overflow-hidden">
+                        {/* Order row header */}
+                        <div className="flex items-center justify-between flex-wrap gap-3 px-4 py-3 bg-slate-800/40">
+                          <button className="flex items-center gap-3 text-left flex-1 min-w-0"
+                            onClick={() => loadExpandedItems(order.id)}>
+                            {isExp
+                              ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+                              : <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="font-semibold text-slate-100 truncate">{storeName}</p>
+                                <Badge variant={STATUS_BADGE[order.status] || 'gray'}>{order.status}</Badge>
+                                {oItems.length > 0 && <span className="text-xs text-slate-400">{oItems.length} items</span>}
+                                {isExp && undelivered > 0 && order.status !== 'received' && (
+                                  <span className="text-xs text-orange-400 flex items-center gap-1">
+                                    <PackageX className="w-3 h-3" />{undelivered} missing
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                Saved {new Date(order.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                              </p>
+                            </div>
+                          </button>
+
+                          {/* Action buttons */}
+                          <div className="flex gap-2 flex-wrap items-center">
+                            <button onClick={() => openAddToSavedOrder(order.id)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-400 border border-blue-700/30 bg-blue-900/10 hover:bg-blue-900/30 rounded-lg transition-colors">
+                              <PlusCircle className="w-3.5 h-3.5" /> Add Item
+                            </button>
+                            {isExp && oItems.length > 0 && (
+                              <>
+                                <button onClick={() => exportHistoryExcel(order)}
+                                  disabled={exportingHistXlsx === order.id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 border border-emerald-700/30 bg-emerald-900/10 hover:bg-emerald-900/30 rounded-lg transition-colors disabled:opacity-50">
+                                  <FileSpreadsheet className="w-3.5 h-3.5" />
+                                  {exportingHistXlsx === order.id ? 'Exporting…' : 'Excel'}
+                                </button>
+                                <button onClick={() => exportHistoryPDF(order)}
+                                  disabled={exportingHistPdf === order.id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-rose-400 border border-rose-700/30 bg-rose-900/10 hover:bg-rose-900/30 rounded-lg transition-colors disabled:opacity-50">
+                                  <FileText className="w-3.5 h-3.5" />
+                                  {exportingHistPdf === order.id ? 'Exporting…' : 'PDF'}
+                                </button>
+                                <button onClick={() => emailOrder(order)}
+                                  disabled={emailingOrder === order.id}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-400 border border-purple-700/30 bg-purple-900/10 hover:bg-purple-900/30 rounded-lg transition-colors disabled:opacity-50">
+                                  <Mail className="w-3.5 h-3.5" />
+                                  {emailingOrder === order.id ? 'Sending…' : 'Email'}
+                                </button>
+                              </>
+                            )}
+                            {order.status !== 'received' && order.status !== 'cancelled' && (
+                              <Button
+                                onClick={() => { loadExpandedItems(order.id); setTimeout(() => markReceived(order.id), 500) }}
+                                loading={markingId === order.id} variant="secondary">
+                                ✓ Mark Received
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Expanded items table */}
+                        {isExp && oItems.length > 0 && (
+                          <div className="border-t border-slate-700/40">
+                            <Table>
+                              <Thead>
+                                <tr>
+                                  <Th className="w-10 text-center">SL</Th>
+                                  <Th>Part #</Th>
+                                  <Th>Item</Th>
+                                  <Th className="text-center">Unit</Th>
+                                  <Th className="text-center">Ordered</Th>
+                                  <Th className="text-center">Received</Th>
+                                  <Th>Status</Th>
+                                </tr>
+                              </Thead>
+                              <Tbody>
+                                {oItems.map((oi, idx) => {
+                                  const shortfall  = Number(oi.ordered_qty) - Number(oi.received_qty)
+                                  const isReceived = shortfall <= 0
+                                  return (
+                                    <Tr key={oi.id} className={isReceived ? 'opacity-60' : ''}>
+                                      <Td className="text-xs text-slate-500 tabular-nums text-center">{idx + 1}</Td>
+                                      <Td className="font-mono text-xs text-slate-300">{codeOf(oi.part_number)}</Td>
+                                      <Td className="font-medium text-slate-100 max-w-xs truncate">{oi.item_name}</Td>
+                                      <Td className="text-center">
+                                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-700 text-teal-300">{oi.unit}</span>
+                                      </Td>
+                                      <Td className="text-center text-teal-400 font-bold">{oi.ordered_qty}</Td>
+                                      <Td className="text-center">
+                                        {order.status !== 'received' ? (
+                                          <input type="number" min="0" max={oi.ordered_qty}
+                                            defaultValue={oi.received_qty}
+                                            className="w-20 input text-xs py-1 text-center"
+                                            onBlur={e => {
+                                              const v = Number(e.target.value)
+                                              if (v !== Number(oi.received_qty)) markPartialReceived(order.id, oi.id, v)
+                                            }} />
+                                        ) : (
+                                          <span className="text-green-400 font-bold">{oi.received_qty}</span>
+                                        )}
+                                      </Td>
+                                      <Td>
+                                        {isReceived
+                                          ? <Badge variant="green">Received</Badge>
+                                          : shortfall === Number(oi.ordered_qty)
+                                            ? <Badge variant="yellow">Pending</Badge>
+                                            : <Badge variant="orange">Partial ({shortfall} short)</Badge>}
+                                      </Td>
+                                    </Tr>
+                                  )
+                                })}
+                              </Tbody>
+                            </Table>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
-      {/* ══ MODAL: Add item to current week's order ══════════ */}
-      {showAddItem && (
-        <Modal isOpen onClose={() => setShowAddItem(false)} title="Add Item to This Order" size="sm"
-          footer={<><Button variant="secondary" onClick={() => setShowAddItem(false)}>Cancel</Button><Button onClick={confirmAddItem}>Add to Order</Button></>}>
-          <div className="space-y-4">
-            {/* Item search */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-1">Item *</label>
-              {selectedItem ? (
-                <div className="input bg-slate-700/50 flex items-center gap-2">
-                  <span className="font-mono text-xs text-[#00AEEF]">{selectedItem.part_number}</span>
-                  <span className="flex-1 text-slate-100">{selectedItem.name}</span>
-                  <span className="text-slate-400 text-xs">{selectedItem.unit}</span>
-                  <button onClick={() => { setSelectedItem(null); setItemSearch('') }}><X className="w-4 h-4 text-slate-400" /></button>
-                </div>
-              ) : (
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input className="input pl-9 text-sm" placeholder="Search by name or part #…" value={itemSearch}
-                    onChange={e => setItemSearch(e.target.value)} autoFocus />
-                  {filteredAllItems.length > 0 && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                      {filteredAllItems.map(item => (
-                        <button key={item.id} onClick={() => { setSelectedItem(item); setItemSearch('') }}
-                          className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-700 text-left text-sm">
-                          <span className="font-mono text-xs text-[#00AEEF] w-20 shrink-0">{item.part_number}</span>
-                          <span className="flex-1 text-slate-200 truncate">{item.name}</span>
-                          <span className="text-slate-500 text-xs shrink-0">{item.stores?.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-            <Input label={`Quantity to Order *${selectedItem ? ` (${selectedItem.unit})` : ''}`}
-              type="number" min="1" value={manualQty} onChange={e => setManualQty(e.target.value)}
-              placeholder="How many to add to order?" />
-            {selectedItem && (
-              <div className="text-xs text-slate-400 bg-slate-700/30 rounded-lg p-2.5">
-                Current stock: <strong className="text-slate-200">{selectedItem.current_stock} {selectedItem.unit}</strong> · Store: {selectedItem.stores?.name}
-              </div>
-            )}
-            <Input label="Note (optional)" value={manualNote} onChange={e => setManualNote(e.target.value)}
-              placeholder="e.g. Chef requested extra stock" />
-          </div>
-        </Modal>
-      )}
-
-      {/* ══ MODAL: Add item to saved order (history) ════════ */}
+      {/* ══ Modal: Add item to saved order ═══════════════════════════════════ */}
       {showAddToOrder && (
         <Modal isOpen onClose={() => setShowAddToOrder(null)} title="Add Item to Saved Order" size="sm"
-          footer={<><Button variant="secondary" onClick={() => setShowAddToOrder(null)}>Cancel</Button><Button onClick={confirmAddToSavedOrder} loading={addingToOrder}>Add to Order</Button></>}>
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowAddToOrder(null)}>Cancel</Button>
+              <Button onClick={confirmAddToSavedOrder} loading={addingToOrder}>Add to Order</Button>
+            </>
+          }>
           <div className="space-y-4">
-            <div className="bg-blue-900/20 border border-blue-700/30 rounded-xl p-3 text-sm text-blue-300">
-              The item will be added to this saved order. You can mark it received later.
-            </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Item *</label>
               {savedItem ? (
@@ -1236,17 +884,20 @@ export default function Orders() {
                   <span className="font-mono text-xs text-[#00AEEF]">{savedItem.part_number}</span>
                   <span className="flex-1 text-slate-100">{savedItem.name}</span>
                   <span className="text-slate-400 text-xs">{savedItem.unit}</span>
-                  <button onClick={() => { setSavedItem(null); setSavedItemSearch('') }}><X className="w-4 h-4 text-slate-400" /></button>
+                  <button onClick={() => { setSavedItem(null); setSavedItemSearch('') }}>
+                    <X className="w-4 h-4 text-slate-400" />
+                  </button>
                 </div>
               ) : (
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input className="input pl-9 text-sm" placeholder="Search by name or part #…" value={savedItemSearch}
-                    onChange={e => setSavedItemSearch(e.target.value)} autoFocus />
+                  <input className="input pl-9 text-sm" placeholder="Search by name or part #…"
+                    value={savedItemSearch} onChange={e => setSavedItemSearch(e.target.value)} autoFocus />
                   {filteredSavedItems.length > 0 && (
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-xl shadow-xl max-h-52 overflow-y-auto">
                       {filteredSavedItems.map(item => (
-                        <button key={item.id} onClick={() => { setSavedItem(item); setSavedItemSearch('') }}
+                        <button key={item.id}
+                          onClick={() => { setSavedItem(item); setSavedItemSearch('') }}
                           className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-700 text-left text-sm">
                           <span className="font-mono text-xs text-[#00AEEF] w-20 shrink-0">{item.part_number}</span>
                           <span className="flex-1 text-slate-200 truncate">{item.name}</span>
@@ -1258,15 +909,19 @@ export default function Orders() {
                 </div>
               )}
             </div>
-            <Input label={`Quantity *${savedItem ? ` (${savedItem.unit})` : ''}`}
-              type="number" min="1" value={savedQty} onChange={e => setSavedQty(e.target.value)} />
-            <Input label="Note (optional)" value={savedNote} onChange={e => setSavedNote(e.target.value)} placeholder="Reason for adding…" />
+            <Input
+              label={`Quantity *${savedItem ? ` (${savedItem.unit})` : ''}`}
+              type="number" min="1" value={savedQty}
+              onChange={e => setSavedQty(e.target.value)} />
+            {savedItem && (
+              <div className="text-xs text-slate-400 bg-slate-700/30 rounded-lg p-2.5">
+                In stock: <strong className="text-slate-200">{savedItem.current_stock} {savedItem.unit}</strong>
+                {savedItem.stores?.name && <> &nbsp;·&nbsp; Store: {savedItem.stores.name}</>}
+              </div>
+            )}
           </div>
         </Modal>
       )}
-
-      {/* CSV import */}
-      {showCSV && <CSVImportModal config={CSV_CONFIGS.order_items} onClose={() => setShowCSV(false)} onImported={() => { setTab('history'); loadHistory() }} />}
     </div>
   )
 }
