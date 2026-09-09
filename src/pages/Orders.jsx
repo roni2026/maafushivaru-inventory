@@ -174,13 +174,11 @@ function buildStoreRows(store, items, avgMap) {
   if (!order) {
     return [...items].sort((a,b) => (a.name||'').localeCompare(b.name||'')).map((it,i) => makeRow(it,i+1,avgMap))
   }
+  // Strict sequence: only items matching the store's Excel order, in that exact order
   const byCode = new Map(items.map(i => [code(i.part_number), i]))
-  const seqSet = new Set(order)
-  const inSeq = order.map((c,i) => { const it=byCode.get(c); return it?makeRow(it,i+1,avgMap):null }).filter(Boolean)
-  const extras = items.filter(i => !seqSet.has(code(i.part_number)))
-    .sort((a,b) => (a.name||'').localeCompare(b.name||''))
-    .map((it,i) => makeRow(it,inSeq.length+i+1,avgMap))
-  return [...inSeq, ...extras]
+  const result = []
+  order.forEach(c => { const it = byCode.get(c); if (it) result.push(makeRow(it, result.length+1, avgMap)) })
+  return result
 }
 
 export default function Orders() {
@@ -249,26 +247,25 @@ export default function Orders() {
   const loadItemsForStore = useCallback(async (store) => {
     if (storeItemsCache.current[store]) return storeItemsCache.current[store]
     let items = []
-    if (store === 'General Order') {
+    const order = STORE_ORDERS[store]
+    if (!order) {
+      // General Order: load all items
       const { data } = await selectAll(() =>
         supabase.from('items').select('id,name,part_number,unit,current_stock,active,stores(name)').order('name')
       )
       items = (data||[]).filter(i => i?.active !== false)
     } else {
-      // !inner forces INNER JOIN — without it Supabase does a LEFT JOIN returning ALL items
-      // regardless of store, making the filter completely ineffective.
-      const { data } = await supabase.from('items')
-        .select('id,name,part_number,unit,current_stock,active,stores!inner(name)')
-        .ilike('stores.name', `%${store}%`)
-        .order('name')
-      items = (data||[]).filter(i => i?.active !== false)
-      // Client-side guard: keep only items whose store name matches keyword + optional number
-      if (items.length) {
-        const kw = store.split(/\s+/)[0].toLowerCase()
-        const num = store.match(/\d+/)?.[0]
-        items = items.filter(i => {
-          const sn = (i.stores?.name || '').toLowerCase()
-          return sn.includes(kw) && (!num || sn.includes(num))
+      // Load by exact part_number codes — bypasses any store-name mismatch issues.
+      // Each code in two variants: raw stripped digits and zero-padded to 14 chars.
+      const variants = [...new Set(order.flatMap(c => [c, c.padStart(14, '0')]))]
+      // Chunk into batches of 400 to stay within URL limits
+      const seen = new Set()
+      for (let i = 0; i < variants.length; i += 400) {
+        const { data } = await supabase.from('items')
+          .select('id,name,part_number,unit,current_stock,active,stores(name)')
+          .in('part_number', variants.slice(i, i + 400))
+        ;(data||[]).forEach(it => {
+          if (it && it.active !== false && !seen.has(it.id)) { seen.add(it.id); items.push(it) }
         })
       }
     }
