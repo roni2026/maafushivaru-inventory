@@ -255,17 +255,22 @@ export default function Orders() {
       )
       items = (data||[]).filter(i => i?.active !== false)
     } else {
-      // Query by exact store name match first
-      const { data: d1 } = await supabase.from('items')
-        .select('id,name,part_number,unit,current_stock,active,stores(name)')
-        .ilike('stores.name', store).order('name')
-      items = (d1||[]).filter(i => i?.active !== false)
-      // Fallback: first keyword (e.g. "Beverage", "Dry", "Freezer") + number
-      if (items.length < 3) {
-        const { data: d2 } = await supabase.from('items')
-          .select('id,name,part_number,unit,current_stock,active,stores(name)')
-          .ilike('stores.name', `%${store}%`).order('name')
-        items = (d2||[]).filter(i => i?.active !== false)
+      // !inner forces an INNER JOIN so only items belonging to the matching store are returned.
+      // Without !inner, Supabase does a LEFT JOIN and returns ALL items (with stores=null for non-matches).
+      const { data } = await supabase.from('items')
+        .select('id,name,part_number,unit,current_stock,active,stores!inner(name)')
+        .ilike('stores.name', `%${store}%`)
+        .order('name')
+      items = (data||[]).filter(i => i?.active !== false)
+      // Client-side guard: keep only items whose store name contains a key word from the selected store
+      // (handles edge cases where the ilike pattern is too broad)
+      if (items.length) {
+        const kw = store.split(/\s+/)[0].toLowerCase() // "Beverage", "Dry", "Freezer"
+        const num = store.match(/\d+/)?.[0] // "1", "2", etc.
+        items = items.filter(i => {
+          const sn = (i.stores?.name || '').toLowerCase()
+          return sn.includes(kw) && (!num || sn.includes(num))
+        })
       }
     }
     storeItemsCache.current[store] = items
