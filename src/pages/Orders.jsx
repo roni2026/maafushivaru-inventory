@@ -246,29 +246,22 @@ export default function Orders() {
 
   const loadItemsForStore = useCallback(async (store) => {
     if (storeItemsCache.current[store]) return storeItemsCache.current[store]
-    let items = []
-    const order = STORE_ORDERS[store]
-    if (!order) {
-      // General Order: load all items
+    // Load (and cache) the full active item catalog once. Matching per store happens
+    // client-side via code(), which strips leading zeros — this avoids ever having to
+    // guess how many zeros Supabase pads part_number with (was hard-coded to 14 and
+    // silently matched nothing, since the real codes are zero-padded to 15).
+    if (!storeItemsCache.current.__all) {
       const { data } = await selectAll(() =>
         supabase.from('items').select('id,name,part_number,unit,current_stock,active,stores(name)').order('name')
       )
-      items = (data||[]).filter(i => i?.active !== false)
-    } else {
-      // Load by exact part_number codes — bypasses any store-name mismatch issues.
-      // Each code in two variants: raw stripped digits and zero-padded to 14 chars.
-      const variants = [...new Set(order.flatMap(c => [c, c.padStart(14, '0')]))]
-      // Chunk into batches of 400 to stay within URL limits
-      const seen = new Set()
-      for (let i = 0; i < variants.length; i += 400) {
-        const { data } = await supabase.from('items')
-          .select('id,name,part_number,unit,current_stock,active,stores(name)')
-          .in('part_number', variants.slice(i, i + 400))
-        ;(data||[]).forEach(it => {
-          if (it && it.active !== false && !seen.has(it.id)) { seen.add(it.id); items.push(it) }
-        })
-      }
+      storeItemsCache.current.__all = (data||[]).filter(i => i?.active !== false)
     }
+    const all = storeItemsCache.current.__all
+    const order = STORE_ORDERS[store]
+    const items = !order ? all : (() => {
+      const orderSet = new Set(order)
+      return all.filter(it => orderSet.has(code(it.part_number)))
+    })()
     storeItemsCache.current[store] = items
     return items
   }, [])
